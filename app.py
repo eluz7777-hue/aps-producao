@@ -11,13 +11,9 @@ st.title("APS - Gantt de Produção (Profissional)")
 # =========================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
-# remover colunas lixo
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
-
-# preencher vazios
 df_base = df_base.fillna(0)
 
-# padronizar código
 df_base["CODIGO"] = (
     df_base["CODIGO"]
     .astype(str)
@@ -27,7 +23,7 @@ df_base["CODIGO"] = (
 )
 
 # =========================
-# PROCESSOS REAIS (ORDEM)
+# PROCESSOS REAIS
 # =========================
 processos_validos = [
     "CORTE - SERRA",
@@ -49,7 +45,6 @@ st.subheader("Simulação por Código")
 codigo = st.text_input("Código da peça")
 quantidade = st.number_input("Quantidade", value=100)
 
-# DEBUG (remover depois se quiser)
 st.write("Códigos disponíveis:")
 st.write(df_base["CODIGO"].head(20))
 
@@ -68,7 +63,6 @@ if st.button("Gerar Programação"):
         produto = produto.iloc[0]
 
         eficiencia = 0.8
-
         timeline = []
         tempo_acumulado = 0
 
@@ -88,9 +82,9 @@ if st.button("Gerar Programação"):
 
                     timeline.append({
                         "Processo": processo,
-                        "Início": inicio,
+                        "Inicio": inicio,
                         "Fim": fim,
-                        "Duração (h)": round(tempo_real, 2)
+                        "Duracao": tempo_real
                     })
 
                     tempo_acumulado = fim
@@ -102,15 +96,20 @@ if st.button("Gerar Programação"):
         else:
             st.subheader("Linha do Tempo da Produção")
 
-            fig = px.timeline(
+            # Gantt com eixo numérico (correto)
+            fig = px.bar(
                 df_gantt,
-                x_start="Início",
-                x_end="Fim",
+                x="Duracao",
                 y="Processo",
-                color="Processo"
+                base="Inicio",
+                orientation="h",
+                text="Duracao"
             )
 
-            fig.update_yaxes(autorange="reversed")
+            fig.update_layout(
+                xaxis_title="Horas",
+                yaxis_title="Processo"
+            )
 
             st.plotly_chart(fig, use_container_width=True)
 
@@ -120,6 +119,6 @@ if st.button("Gerar Programação"):
 
             st.success(f"Tempo total de produção: {round(tempo_total,2)} horas")
 
-            gargalo = df_gantt.sort_values(by="Duração (h)", ascending=False).iloc[0]
+            gargalo = df_gantt.sort_values(by="Duracao", ascending=False).iloc[0]
 
-            st.error(f"GARGALO: {gargalo['Processo']} ({gargalo['Duração (h)']} h)")
+            st.error(f"GARGALO: {gargalo['Processo']} ({round(gargalo['Duracao'],2)} h)")
