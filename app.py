@@ -33,14 +33,15 @@ quantidade = st.number_input("Quantidade", value=100)
 
 if st.button("Gerar Programação"):
 
-    df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
+df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 codigo_input = codigo.strip().upper()
+
 produto = df_base[df_base["CODIGO"] == codigo_input]
 
-    if produto.empty:
-        st.error("Código não encontrado")
-    else:
-        produto = produto.iloc[0]
+if produto.empty:
+    st.error("Código não encontrado")
+else:
+    produto = produto.iloc[0]
 
         timeline = []
         tempo_acumulado = 0
