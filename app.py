@@ -35,12 +35,14 @@ def somar_horas(data_inicio, horas):
     horas_restantes = horas
 
     while horas_restantes > 0:
-        if data.weekday() >= 5:  # fim de semana
+
+        # pula fim de semana
+        if data.weekday() >= 5:
             data += timedelta(days=1)
             data = data.replace(hour=inicio_turno, minute=0)
             continue
 
-        hora_atual = data.hour + data.minute/60
+        hora_atual = data.hour + data.minute / 60
         horas_disponiveis = fim_turno - hora_atual
 
         if horas_restantes <= horas_disponiveis:
@@ -126,11 +128,17 @@ if st.button("Gerar APS"):
         except:
             continue
 
-    # 🔥 ORDENAR POR DATA
+    # ordenar por data (prioridade)
     pedidos = sorted(pedidos, key=lambda x: x["data"])
 
     timeline = []
-    fila_maquinas = {p: [datetime.now().replace(hour=7, minute=0)]*maquinas[p] for p in maquinas}
+
+    inicio_base = datetime.now().replace(hour=inicio_turno, minute=0)
+
+    fila_maquinas = {
+        p: [inicio_base for _ in range(maquinas[p])]
+        for p in maquinas
+    }
 
     for pedido in pedidos:
 
@@ -141,7 +149,7 @@ if st.button("Gerar APS"):
             continue
 
         produto = produto.iloc[0]
-        tempo_anterior = datetime.now().replace(hour=7, minute=0)
+        tempo_anterior = inicio_base
 
         for processo in maquinas.keys():
 
@@ -159,6 +167,21 @@ if st.button("Gerar APS"):
 
                     inicio = max(maquinas_proc[idx], tempo_anterior)
 
+                    # restrições
+                    ativos = [
+                        p["Processo"]
+                        for p in timeline
+                        if p["Fim"] > inicio
+                    ]
+
+                    while not pode_rodar(processo, ativos):
+                        inicio += timedelta(minutes=30)
+                        ativos = [
+                            p["Processo"]
+                            for p in timeline
+                            if p["Fim"] > inicio
+                        ]
+
                     fim = somar_horas(inicio, tempo_real)
 
                     fila_maquinas[processo][idx] = fim
@@ -169,7 +192,7 @@ if st.button("Gerar APS"):
                         "Processo": processo,
                         "Inicio": inicio,
                         "Fim": fim,
-                        "Duracao": tempo_real
+                        "Duracao": round(tempo_real, 2)
                     })
 
     df_gantt = pd.DataFrame(timeline)
@@ -178,6 +201,9 @@ if st.button("Gerar APS"):
         st.error("Nenhuma ordem válida.")
     else:
 
+        # =========================
+        # GANTT COM LABELS
+        # =========================
         st.subheader("Gantt com Datas Reais")
 
         fig = px.timeline(
@@ -185,7 +211,13 @@ if st.button("Gerar APS"):
             x_start="Inicio",
             x_end="Fim",
             y="Processo",
-            color="Ordem"
+            color="Ordem",
+            text=df_gantt["Duracao"].astype(str) + " h"
+        )
+
+        fig.update_traces(
+            textposition="inside",
+            textfont_size=12
         )
 
         fig.update_yaxes(autorange="reversed")
