@@ -18,8 +18,13 @@ df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 df_base = df_base.fillna(0)
 
 # padronizar coluna CODIGO
-df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
-
+df_base["CODIGO"] = (
+    df_base["CODIGO"]
+    .astype(str)
+    .str.replace(".0", "", regex=False)
+    .str.strip()
+    .str.upper()
+)
 # =========================
 # CONFIGURAÇÃO
 # =========================
@@ -32,13 +37,15 @@ st.subheader("Simulação por Código")
 
 codigo = st.text_input("Código da peça")
 quantidade = st.number_input("Quantidade", value=100)
+st.write("Códigos disponíveis:")
+st.write(df_base["CODIGO"].head(20))
 
 # =========================
 # BOTÃO
 # =========================
 if st.button("Gerar Programação"):
 
-    codigo_input = codigo.strip().upper()
+    codigo_input = codigo.strip().upper().replace(".0", "")
 
     produto = df_base[df_base["CODIGO"] == codigo_input]
 
