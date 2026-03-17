@@ -20,53 +20,46 @@ HORAS_DIA = {
     4: 8
 }
 
-PROCESSOS_VALIDOS = [
-    "CORTE - SERRA",
-    "CORTE-LASER",
-    "FRESADORAS",
-    "PRENSA (AMASSAMENTO)",
-    "SOLDAGEM",
-    "ACABAMENTO",
-    "TORNO CNC"
-]
-
-RESTRICOES = {
-    "CORTE-LASER": ["PLASMA"],
-    "PLASMA": ["CORTE-LASER"]
+# ===============================
+# MÁQUINAS REAIS
+# ===============================
+MAQUINAS = {
+    "CORTE-LASER": ["LASER_1"],
+    "FRESADORAS": ["FRESA_1", "FRESA_2", "FRESA_3"],
+    "TORNO CNC": ["TORNO_1", "TORNO_2"],
+    "SOLDAGEM": ["SOLDA_1", "SOLDA_2", "SOLDA_3"],
+    "ACABAMENTO": ["ACAB_1", "ACAB_2"],
+    "CORTE - SERRA": ["SERRA_1"],
+    "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
 }
 
+PROCESSOS_VALIDOS = list(MAQUINAS.keys())
+
 # ===============================
-# FUNÇÃO TURNO (CORRIGIDA - SEM RECURSÃO)
+# TURNOS
 # ===============================
 def ajustar_para_turno(data):
 
     while True:
 
-        # pula fim de semana
         if data.weekday() > 4:
             data += timedelta(days=1)
             data = data.replace(hour=7, minute=0)
             continue
 
-        hora_inicio = 7
-        hora_fim = 17 if data.weekday() < 4 else 16
+        inicio = 7
+        fim = 17 if data.weekday() < 4 else 16
 
-        # antes do turno
-        if data.hour < hora_inicio:
-            data = data.replace(hour=hora_inicio, minute=0)
-            return data
+        if data.hour < inicio:
+            return data.replace(hour=inicio, minute=0)
 
-        # depois do turno
-        if data.hour >= hora_fim:
+        if data.hour >= fim:
             data += timedelta(days=1)
             data = data.replace(hour=7, minute=0)
             continue
 
         return data
 
-# ===============================
-# CAPACIDADE
-# ===============================
 def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
@@ -115,12 +108,10 @@ for i in range(qtd_ordens):
 # ===============================
 # CONFLITO
 # ===============================
-def conflito(processo, inicio, fim, agenda):
-    for p, blocos in agenda.items():
-        if p == processo or p in RESTRICOES.get(processo, []):
-            for i, f in blocos:
-                if not (fim <= i or inicio >= f):
-                    return True
+def conflito(maquina, inicio, fim, agenda):
+    for (i, f) in agenda[maquina]:
+        if not (fim <= i or inicio >= f):
+            return True
     return False
 
 # ===============================
@@ -135,18 +126,17 @@ if st.button("Gerar APS"):
         ascending=[False, True]
     )
 
-    agenda = {p: [] for p in PROCESSOS_VALIDOS}
-
-    inicio_global = ajustar_para_turno(datetime.now())
+    agenda = {m: [] for maquinas in MAQUINAS.values() for m in maquinas}
 
     gantt = []
+
+    inicio_global = ajustar_para_turno(datetime.now())
 
     for _, ordem in df_ordens.iterrows():
 
         produto = df_base[df_base["CODIGO"] == ordem["CODIGO"]]
 
         if produto.empty:
-            st.warning(f"Código não encontrado: {ordem['CODIGO']}")
             continue
 
         tempo_inicio = inicio_global
@@ -162,6 +152,16 @@ if st.button("Gerar APS"):
                 continue
 
             duracao_total = (tempo_min * ordem["QTD"]) / 60
+
+            maquinas = MAQUINAS[processo]
+
+            # 🔥 ESCOLHE MÁQUINA MENOS CARREGADA
+            cargas = {
+                m: sum([(f - i).total_seconds() for i, f in agenda[m]])
+                for m in maquinas
+            }
+
+            maquina_escolhida = min(cargas, key=cargas.get)
 
             restante = duracao_total
             atual = tempo_inicio
@@ -181,17 +181,17 @@ if st.button("Gerar APS"):
                 tentativa = atual
                 fim = tentativa + timedelta(hours=horas_exec)
 
-                while conflito(processo, tentativa, fim, agenda):
+                while conflito(maquina_escolhida, tentativa, fim, agenda):
                     tentativa += timedelta(minutes=10)
                     tentativa = ajustar_para_turno(tentativa)
                     fim = tentativa + timedelta(hours=horas_exec)
 
-                agenda[processo].append((tentativa, fim))
+                agenda[maquina_escolhida].append((tentativa, fim))
 
                 gantt.append({
                     "PV": ordem["PV"],
                     "Processo": processo,
-                    "Maquina": processo,
+                    "Maquina": maquina_escolhida,
                     "Início": tentativa,
                     "Fim": fim,
                     "Duração (h)": round(horas_exec, 2)
@@ -210,7 +210,7 @@ if st.button("Gerar APS"):
         gantt_df,
         x_start="Início",
         x_end="Fim",
-        y="Processo",
+        y="Maquina",
         color="PV",
         text="Duração (h)"
     )
@@ -218,5 +218,30 @@ if st.button("Gerar APS"):
     fig.update_yaxes(autorange="reversed")
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # ===============================
+    # OCUPAÇÃO REAL
+    # ===============================
+    st.subheader("Ocupação Real (%)")
+
+    ocup = (
+        gantt_df.groupby("Maquina")["Duração (h)"]
+        .sum()
+        .reset_index()
+    )
+
+    dias = gantt_df["Início"].dt.date.nunique()
+    capacidade_total = dias * 9 * EFICIENCIA
+
+    ocup["Ocupação (%)"] = (ocup["Duração (h)"] / capacidade_total) * 100
+
+    fig2 = px.bar(
+        ocup,
+        x="Maquina",
+        y="Ocupação (%)",
+        text_auto=True
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
 
     st.session_state["dados_dashboard"] = gantt_df
