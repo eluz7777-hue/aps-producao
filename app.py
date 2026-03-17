@@ -64,4 +64,4 @@ if st.button("Simular Fábrica"):
 
     gargalo = df.sort_values(by="Ocupação (%)", ascending=False).iloc[0]
 
-    st.error(f"Gargalo da fábrica: {gargalo['Processo']} ({gargalo['Ocupação (%)']}%)")
+    st.error(f"Gargalo da fábrica: {gargalo['Processo']} ({gargalo['Ocupação (%)']}%)")# 
