@@ -11,7 +11,7 @@ st.title("APS - Gantt de Produção (Profissional)")
 # =========================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
-# remover colunas "Unnamed"
+# remover colunas lixo
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 
 # preencher vazios
@@ -27,6 +27,21 @@ df_base["CODIGO"] = (
 )
 
 # =========================
+# PROCESSOS REAIS (ORDEM)
+# =========================
+processos_validos = [
+    "CORTE - SERRA",
+    "CORTE-LASER",
+    "CORTE-PLASMA",
+    "FRESADORAS",
+    "TORNO CNC",
+    "DOBRADEIRA",
+    "PRENSA (AMASSAMENTO)",
+    "SOLDAGEM",
+    "ACABAMENTO"
+]
+
+# =========================
 # INPUT
 # =========================
 st.subheader("Simulação por Código")
@@ -34,7 +49,7 @@ st.subheader("Simulação por Código")
 codigo = st.text_input("Código da peça")
 quantidade = st.number_input("Quantidade", value=100)
 
-# DEBUG (pode remover depois)
+# DEBUG (remover depois se quiser)
 st.write("Códigos disponíveis:")
 st.write(df_base["CODIGO"].head(20))
 
@@ -57,11 +72,11 @@ if st.button("Gerar Programação"):
         timeline = []
         tempo_acumulado = 0
 
-        for coluna in df_base.columns:
+        for processo in processos_validos:
 
-            if coluna not in ["CODIGO", "CLIENTE", "DESCRICAO"]:
+            if processo in df_base.columns:
 
-                tempo_min = pd.to_numeric(produto[coluna], errors='coerce')
+                tempo_min = pd.to_numeric(produto[processo], errors='coerce')
 
                 if pd.notna(tempo_min) and tempo_min > 0:
 
@@ -72,7 +87,7 @@ if st.button("Gerar Programação"):
                     fim = inicio + tempo_real
 
                     timeline.append({
-                        "Processo": coluna,
+                        "Processo": processo,
                         "Início": inicio,
                         "Fim": fim,
                         "Duração (h)": round(tempo_real, 2)
@@ -103,7 +118,7 @@ if st.button("Gerar Programação"):
 
             tempo_total = df_gantt["Fim"].max()
 
-            st.success(f"Tempo total de produção: {round(tempo_total,1)} horas")
+            st.success(f"Tempo total de produção: {round(tempo_total,2)} horas")
 
             gargalo = df_gantt.sort_values(by="Duração (h)", ascending=False).iloc[0]
 
