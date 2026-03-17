@@ -3,81 +3,103 @@ import pandas as pd
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Simulador de Produção (Fábrica Real)")
+st.title("APS - Simulador de Produção (Múltiplas Ordens)")
 
-st.subheader("Entrada da Ordem")
-
-# ENTRADA
-pecas = st.number_input("Quantidade de peças", value=100)
-
-tempo_laser = st.number_input("Tempo Corte Laser (min/peça)", value=5)
-tempo_solda_al = st.number_input("Tempo Solda Alumínio (min/peça)", value=8)
-tempo_solda_ac = st.number_input("Tempo Solda Aço (min/peça)", value=10)
-tempo_torno = st.number_input("Tempo Torno (min/peça)", value=6)
-tempo_fresa = st.number_input("Tempo Fresa (min/peça)", value=7)
-tempo_acabamento = st.number_input("Tempo Acabamento (min/peça)", value=5)
-
-# CONFIGURAÇÃO DA FÁBRICA
+# CONFIGURAÇÃO
 eficiencia = 0.8
 horas_dia = 9
 
-# MÁQUINAS REAIS (baseado na sua fábrica)
+# RECURSOS REAIS
 recursos = {
-    "Corte Laser (André)": 1,
-    "Solda Alumínio (3 operadores)": 3,
-    "Solda Aço Carbono (3 operadores)": 3,
-    "Torno Convencional (2 operadores)": 2,
-    "Fresa (3 operadores)": 3,
-    "Acabamento (6 operadores)": 6
+    "Corte Laser": 1,
+    "Solda Alumínio": 3,
+    "Solda Aço": 3,
+    "Torno": 2,
+    "Fresa": 3,
+    "Acabamento": 6
 }
 
-if st.button("Simular Produção Real"):
+st.subheader("Cadastro de Ordens")
+
+# CRIAR ORDENS
+num_ordens = st.number_input("Quantidade de ordens", min_value=1, max_value=10, value=3)
+
+ordens = []
+
+for i in range(int(num_ordens)):
+    st.markdown(f"### Ordem {i+1}")
+    
+    pecas = st.number_input(f"Peças O{i+1}", value=100, key=f"p{i}")
+    
+    tempo_laser = st.number_input(f"Laser (min/peça) O{i+1}", value=5, key=f"l{i}")
+    tempo_solda = st.number_input(f"Solda (min/peça) O{i+1}", value=8, key=f"s{i}")
+    tempo_torno = st.number_input(f"Torno (min/peça) O{i+1}", value=6, key=f"t{i}")
+    tempo_fresa = st.number_input(f"Fresa (min/peça) O{i+1}", value=7, key=f"f{i}")
+    tempo_acab = st.number_input(f"Acabamento (min/peça) O{i+1}", value=5, key=f"a{i}")
+
+    ordens.append({
+        "pecas": pecas,
+        "laser": tempo_laser,
+        "solda": tempo_solda,
+        "torno": tempo_torno,
+        "fresa": tempo_fresa,
+        "acab": tempo_acab
+    })
+
+# SIMULAÇÃO
+if st.button("Simular Carteira de Pedidos"):
+
+    carga_total = {
+        "Corte Laser": 0,
+        "Solda Alumínio": 0,
+        "Solda Aço": 0,
+        "Torno": 0,
+        "Fresa": 0,
+        "Acabamento": 0
+    }
+
+    for ordem in ordens:
+
+        carga_total["Corte Laser"] += (ordem["pecas"] * ordem["laser"]) / 60
+        carga_total["Solda Alumínio"] += (ordem["pecas"] * ordem["solda"]) / 60
+        carga_total["Solda Aço"] += (ordem["pecas"] * ordem["solda"]) / 60
+        carga_total["Torno"] += (ordem["pecas"] * ordem["torno"]) / 60
+        carga_total["Fresa"] += (ordem["pecas"] * ordem["fresa"]) / 60
+        carga_total["Acabamento"] += (ordem["pecas"] * ordem["acab"]) / 60
 
     dados = []
 
-    processos = {
-        "Corte Laser (André)": tempo_laser,
-        "Solda Alumínio (3 operadores)": tempo_solda_al,
-        "Solda Aço Carbono (3 operadores)": tempo_solda_ac,
-        "Torno Convencional (2 operadores)": tempo_torno,
-        "Fresa (3 operadores)": tempo_fresa,
-        "Acabamento (6 operadores)": tempo_acabamento
-    }
+    for recurso, carga in carga_total.items():
 
-    for processo, tempo_unit in processos.items():
+        capacidade = recursos[recurso] * horas_dia * eficiencia
+        ocupacao = (carga / capacidade) * 100 if capacidade > 0 else 0
 
-        qtd_maquinas = recursos[processo]
-
-        tempo_total_horas = (pecas * tempo_unit) / 60
-
-        capacidade = qtd_maquinas * horas_dia * eficiencia
-
-        ocupacao = (tempo_total_horas / capacidade) * 100 if capacidade > 0 else 0
+        dias_necessarios = carga / capacidade if capacidade > 0 else 0
 
         dados.append({
-            "Recurso": processo,
-            "Carga (h)": round(tempo_total_horas,1),
-            "Capacidade (h/dia)": round(capacidade,1),
-            "Ocupação (%)": round(ocupacao,1)
+            "Recurso": recurso,
+            "Carga Total (h)": round(carga,1),
+            "Capacidade/dia (h)": round(capacidade,1),
+            "Ocupação (%)": round(ocupacao,1),
+            "Dias Necessários": round(dias_necessarios,1)
         })
 
     df = pd.DataFrame(dados)
 
-    st.subheader("Capacidade da Fábrica")
+    st.subheader("Resultado da Carteira")
 
     st.dataframe(df, use_container_width=True)
 
-    gargalo = df.sort_values(by="Ocupação (%)", ascending=False).iloc[0]
+    gargalo = df.sort_values(by="Dias Necessários", ascending=False).iloc[0]
 
-    st.error(f"GARGALO: {gargalo['Recurso']} → {gargalo['Ocupação (%)']}% de ocupação")
+    st.error(f"GARGALO DA FÁBRICA: {gargalo['Recurso']} → {gargalo['Dias Necessários']} dias")
 
-    # ALERTAS VISUAIS
     st.subheader("Diagnóstico")
 
     for i in df.itertuples():
         if i._4 > 100:
-            st.error(f"{i.Recurso} está SOBRECARREGADO ({i._4}%)")
+            st.error(f"{i.Recurso} sobrecarregado ({i._4}%)")
         elif i._4 > 80:
-            st.warning(f"{i.Recurso} próximo do limite ({i._4}%)")
+            st.warning(f"{i.Recurso} no limite ({i._4}%)")
         else:
-            st.success(f"{i.Recurso} com folga ({i._4}%)")
+            st.success(f"{i.Recurso} OK ({i._4}%)")
