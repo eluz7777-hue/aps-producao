@@ -11,17 +11,19 @@ st.title("APS - Gantt de Produção (Profissional)")
 # =========================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
-# limpar colunas lixo
+# remover colunas "Unnamed"
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 
-# preencher vazios
+# preencher vazios com zero
 df_base = df_base.fillna(0)
+
+# padronizar coluna CODIGO
+df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
 # =========================
 # CONFIGURAÇÃO
 # =========================
 eficiencia = 0.8
-horas_dia = 9
 
 # =========================
 # INPUT
@@ -31,17 +33,19 @@ st.subheader("Simulação por Código")
 codigo = st.text_input("Código da peça")
 quantidade = st.number_input("Quantidade", value=100)
 
+# =========================
+# BOTÃO
+# =========================
 if st.button("Gerar Programação"):
 
-df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
-codigo_input = codigo.strip().upper()
+    codigo_input = codigo.strip().upper()
 
-produto = df_base[df_base["CODIGO"] == codigo_input]
+    produto = df_base[df_base["CODIGO"] == codigo_input]
 
-if produto.empty:
-    st.error("Código não encontrado")
-else:
-    produto = produto.iloc[0]
+    if produto.empty:
+        st.error("Código não encontrado")
+    else:
+        produto = produto.iloc[0]
 
         timeline = []
         tempo_acumulado = 0
@@ -64,33 +68,36 @@ else:
                         "Processo": coluna,
                         "Início": inicio,
                         "Fim": fim,
-                        "Duração (h)": round(tempo_real,2)
+                        "Duração (h)": round(tempo_real, 2)
                     })
 
                     tempo_acumulado = fim
 
         df_gantt = pd.DataFrame(timeline)
 
-        st.subheader("Linha do Tempo da Produção")
+        if df_gantt.empty:
+            st.warning("Esse produto não possui tempos cadastrados.")
+        else:
+            st.subheader("Linha do Tempo da Produção")
 
-        fig = px.timeline(
-            df_gantt,
-            x_start="Início",
-            x_end="Fim",
-            y="Processo",
-            color="Processo"
-        )
+            fig = px.timeline(
+                df_gantt,
+                x_start="Início",
+                x_end="Fim",
+                y="Processo",
+                color="Processo"
+            )
 
-        fig.update_yaxes(autorange="reversed")
+            fig.update_yaxes(autorange="reversed")
 
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("Resumo")
+            st.subheader("Resumo")
 
-        tempo_total = df_gantt["Fim"].max()
+            tempo_total = df_gantt["Fim"].max()
 
-        st.success(f"Tempo total de produção: {round(tempo_total,1)} horas")
+            st.success(f"Tempo total de produção: {round(tempo_total,1)} horas")
 
-        gargalo = df_gantt.sort_values(by="Duração (h)", ascending=False).iloc[0]
+            gargalo = df_gantt.sort_values(by="Duração (h)", ascending=False).iloc[0]
 
-        st.error(f"GARGALO: {gargalo['Processo']} ({gargalo['Duração (h)']} h)")
+            st.error(f"GARGALO: {gargalo['Processo']} ({gargalo['Duração (h)']} h)")
