@@ -12,12 +12,12 @@ st.title("APS - Gantt de Produção (Profissional)")
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
 # remover colunas "Unnamed"
-df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
+df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 
-# preencher vazios com zero
+# preencher vazios
 df_base = df_base.fillna(0)
 
-# padronizar coluna CODIGO
+# padronizar código
 df_base["CODIGO"] = (
     df_base["CODIGO"]
     .astype(str)
@@ -25,10 +25,6 @@ df_base["CODIGO"] = (
     .str.strip()
     .str.upper()
 )
-# =========================
-# CONFIGURAÇÃO
-# =========================
-eficiencia = 0.8
 
 # =========================
 # INPUT
@@ -37,6 +33,8 @@ st.subheader("Simulação por Código")
 
 codigo = st.text_input("Código da peça")
 quantidade = st.number_input("Quantidade", value=100)
+
+# DEBUG (pode remover depois)
 st.write("Códigos disponíveis:")
 st.write(df_base["CODIGO"].head(20))
 
@@ -54,6 +52,8 @@ if st.button("Gerar Programação"):
     else:
         produto = produto.iloc[0]
 
+        eficiencia = 0.8
+
         timeline = []
         tempo_acumulado = 0
 
@@ -61,9 +61,9 @@ if st.button("Gerar Programação"):
 
             if coluna not in ["CODIGO", "CLIENTE", "DESCRICAO"]:
 
-                tempo_min = produto[coluna]
+                tempo_min = pd.to_numeric(produto[coluna], errors='coerce')
 
-                if tempo_min > 0:
+                if pd.notna(tempo_min) and tempo_min > 0:
 
                     tempo_total_h = (tempo_min * quantidade) / 60
                     tempo_real = tempo_total_h / eficiencia
