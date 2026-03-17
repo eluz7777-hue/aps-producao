@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Planejamento Avançado de Produção")
+st.title("APS - Planejamento Avançado com Calendário Real")
 
 # =========================
 # CONFIGURAÇÃO FÁBRICA
@@ -23,43 +24,67 @@ maquinas = {
     "ACABAMENTO": 6
 }
 
+inicio_turno = 7
+fim_turno = 17
+
 # =========================
-# FUNÇÃO NORMALIZAR CÓDIGO
+# FUNÇÃO DE CALENDÁRIO
+# =========================
+def somar_horas(data_inicio, horas):
+    data = data_inicio
+    horas_restantes = horas
+
+    while horas_restantes > 0:
+        if data.weekday() >= 5:  # fim de semana
+            data += timedelta(days=1)
+            data = data.replace(hour=inicio_turno, minute=0)
+            continue
+
+        hora_atual = data.hour + data.minute/60
+        horas_disponiveis = fim_turno - hora_atual
+
+        if horas_restantes <= horas_disponiveis:
+            return data + timedelta(hours=horas_restantes)
+        else:
+            horas_restantes -= horas_disponiveis
+            data += timedelta(days=1)
+            data = data.replace(hour=inicio_turno, minute=0)
+
+    return data
+
+# =========================
+# NORMALIZAR CÓDIGO
 # =========================
 def normalizar_codigo(x):
-    try:
-        x = str(x)
-        x = x.replace(".0", "")
-        x = x.replace(" ", "")
-        return x.strip().upper()
-    except:
+    if pd.isna(x):
         return ""
+    x = str(x)
+    x = x.replace(".0", "")
+    x = x.replace(" ", "")
+    return x.strip().upper()
 
 # =========================
 # CARREGAR BASE
 # =========================
-df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+df_base = pd.read_excel(
+    "Processos_de_Fabricacao.xlsx",
+    dtype={"CODIGO": str}
+)
 
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 df_base = df_base.fillna(0)
-
-# 🔥 NORMALIZAÇÃO FORTE
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
-
-# =========================
-# DEBUG VISUAL
-# =========================
-st.subheader("Códigos disponíveis (base real)")
-st.dataframe(df_base[["CODIGO"]].drop_duplicates().head(30))
 
 # =========================
 # INPUT
 # =========================
 st.subheader("Ordens de Produção")
 
+st.write("Formato: CODIGO,QUANTIDADE,DATA_ENTREGA (AAAA-MM-DD)")
+
 ordens = st.text_area(
-    "Formato: CODIGO,QUANTIDADE",
-    "15473448,10\n15473448,20\n10002343864,10"
+    "",
+    "15494625,5,2026-03-20\nHVHV311697-01,5,2026-03-18\n16323723,9,2026-03-25"
 )
 
 # =========================
@@ -88,29 +113,35 @@ def pode_rodar(processo, ativos):
 # =========================
 if st.button("Gerar APS"):
 
-    timeline = []
-    fila_maquinas = {p: [0]*maquinas[p] for p in maquinas}
+    pedidos = []
 
-    linhas = ordens.strip().split("\n")
-
-    for linha in linhas:
-
+    for linha in ordens.strip().split("\n"):
         try:
-            cod, qtd = linha.split(",")
-            cod = normalizar_codigo(cod)
-            qtd = int(qtd)
+            cod, qtd, data = linha.split(",")
+            pedidos.append({
+                "codigo": normalizar_codigo(cod),
+                "qtd": int(qtd),
+                "data": pd.to_datetime(data)
+            })
         except:
             continue
 
-        produto = df_base[df_base["CODIGO"] == cod]
+    # 🔥 ORDENAR POR DATA
+    pedidos = sorted(pedidos, key=lambda x: x["data"])
+
+    timeline = []
+    fila_maquinas = {p: [datetime.now().replace(hour=7, minute=0)]*maquinas[p] for p in maquinas}
+
+    for pedido in pedidos:
+
+        produto = df_base[df_base["CODIGO"] == pedido["codigo"]]
 
         if produto.empty:
-            st.warning(f"Código não encontrado: {cod}")
+            st.warning(f"Código não encontrado: {pedido['codigo']}")
             continue
 
         produto = produto.iloc[0]
-
-        tempo_anterior = 0
+        tempo_anterior = datetime.now().replace(hour=7, minute=0)
 
         for processo in maquinas.keys():
 
@@ -120,7 +151,7 @@ if st.button("Gerar APS"):
 
                 if pd.notna(tempo_min) and tempo_min > 0:
 
-                    tempo_h = (tempo_min * qtd) / 60
+                    tempo_h = (tempo_min * pedido["qtd"]) / 60
                     tempo_real = tempo_h / eficiencia
 
                     maquinas_proc = fila_maquinas[processo]
@@ -128,23 +159,17 @@ if st.button("Gerar APS"):
 
                     inicio = max(maquinas_proc[idx], tempo_anterior)
 
-                    ativos = [p["Processo"] for p in timeline if p["Fim"] > inicio]
-
-                    while not pode_rodar(processo, ativos):
-                        inicio += 0.5
-                        ativos = [p["Processo"] for p in timeline if p["Fim"] > inicio]
-
-                    fim = inicio + tempo_real
+                    fim = somar_horas(inicio, tempo_real)
 
                     fila_maquinas[processo][idx] = fim
                     tempo_anterior = fim
 
                     timeline.append({
-                        "Ordem": cod,
+                        "Ordem": pedido["codigo"],
                         "Processo": processo,
                         "Inicio": inicio,
                         "Fim": fim,
-                        "Duracao": round(tempo_real,2)
+                        "Duracao": tempo_real
                     })
 
     df_gantt = pd.DataFrame(timeline)
@@ -153,26 +178,40 @@ if st.button("Gerar APS"):
         st.error("Nenhuma ordem válida.")
     else:
 
-        st.subheader("Gantt de Produção")
+        st.subheader("Gantt com Datas Reais")
 
-        fig = px.bar(
+        fig = px.timeline(
             df_gantt,
-            x="Duracao",
+            x_start="Inicio",
+            x_end="Fim",
             y="Processo",
-            base="Inicio",
-            color="Ordem",
-            orientation="h",
-            text="Duracao"   # 🔥 MOSTRAR VALORES
+            color="Ordem"
         )
 
-        fig.update_traces(textposition="inside")
+        fig.update_yaxes(autorange="reversed")
 
         st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("Resumo")
+        # =========================
+        # GARGALOS
+        # =========================
+        st.subheader("Análise de Gargalos")
 
-        total = df_gantt["Fim"].max()
-        st.success(f"Tempo total da fábrica: {round(total,2)} horas")
+        df_gantt["Dia"] = df_gantt["Inicio"].dt.date
+        df_gantt["Semana"] = df_gantt["Inicio"].dt.isocalendar().week
+        df_gantt["Mes"] = df_gantt["Inicio"].dt.month
 
-        gargalo = df_gantt.groupby("Processo")["Duracao"].sum().sort_values(ascending=False).index[0]
-        st.error(f"GARGALO GLOBAL: {gargalo}")
+        st.write("🔴 Gargalo Diário")
+        st.dataframe(
+            df_gantt.groupby(["Dia","Processo"])["Duracao"].sum().reset_index()
+        )
+
+        st.write("🟠 Gargalo Semanal")
+        st.dataframe(
+            df_gantt.groupby(["Semana","Processo"])["Duracao"].sum().reset_index()
+        )
+
+        st.write("🟢 Gargalo Mensal")
+        st.dataframe(
+            df_gantt.groupby(["Mes","Processo"])["Duracao"].sum().reset_index()
+        )
