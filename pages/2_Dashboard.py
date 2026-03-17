@@ -4,10 +4,10 @@ import plotly.express as px
 
 st.set_page_config(layout="wide")
 
-st.title("📊 APS ELOHIM - CAPACIDADE INDUSTRIAL")
+st.title("📊 APS ELOHIM - CAPACIDADE REAL")
 
 # ===============================
-# CONFIGURAÇÃO
+# CONFIG
 # ===============================
 EFICIENCIA = 0.8
 
@@ -19,22 +19,6 @@ HORAS_DIA = {
     4: 8
 }
 
-MAQUINAS_QTD = {
-    "LASER_1": 1,
-    "FRESA_1": 1,
-    "FRESA_2": 1,
-    "FRESA_3": 1,
-    "TORNO_1": 1,
-    "TORNO_2": 1,
-    "SOLDA_1": 1,
-    "SOLDA_2": 1,
-    "SOLDA_3": 1,
-    "ACAB_1": 1,
-    "ACAB_2": 1,
-    "SERRA_1": 1,
-    "PRENSA_1": 1
-}
-
 # ===============================
 # DADOS
 # ===============================
@@ -43,26 +27,48 @@ if "dados_dashboard" not in st.session_state:
     st.stop()
 
 df = st.session_state["dados_dashboard"].copy()
-
 df["Início"] = pd.to_datetime(df["Início"])
 
 # ===============================
-# PERÍODO
+# FILTRO DE MÊS (NOVO)
 # ===============================
-st.subheader("📅 Análise por Período")
+st.subheader("📅 Seleção de Período")
 
-periodo = st.selectbox(
-    "Selecione o período",
-    ["Diário", "Semanal", "Mensal"]
+meses = {
+    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+    "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+    "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+}
+
+mes_nome = st.selectbox("Selecione o mês", list(meses.keys()))
+mes = meses[mes_nome]
+
+# filtrar dados corretamente
+df = df[df["Início"].dt.month == mes]
+
+if df.empty:
+    st.warning("Sem dados para este mês")
+    st.stop()
+
+# ===============================
+# TIPO DE ANÁLISE
+# ===============================
+tipo = st.radio(
+    "Tipo de análise",
+    ["Diária", "Semanal", "Mensal"]
 )
 
-if periodo == "Diário":
-    df["Periodo"] = df["Início"].dt.strftime("%Y-%m-%d")
+# ===============================
+# PERÍODOS CORRETOS
+# ===============================
+if tipo == "Diária":
+    df["Periodo"] = df["Início"].dt.strftime("%d/%m")
 
-elif periodo == "Semanal":
-    df["Periodo"] = df["Início"].dt.to_period("W").astype(str)
+elif tipo == "Semanal":
+    df["Semana"] = df["Início"].dt.isocalendar().week
+    df["Periodo"] = "Semana " + df["Semana"].astype(str)
 
-elif periodo == "Mensal":
+elif tipo == "Mensal":
     df["Periodo"] = df["Início"].dt.strftime("%Y-%m")
 
 # ===============================
@@ -75,26 +81,35 @@ demanda = (
 )
 
 # ===============================
-# CAPACIDADE
+# CAPACIDADE REAL
 # ===============================
-def capacidade_mes(periodo_str):
-    datas = pd.date_range(start=periodo_str + "-01", periods=31)
-    dias_uteis = [d for d in datas if d.weekday() <= 4]
-    horas = sum([HORAS_DIA[d.weekday()] for d in dias_uteis])
-    return horas * EFICIENCIA
+def capacidade_periodo(df_periodo):
+
+    dias = df_periodo["Início"].dt.date.unique()
+
+    total_horas = 0
+
+    for d in dias:
+        d = pd.to_datetime(d)
+        total_horas += HORAS_DIA.get(d.weekday(), 0)
+
+    return total_horas * EFICIENCIA
 
 capacidade_lista = []
 
-for p in demanda["Periodo"].unique():
-    cap_base = capacidade_mes(p)
+for periodo in demanda["Periodo"].unique():
 
-    for m in demanda["Maquina"].unique():
-        qtd = MAQUINAS_QTD.get(m, 1)
+    df_p = df[df["Periodo"] == periodo]
 
+    cap = capacidade_periodo(df_p)
+
+    maquinas = df["Maquina"].unique()
+
+    for m in maquinas:
         capacidade_lista.append({
-            "Periodo": p,
+            "Periodo": periodo,
             "Maquina": m,
-            "Capacidade (h)": cap_base * qtd
+            "Capacidade (h)": cap
         })
 
 cap_df = pd.DataFrame(capacidade_lista)
@@ -102,7 +117,7 @@ cap_df = pd.DataFrame(capacidade_lista)
 # ===============================
 # MERGE
 # ===============================
-df_final = pd.merge(demanda, cap_df, on=["Periodo", "Maquina"], how="left")
+df_final = pd.merge(demanda, cap_df, on=["Periodo", "Maquina"])
 
 df_final["Ocupação (%)"] = (
     df_final["Duração (h)"] / df_final["Capacidade (h)"]
@@ -115,12 +130,12 @@ df_final["Excesso (h)"] = (
 # ===============================
 # ORDENAR PERÍODO
 # ===============================
-df_final = df_final.sort_values(by="Periodo")
+df_final = df_final.sort_values("Periodo")
 
 # ===============================
-# GRÁFICO 1 - DEMANDA vs CAPACIDADE
+# GRÁFICO
 # ===============================
-st.subheader("🏭 Demanda vs Capacidade por Mês")
+st.subheader("🏭 Demanda vs Capacidade")
 
 fig1 = px.bar(
     df_final,
@@ -134,9 +149,9 @@ fig1 = px.bar(
 st.plotly_chart(fig1, use_container_width=True)
 
 # ===============================
-# GRÁFICO 2 - OCUPAÇÃO
+# OCUPAÇÃO
 # ===============================
-st.subheader("📊 Ocupação (%) por Mês")
+st.subheader("📊 Ocupação (%)")
 
 fig2 = px.bar(
     df_final,
@@ -151,11 +166,11 @@ st.plotly_chart(fig2, use_container_width=True)
 # ===============================
 # GARGALOS
 # ===============================
-st.subheader("🔥 Gargalos Reais")
+st.subheader("🔥 Gargalos")
 
 gargalos = df_final[df_final["Excesso (h)"] > 0]
 
 if gargalos.empty:
-    st.success("Nenhum gargalo identificado")
+    st.success("Sem gargalos no período")
 else:
     st.dataframe(gargalos)
