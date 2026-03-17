@@ -12,11 +12,10 @@ st.title("APS - Planejamento da Produção")
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
-# LIMPEZA FORTE (ESSA É A CHAVE)
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 df_base.fillna(0, inplace=True)
 
-# FORÇA TUDO (menos CODIGO) a ser número
+# Força números
 for col in df_base.columns:
     if col != "CODIGO":
         df_base[col] = pd.to_numeric(df_base[col], errors="coerce").fillna(0)
@@ -26,30 +25,22 @@ df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 codigos_disponiveis = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# ENTRADA DE ORDENS
+# ENTRADA
 # ===============================
 st.subheader("Ordens")
 
-qtd_ordens = st.number_input("Quantidade de ordens", min_value=1, max_value=20, value=3)
+qtd_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
 
 ordens = []
 
 for i in range(qtd_ordens):
-    col1, col2, col3, col4, col5 = st.columns(5)
+    c1, c2, c3, c4, c5 = st.columns(5)
 
-    pv = col1.text_input(f"PV {i}", key=f"pv_{i}")
-
-    codigo = col2.selectbox(
-        f"Código {i}",
-        options=["-"] + codigos_disponiveis,
-        key=f"cod_{i}"
-    )
-
-    qtd = col3.number_input(f"Qtd {i}", min_value=1, value=1, key=f"qtd_{i}")
-
-    entrega = col4.date_input(f"Entrega {i}", key=f"entrega_{i}")
-
-    urgente = col5.checkbox("🔥 Urgente", key=f"urg_{i}")
+    pv = c1.text_input(f"PV {i}", key=f"pv_{i}")
+    codigo = c2.selectbox(f"Código {i}", ["-"] + codigos_disponiveis, key=f"cod_{i}")
+    qtd = c3.number_input(f"Qtd {i}", 1, 10000, 1, key=f"qtd_{i}")
+    entrega = c4.date_input(f"Entrega {i}", key=f"entrega_{i}")
+    urgente = c5.checkbox("🔥 Urgente", key=f"urg_{i}")
 
     if codigo != "-":
         ordens.append({
@@ -61,20 +52,17 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# PROCESSAMENTO APS
+# APS
 # ===============================
 if st.button("Gerar APS"):
 
-    if len(ordens) == 0:
+    if not ordens:
         st.error("Nenhuma ordem válida")
         st.stop()
 
     df_ordens = pd.DataFrame(ordens)
 
-    df_ordens = df_ordens.sort_values(
-        by=["URGENTE", "ENTREGA"],
-        ascending=[False, True]
-    )
+    df_ordens = df_ordens.sort_values(by=["URGENTE", "ENTREGA"], ascending=[False, True])
 
     inicio_global = datetime.now()
     gantt = []
@@ -94,13 +82,24 @@ if st.button("Gerar APS"):
             if col == "CODIGO":
                 continue
 
-            # GARANTIA ABSOLUTA
             tempo_min = float(produto.iloc[0][col])
 
+            # IGNORA ZERO
             if tempo_min <= 0:
                 continue
 
+            # 🚨 LIMITADOR DE SEGURANÇA
+            if tempo_min > 10000:
+                st.warning(f"Tempo absurdo detectado em {col}: {tempo_min}")
+                continue
+
             duracao_h = (tempo_min * ordem["QTD"]) / 60
+
+            # 🚨 LIMITADOR FINAL
+            if duracao_h > 500:
+                st.warning(f"Operação muito longa ignorada ({col} - {round(duracao_h,1)}h)")
+                continue
+
             tempo_fim = tempo_inicio + timedelta(hours=duracao_h)
 
             gantt.append({
@@ -113,8 +112,8 @@ if st.button("Gerar APS"):
 
             tempo_inicio = tempo_fim
 
-    if len(gantt) == 0:
-        st.error("Nenhum processo gerado")
+    if not gantt:
+        st.error("Nenhum processo válido gerado")
         st.stop()
 
     gantt_df = pd.DataFrame(gantt)
@@ -153,7 +152,7 @@ if st.button("Gerar APS"):
     st.error(f"Gargalo: {gargalo}")
 
     # ===============================
-    # DASHBOARD (AGORA SEM ERRO)
+    # DASHBOARD
     # ===============================
     st.session_state["dados_dashboard"] = gantt_df
     st.session_state["total_horas"] = total_horas
