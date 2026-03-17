@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Planejamento com Restrições Reais")
+st.title("APS - Planejamento da Produção")
 
 # ===============================
 # PROCESSOS VÁLIDOS
@@ -26,22 +26,28 @@ PROCESSOS_VALIDOS = [
 RESTRICOES = {
     "CORTE-LASER": ["PLASMA"],
     "PLASMA": ["CORTE-LASER"],
-    "TORNO CNC": ["FRESADORAS"]  # exemplo de isolamento
 }
 
 # ===============================
 # CARREGAR BASE
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+
+# limpar colunas lixo
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
+
+# preencher vazio com zero
 df_base.fillna(0, inplace=True)
 
+# normalizar código
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
+# garantir numéricos
 for col in PROCESSOS_VALIDOS:
     if col in df_base.columns:
         df_base[col] = pd.to_numeric(df_base[col], errors="coerce").fillna(0)
 
+# lista de códigos
 codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
@@ -67,7 +73,7 @@ for i in range(qtd_ordens):
             "PV": pv if pv else f"PV_{i}",
             "CODIGO": codigo,
             "QTD": qtd,
-            "ENTREGA": entrega,
+            "ENTREGA": pd.to_datetime(entrega),
             "URGENTE": urgente
         })
 
@@ -77,7 +83,6 @@ for i in range(qtd_ordens):
 def verifica_conflito(processo, inicio, fim, agenda):
     for p, blocos in agenda.items():
 
-        # mesma máquina ou conflito
         conflito = p == processo or p in RESTRICOES.get(processo, [])
 
         if conflito:
@@ -87,7 +92,7 @@ def verifica_conflito(processo, inicio, fim, agenda):
     return False
 
 # ===============================
-# APS
+# EXECUÇÃO APS
 # ===============================
 if st.button("Gerar APS"):
 
@@ -96,11 +101,18 @@ if st.button("Gerar APS"):
         st.stop()
 
     df_ordens = pd.DataFrame(ordens)
-    df_ordens = df_ordens.sort_values(by=["URGENTE", "ENTREGA"], ascending=[False, True])
 
+    # ordenação inteligente
+    df_ordens = df_ordens.sort_values(
+        by=["URGENTE", "ENTREGA"],
+        ascending=[False, True]
+    )
+
+    # agenda das máquinas
     agenda = {p: [] for p in PROCESSOS_VALIDOS}
 
     inicio_global = datetime.now()
+
     gantt = []
 
     for _, ordem in df_ordens.iterrows():
@@ -108,6 +120,7 @@ if st.button("Gerar APS"):
         produto = df_base[df_base["CODIGO"] == ordem["CODIGO"]]
 
         if produto.empty:
+            st.warning(f"Código não encontrado: {ordem['CODIGO']}")
             continue
 
         tempo_inicio = inicio_global
@@ -119,30 +132,41 @@ if st.button("Gerar APS"):
 
             tempo_min = float(produto.iloc[0][processo])
 
+            # ignora zero ou inválido
             if tempo_min <= 0:
                 continue
 
-            duracao_h = (tempo_min * ordem["QTD"]) / 60
-
-            if duracao_h > 200:
+            # cálculo seguro
+            try:
+                duracao_h = (tempo_min * ordem["QTD"]) / 60
+            except:
                 continue
 
-            # 🔥 RESPEITA RESTRIÇÕES
+            # trava contra valores absurdos (proteção overflow)
+            if duracao_h <= 0 or duracao_h > 200:
+                continue
+
+            # respeitar restrições
             tentativa = tempo_inicio
+
             while True:
-                tempo_fim = tentativa + timedelta(hours=duracao_h)
+                tempo_fim = tentativa + timedelta(hours=float(duracao_h))
 
                 if not verifica_conflito(processo, tentativa, tempo_fim, agenda):
                     break
 
                 tentativa += timedelta(minutes=10)
 
-            # salva na agenda
+            # salvar agenda
             agenda[processo].append((tentativa, tempo_fim))
+
+            # definir máquina (por enquanto = processo)
+            maquina = processo
 
             gantt.append({
                 "PV": ordem["PV"],
                 "Processo": processo,
+                "Maquina": maquina,
                 "Início": tentativa,
                 "Fim": tempo_fim,
                 "Duração (h)": round(duracao_h, 2)
@@ -150,22 +174,29 @@ if st.button("Gerar APS"):
 
             tempo_inicio = tempo_fim
 
+    if not gantt:
+        st.error("Nenhuma operação gerada")
+        st.stop()
+
     gantt_df = pd.DataFrame(gantt)
 
     # ===============================
     # GANTT
     # ===============================
-    # DEFINIR MÁQUINA (SIMPLES POR ENQUANTO)
-maquina = processo
+    st.subheader("Gantt de Produção")
 
-gantt.append({
-    "PV": ordem["PV"],
-    "Processo": processo,
-    "Maquina": maquina,
-    "Início": tentativa,
-    "Fim": tempo_fim,
-    "Duração (h)": round(duracao_h, 2)
-})
+    fig = px.timeline(
+        gantt_df,
+        x_start="Início",
+        x_end="Fim",
+        y="Processo",
+        color="PV",
+        text="Duração (h)"
+    )
+
+    fig.update_yaxes(autorange="reversed")
+
+    st.plotly_chart(fig, use_container_width=True)
 
     # ===============================
     # RESUMO
@@ -179,10 +210,12 @@ gantt.append({
         .index[0]
     )
 
-    st.success(f"Tempo total: {round(total,2)} h")
-    st.error(f"Gargalo: {gargalo}")
+    st.success(f"Tempo total da fábrica: {round(total,2)} h")
+    st.error(f"GARGALO GLOBAL: {gargalo}")
 
-    # dashboard
+    # ===============================
+    # SALVAR PARA DASHBOARD
+    # ===============================
     st.session_state["dados_dashboard"] = gantt_df
     st.session_state["total_horas"] = total
     st.session_state["gargalo"] = gargalo

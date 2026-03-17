@@ -4,10 +4,10 @@ import plotly.express as px
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Dashboard APS Elohim")
+st.title("📊 APS ELOHIM - DASHBOARD DE CAPACIDADE")
 
 # ===============================
-# VERIFICA DADOS
+# VALIDAR DADOS
 # ===============================
 if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
@@ -16,20 +16,28 @@ if "dados_dashboard" not in st.session_state:
 df = st.session_state["dados_dashboard"].copy()
 
 # ===============================
-# DATETIME
+# GARANTIR TIPOS
 # ===============================
 df["Início"] = pd.to_datetime(df["Início"])
+df["Fim"] = pd.to_datetime(df["Fim"])
+
+# Se ainda não existir coluna Maquina, cria automaticamente
+if "Maquina" not in df.columns:
+    df["Maquina"] = df["Processo"]
 
 # ===============================
-# FILTRO PERÍODO
+# SELETOR DE PERÍODO
 # ===============================
-st.subheader("Análise por Período")
+st.subheader("📅 Análise por Período")
 
 periodo = st.selectbox(
     "Selecione o período",
     ["Diário", "Semanal", "Mensal"]
 )
 
+# ===============================
+# CRIAR COLUNA DE PERÍODO (SEM ERRO JSON)
+# ===============================
 if periodo == "Diário":
     df["Periodo"] = df["Início"].dt.date.astype(str)
 
@@ -49,11 +57,11 @@ df_maquina = (
 )
 
 # ===============================
-# GRÁFICO DE CARGA (VERTICAL)
+# GRÁFICO 1 - CARGA POR MÁQUINA
 # ===============================
-st.subheader("Carga por Máquina")
+st.subheader("🏭 Carga por Máquina")
 
-fig = px.bar(
+fig1 = px.bar(
     df_maquina,
     x="Periodo",
     y="Duração (h)",
@@ -62,15 +70,16 @@ fig = px.bar(
     text_auto=True
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig1, use_container_width=True)
 
 # ===============================
-# GARGALO POR PERÍODO
+# GRÁFICO 2 - GARGALO POR PERÍODO
 # ===============================
-st.subheader("Gargalo por Máquina")
+st.subheader("🔥 Gargalo por Período")
 
 gargalo = (
-    df_maquina.sort_values(["Periodo", "Duração (h)"], ascending=[True, False])
+    df_maquina
+    .sort_values(["Periodo", "Duração (h)"], ascending=[True, False])
     .groupby("Periodo")
     .first()
     .reset_index()
@@ -87,9 +96,9 @@ fig2 = px.bar(
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# RANKING GERAL
+# GRÁFICO 3 - RANKING GERAL
 # ===============================
-st.subheader("Ranking de Gargalos")
+st.subheader("📊 Ranking Geral de Gargalos")
 
 ranking = (
     df.groupby("Maquina")["Duração (h)"]
@@ -108,16 +117,16 @@ fig3 = px.bar(
 st.plotly_chart(fig3, use_container_width=True)
 
 # ===============================
-# KPI
+# KPI FINAL
 # ===============================
-st.subheader("Indicadores")
+st.subheader("📌 Indicadores Gerais")
 
-total = df["Duração (h)"].sum()
-ordens = df["PV"].nunique()
-maquinas = df["Maquina"].nunique()
+total_horas = df["Duração (h)"].sum()
+total_ordens = df["PV"].nunique()
+total_maquinas = df["Maquina"].nunique()
 
 c1, c2, c3 = st.columns(3)
 
-c1.metric("Horas Totais", round(total, 2))
-c2.metric("Ordens", ordens)
-c3.metric("Máquinas Ativas", maquinas)
+c1.metric("Horas Totais", round(total_horas, 2))
+c2.metric("Ordens", total_ordens)
+c3.metric("Máquinas Utilizadas", total_maquinas)
