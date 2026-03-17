@@ -12,9 +12,14 @@ st.title("APS - Planejamento da Produção")
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
-# Limpeza
+# LIMPEZA FORTE (ESSA É A CHAVE)
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 df_base.fillna(0, inplace=True)
+
+# FORÇA TUDO (menos CODIGO) a ser número
+for col in df_base.columns:
+    if col != "CODIGO":
+        df_base[col] = pd.to_numeric(df_base[col], errors="coerce").fillna(0)
 
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
@@ -66,14 +71,12 @@ if st.button("Gerar APS"):
 
     df_ordens = pd.DataFrame(ordens)
 
-    # Ordenação (urgente primeiro, depois data)
     df_ordens = df_ordens.sort_values(
         by=["URGENTE", "ENTREGA"],
         ascending=[False, True]
     )
 
     inicio_global = datetime.now()
-
     gantt = []
 
     for _, ordem in df_ordens.iterrows():
@@ -87,25 +90,28 @@ if st.button("Gerar APS"):
         tempo_inicio = inicio_global
 
         for col in df_base.columns:
+
             if col == "CODIGO":
                 continue
 
-            tempo_min = produto.iloc[0][col]
+            # GARANTIA ABSOLUTA
+            tempo_min = float(produto.iloc[0][col])
 
-            if tempo_min > 0:
-                duracao_h = (tempo_min * ordem["QTD"]) / 60
+            if tempo_min <= 0:
+                continue
 
-                tempo_fim = tempo_inicio + timedelta(hours=duracao_h)
+            duracao_h = (tempo_min * ordem["QTD"]) / 60
+            tempo_fim = tempo_inicio + timedelta(hours=duracao_h)
 
-                gantt.append({
-                    "PV": ordem["PV"],
-                    "Processo": col,
-                    "Início": tempo_inicio,
-                    "Fim": tempo_fim,
-                    "Duração (h)": round(duracao_h, 2)
-                })
+            gantt.append({
+                "PV": ordem["PV"],
+                "Processo": col,
+                "Início": tempo_inicio,
+                "Fim": tempo_fim,
+                "Duração (h)": round(duracao_h, 2)
+            })
 
-                tempo_inicio = tempo_fim
+            tempo_inicio = tempo_fim
 
     if len(gantt) == 0:
         st.error("Nenhum processo gerado")
@@ -147,7 +153,7 @@ if st.button("Gerar APS"):
     st.error(f"Gargalo: {gargalo}")
 
     # ===============================
-    # SALVAR PARA DASHBOARD (AGORA CORRETO)
+    # DASHBOARD (AGORA SEM ERRO)
     # ===============================
     st.session_state["dados_dashboard"] = gantt_df
     st.session_state["total_horas"] = total_horas
