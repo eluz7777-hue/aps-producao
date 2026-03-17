@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS COMPLETO - Planejamento + Capacidade + Prazo")
+st.title("APS COMPLETO - Planejamento Profissional")
 
 # =========================
 # CONFIG
@@ -56,9 +56,7 @@ def somar_horas(data_inicio, horas):
 def normalizar_codigo(x):
     if pd.isna(x):
         return ""
-    x = str(x)
-    x = x.replace(".0", "")
-    return x.strip().upper()
+    return str(x).replace(".0","").strip().upper()
 
 # =========================
 # BASE
@@ -67,6 +65,9 @@ df_base = pd.read_excel("Processos_de_Fabricacao.xlsx", dtype={"CODIGO": str})
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 df_base = df_base.fillna(0)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
+
+# 👉 LISTA DE CÓDIGOS PARA DROPDOWN
+lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # =========================
 # FORMULÁRIO
@@ -85,7 +86,11 @@ for i in range(num_ordens):
         pv = st.text_input(f"PV {i}", key=f"pv_{i}")
 
     with col2:
-        codigo = st.text_input(f"Código {i}", key=f"cod_{i}")
+        codigo = st.selectbox(
+            f"Código {i}",
+            options=lista_codigos,
+            key=f"cod_{i}"
+        )
 
     with col3:
         qtd = st.number_input(f"Qtd {i}", 1, key=f"qtd_{i}")
@@ -193,9 +198,6 @@ if st.button("Gerar APS"):
     df_gantt = pd.DataFrame(timeline)
     df_resumo = pd.DataFrame(resumo)
 
-    # =========================
-    # GANTT
-    # =========================
     st.subheader("Gantt")
 
     fig = px.timeline(
@@ -212,32 +214,21 @@ if st.button("Gerar APS"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # =========================
-    # STATUS
-    # =========================
-    st.subheader("Status das Ordens")
+    st.subheader("Status")
     st.dataframe(df_resumo, use_container_width=True)
 
-    # =========================
-    # ANÁLISE DE CAPACIDADE
-    # =========================
-    st.subheader("Análise de Gargalos")
+    st.subheader("Gargalos")
 
     df_gantt["Dia"] = df_gantt["Inicio"].dt.date
     df_gantt["Semana"] = df_gantt["Inicio"].dt.isocalendar().week
     df_gantt["Mes"] = df_gantt["Inicio"].dt.month
 
-    tipo = st.selectbox(
-        "Visualização",
-        ["Diário", "Semanal", "Mensal"]
-    )
+    tipo = st.selectbox("Tipo de análise", ["Dia", "Semana", "Mês"])
 
-    if tipo == "Diário":
+    if tipo == "Dia":
         analise = df_gantt.groupby(["Dia","Processo"])["Duracao"].sum().reset_index()
-
-    elif tipo == "Semanal":
+    elif tipo == "Semana":
         analise = df_gantt.groupby(["Semana","Processo"])["Duracao"].sum().reset_index()
-
     else:
         analise = df_gantt.groupby(["Mes","Processo"])["Duracao"].sum().reset_index()
 
