@@ -19,7 +19,6 @@ HORAS_DIA = {
     4: 8
 }
 
-# quantidade de máquinas
 MAQUINAS_QTD = {
     "LASER_1": 1,
     "FRESA_1": 1,
@@ -37,7 +36,7 @@ MAQUINAS_QTD = {
 }
 
 # ===============================
-# VALIDAR DADOS
+# DADOS
 # ===============================
 if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
@@ -58,13 +57,13 @@ periodo = st.selectbox(
 )
 
 if periodo == "Diário":
-    df["Periodo"] = df["Início"].dt.date.astype(str)
+    df["Periodo"] = df["Início"].dt.strftime("%Y-%m-%d")
 
 elif periodo == "Semanal":
     df["Periodo"] = df["Início"].dt.to_period("W").astype(str)
 
 elif periodo == "Mensal":
-    df["Periodo"] = df["Início"].dt.to_period("M").astype(str)
+    df["Periodo"] = df["Início"].dt.strftime("%Y-%m")
 
 # ===============================
 # DEMANDA
@@ -78,43 +77,32 @@ demanda = (
 # ===============================
 # CAPACIDADE
 # ===============================
-def calcular_capacidade(periodo_str):
-
+def capacidade_mes(periodo_str):
     datas = pd.date_range(start=periodo_str + "-01", periods=31)
-
     dias_uteis = [d for d in datas if d.weekday() <= 4]
-
     horas = sum([HORAS_DIA[d.weekday()] for d in dias_uteis])
-
     return horas * EFICIENCIA
 
 capacidade_lista = []
 
-for periodo_val in demanda["Periodo"].unique():
+for p in demanda["Periodo"].unique():
+    cap_base = capacidade_mes(p)
 
-    base_cap = calcular_capacidade(periodo_val)
-
-    for maquina in demanda["Maquina"].unique():
-
-        qtd = MAQUINAS_QTD.get(maquina, 1)
+    for m in demanda["Maquina"].unique():
+        qtd = MAQUINAS_QTD.get(m, 1)
 
         capacidade_lista.append({
-            "Periodo": periodo_val,
-            "Maquina": maquina,
-            "Capacidade (h)": base_cap * qtd
+            "Periodo": p,
+            "Maquina": m,
+            "Capacidade (h)": cap_base * qtd
         })
 
-capacidade_df = pd.DataFrame(capacidade_lista)
+cap_df = pd.DataFrame(capacidade_lista)
 
 # ===============================
 # MERGE
 # ===============================
-df_final = pd.merge(
-    demanda,
-    capacidade_df,
-    on=["Periodo", "Maquina"],
-    how="left"
-)
+df_final = pd.merge(demanda, cap_df, on=["Periodo", "Maquina"], how="left")
 
 df_final["Ocupação (%)"] = (
     df_final["Duração (h)"] / df_final["Capacidade (h)"]
@@ -125,19 +113,40 @@ df_final["Excesso (h)"] = (
 )
 
 # ===============================
-# GRÁFICO DEMANDA vs CAPACIDADE
+# ORDENAR PERÍODO
 # ===============================
-st.subheader("🏭 Demanda vs Capacidade")
+df_final = df_final.sort_values(by="Periodo")
 
-fig = px.bar(
+# ===============================
+# GRÁFICO 1 - DEMANDA vs CAPACIDADE
+# ===============================
+st.subheader("🏭 Demanda vs Capacidade por Mês")
+
+fig1 = px.bar(
     df_final,
-    x="Maquina",
+    x="Periodo",
     y=["Duração (h)", "Capacidade (h)"],
+    color="Maquina",
     barmode="group",
     text_auto=True
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig1, use_container_width=True)
+
+# ===============================
+# GRÁFICO 2 - OCUPAÇÃO
+# ===============================
+st.subheader("📊 Ocupação (%) por Mês")
+
+fig2 = px.bar(
+    df_final,
+    x="Periodo",
+    y="Ocupação (%)",
+    color="Maquina",
+    text_auto=True
+)
+
+st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
 # GARGALOS
@@ -147,20 +156,6 @@ st.subheader("🔥 Gargalos Reais")
 gargalos = df_final[df_final["Excesso (h)"] > 0]
 
 if gargalos.empty:
-    st.success("Nenhum gargalo no período")
+    st.success("Nenhum gargalo identificado")
 else:
     st.dataframe(gargalos)
-
-# ===============================
-# OCUPAÇÃO
-# ===============================
-st.subheader("📊 Ocupação (%)")
-
-fig2 = px.bar(
-    df_final,
-    x="Maquina",
-    y="Ocupação (%)",
-    text_auto=True
-)
-
-st.plotly_chart(fig2, use_container_width=True)
