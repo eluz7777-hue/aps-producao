@@ -24,23 +24,27 @@ maquinas = {
 }
 
 # =========================
+# FUNÇÃO NORMALIZAR CÓDIGO
+# =========================
+def normalizar_codigo(x):
+    try:
+        x = str(x)
+        x = x.replace(".0", "")
+        x = x.replace(" ", "")
+        return x.strip().upper()
+    except:
+        return ""
+
+# =========================
 # CARREGAR BASE
 # =========================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
-# limpar lixo
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 df_base = df_base.fillna(0)
 
-# 🔥 NORMALIZAÇÃO FORTE (resolve 100%)
-df_base["CODIGO"] = (
-    df_base["CODIGO"]
-    .astype(str)
-    .str.replace(".0", "", regex=False)
-    .str.replace(" ", "")
-    .str.strip()
-    .str.upper()
-)
+# 🔥 NORMALIZAÇÃO FORTE
+df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
 # =========================
 # DEBUG VISUAL
@@ -93,7 +97,7 @@ if st.button("Gerar APS"):
 
         try:
             cod, qtd = linha.split(",")
-            cod = cod.strip().replace(" ", "").upper()
+            cod = normalizar_codigo(cod)
             qtd = int(qtd)
         except:
             continue
@@ -140,7 +144,7 @@ if st.button("Gerar APS"):
                         "Processo": processo,
                         "Inicio": inicio,
                         "Fim": fim,
-                        "Duracao": tempo_real
+                        "Duracao": round(tempo_real,2)
                     })
 
     df_gantt = pd.DataFrame(timeline)
@@ -157,8 +161,11 @@ if st.button("Gerar APS"):
             y="Processo",
             base="Inicio",
             color="Ordem",
-            orientation="h"
+            orientation="h",
+            text="Duracao"   # 🔥 MOSTRAR VALORES
         )
+
+        fig.update_traces(textposition="inside")
 
         st.plotly_chart(fig, use_container_width=True)
 
