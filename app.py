@@ -7,10 +7,9 @@ st.set_page_config(layout="wide")
 st.title("APS - Planejamento Avançado de Produção")
 
 # =========================
-# CONFIGURAÇÕES DA FÁBRICA
+# CONFIGURAÇÃO FÁBRICA
 # =========================
 eficiencia = 0.8
-horas_dia = 9
 
 maquinas = {
     "CORTE - SERRA": 1,
@@ -28,31 +27,42 @@ maquinas = {
 # CARREGAR BASE
 # =========================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+
+# limpar lixo
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 df_base = df_base.fillna(0)
 
+# 🔥 NORMALIZAÇÃO FORTE (resolve 100%)
 df_base["CODIGO"] = (
     df_base["CODIGO"]
     .astype(str)
     .str.replace(".0", "", regex=False)
+    .str.replace(" ", "")
     .str.strip()
     .str.upper()
 )
 
 # =========================
-# INPUT MULTIPLOS PEDIDOS
+# DEBUG VISUAL
+# =========================
+st.subheader("Códigos disponíveis (base real)")
+st.dataframe(df_base[["CODIGO"]].drop_duplicates().head(30))
+
+# =========================
+# INPUT
 # =========================
 st.subheader("Ordens de Produção")
 
 ordens = st.text_area(
-    "Digite pedidos no formato: CODIGO,QUANTIDADE (1 por linha)",
-    "15473448,50\n15473448,30"
+    "Formato: CODIGO,QUANTIDADE",
+    "15473448,10\n15473448,20\n10002343864,10"
 )
 
 # =========================
-# FUNÇÃO DE RESTRIÇÕES
+# RESTRIÇÕES
 # =========================
 def pode_rodar(processo, ativos):
+
     if processo == "CORTE-PLASMA":
         if "CORTE-LASER" in ativos or "SOLDAGEM" in ativos:
             return False
@@ -70,18 +80,12 @@ def pode_rodar(processo, ativos):
     return True
 
 # =========================
-# PROCESSOS
-# =========================
-processos_validos = list(maquinas.keys())
-
-# =========================
-# EXECUÇÃO
+# EXECUÇÃO APS
 # =========================
 if st.button("Gerar APS"):
 
     timeline = []
     fila_maquinas = {p: [0]*maquinas[p] for p in maquinas}
-    tempo_global = 0
 
     linhas = ordens.strip().split("\n")
 
@@ -89,7 +93,7 @@ if st.button("Gerar APS"):
 
         try:
             cod, qtd = linha.split(",")
-            cod = cod.strip().upper()
+            cod = cod.strip().replace(" ", "").upper()
             qtd = int(qtd)
         except:
             continue
@@ -104,7 +108,7 @@ if st.button("Gerar APS"):
 
         tempo_anterior = 0
 
-        for processo in processos_validos:
+        for processo in maquinas.keys():
 
             if processo in df_base.columns:
 
@@ -115,14 +119,13 @@ if st.button("Gerar APS"):
                     tempo_h = (tempo_min * qtd) / 60
                     tempo_real = tempo_h / eficiencia
 
-                    # escolher máquina mais cedo
                     maquinas_proc = fila_maquinas[processo]
                     idx = maquinas_proc.index(min(maquinas_proc))
 
                     inicio = max(maquinas_proc[idx], tempo_anterior)
 
-                    # aplicar restrições simples
                     ativos = [p["Processo"] for p in timeline if p["Fim"] > inicio]
+
                     while not pode_rodar(processo, ativos):
                         inicio += 0.5
                         ativos = [p["Processo"] for p in timeline if p["Fim"] > inicio]
