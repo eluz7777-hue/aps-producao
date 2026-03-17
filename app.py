@@ -9,7 +9,7 @@ st.title("APS - Simulador com Base Real")
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
 # LIMPEZA BÁSICA
-df_base = df_base.dropna(subset=["CODIGO"], errors='ignore')
+df_base = df_base.dropna(subset=["CODIGO"])
 
 st.subheader("Consulta de Produto")
 
