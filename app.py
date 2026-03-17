@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Planejamento Avançado com Interface Profissional")
+st.title("APS - Planejamento com Análise de Prazo")
 
 # =========================
-# CONFIGURAÇÃO FÁBRICA
+# CONFIGURAÇÃO
 # =========================
 eficiencia = 0.8
 
@@ -28,7 +28,7 @@ inicio_turno = 7
 fim_turno = 17
 
 # =========================
-# FUNÇÃO DE CALENDÁRIO
+# FUNÇÕES
 # =========================
 def somar_horas(data_inicio, horas):
     data = data_inicio
@@ -53,9 +53,6 @@ def somar_horas(data_inicio, horas):
 
     return data
 
-# =========================
-# NORMALIZAR CÓDIGO
-# =========================
 def normalizar_codigo(x):
     if pd.isna(x):
         return ""
@@ -65,7 +62,7 @@ def normalizar_codigo(x):
     return x.strip().upper()
 
 # =========================
-# CARREGAR BASE
+# BASE
 # =========================
 df_base = pd.read_excel(
     "Processos_de_Fabricacao.xlsx",
@@ -77,15 +74,16 @@ df_base = df_base.fillna(0)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
 # =========================
-# FORMULÁRIO DE ORDENS
+# FORMULÁRIO
 # =========================
 st.subheader("Cadastro de Ordens")
 
-num_ordens = st.number_input("Quantidade de ordens", min_value=1, max_value=20, value=3)
+num_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
 
 ordens = []
 
 for i in range(num_ordens):
+
     st.markdown(f"### Ordem {i+1}")
 
     col1, col2, col3, col4 = st.columns(4)
@@ -97,7 +95,7 @@ for i in range(num_ordens):
         codigo = st.text_input(f"Código {i}", key=f"cod_{i}")
 
     with col3:
-        qtd = st.number_input(f"Qtd {i}", min_value=1, value=1, key=f"qtd_{i}")
+        qtd = st.number_input(f"Qtd {i}", 1, key=f"qtd_{i}")
 
     with col4:
         data = st.date_input(f"Entrega {i}", key=f"data_{i}")
@@ -131,14 +129,15 @@ def pode_rodar(processo, ativos):
     return True
 
 # =========================
-# EXECUÇÃO APS
+# APS
 # =========================
 if st.button("Gerar APS"):
 
-    # ordenar por data de entrega
     pedidos = sorted(ordens, key=lambda x: x["data"])
 
     timeline = []
+    resumo = []
+
     inicio_base = datetime.now().replace(hour=inicio_turno, minute=0)
 
     fila_maquinas = {
@@ -173,19 +172,11 @@ if st.button("Gerar APS"):
 
                     inicio = max(maquinas_proc[idx], tempo_anterior)
 
-                    ativos = [
-                        p["Processo"]
-                        for p in timeline
-                        if p["Fim"] > inicio
-                    ]
+                    ativos = [p["Processo"] for p in timeline if p["Fim"] > inicio]
 
                     while not pode_rodar(processo, ativos):
                         inicio += timedelta(minutes=30)
-                        ativos = [
-                            p["Processo"]
-                            for p in timeline
-                            if p["Fim"] > inicio
-                        ]
+                        ativos = [p["Processo"] for p in timeline if p["Fim"] > inicio]
 
                     fim = somar_horas(inicio, tempo_real)
 
@@ -194,41 +185,50 @@ if st.button("Gerar APS"):
 
                     timeline.append({
                         "PV": pedido["pv"],
-                        "Ordem": pedido["codigo"],
                         "Processo": processo,
                         "Inicio": inicio,
                         "Fim": fim,
                         "Duracao": round(tempo_real, 2)
                     })
 
+        # 🔥 FINAL DA ORDEM
+        atraso_horas = (tempo_anterior - pedido["data"]).total_seconds() / 3600
+
+        status = "🟢 Em dia" if atraso_horas <= 0 else "🔴 Atrasado"
+
+        resumo.append({
+            "PV": pedido["pv"],
+            "Entrega Cliente": pedido["data"],
+            "Fim Produção": tempo_anterior,
+            "Atraso (h)": round(atraso_horas, 1),
+            "Status": status
+        })
+
     df_gantt = pd.DataFrame(timeline)
+    df_resumo = pd.DataFrame(resumo)
 
-    if df_gantt.empty:
-        st.error("Nenhuma ordem válida.")
-    else:
+    # =========================
+    # GANTT
+    # =========================
+    st.subheader("Gantt de Produção")
 
-        st.subheader("Gantt de Produção")
+    fig = px.timeline(
+        df_gantt,
+        x_start="Inicio",
+        x_end="Fim",
+        y="Processo",
+        color="PV",
+        text=df_gantt["Duracao"].astype(str) + " h"
+    )
 
-        fig = px.timeline(
-            df_gantt,
-            x_start="Inicio",
-            x_end="Fim",
-            y="Processo",
-            color="PV",
-            text=df_gantt["Duracao"].astype(str) + " h"
-        )
+    fig.update_traces(textposition="inside", textfont_size=12)
+    fig.update_yaxes(autorange="reversed")
 
-        fig.update_traces(textposition="inside", textfont_size=12)
-        fig.update_yaxes(autorange="reversed")
+    st.plotly_chart(fig, use_container_width=True)
 
-        st.plotly_chart(fig, use_container_width=True)
+    # =========================
+    # RESUMO DE PRAZO
+    # =========================
+    st.subheader("Status das Ordens")
 
-        st.subheader("Resumo")
-
-        total = df_gantt["Fim"].max()
-        st.success(f"Tempo total da fábrica: {round((total - inicio_base).total_seconds()/3600,2)} horas")
-
-        st.write("🔴 Gargalo por Processo")
-        st.dataframe(
-            df_gantt.groupby("Processo")["Duracao"].sum().sort_values(ascending=False)
-        )
+    st.dataframe(df_resumo, use_container_width=True)
