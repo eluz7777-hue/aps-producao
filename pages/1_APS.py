@@ -12,10 +12,11 @@ st.title("APS - Planejamento da Produção")
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 
+# Limpeza
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 df_base.fillna(0, inplace=True)
 
-# Força números
+# Garantir números
 for col in df_base.columns:
     if col != "CODIGO":
         df_base[col] = pd.to_numeric(df_base[col], errors="coerce").fillna(0)
@@ -25,22 +26,30 @@ df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 codigos_disponiveis = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# ENTRADA
+# ENTRADA DE ORDENS
 # ===============================
 st.subheader("Ordens")
 
-qtd_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
+qtd_ordens = st.number_input("Quantidade de ordens", min_value=1, max_value=20, value=3)
 
 ordens = []
 
 for i in range(qtd_ordens):
-    c1, c2, c3, c4, c5 = st.columns(5)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
-    pv = c1.text_input(f"PV {i}", key=f"pv_{i}")
-    codigo = c2.selectbox(f"Código {i}", ["-"] + codigos_disponiveis, key=f"cod_{i}")
-    qtd = c3.number_input(f"Qtd {i}", 1, 10000, 1, key=f"qtd_{i}")
-    entrega = c4.date_input(f"Entrega {i}", key=f"entrega_{i}")
-    urgente = c5.checkbox("🔥 Urgente", key=f"urg_{i}")
+    pv = col1.text_input(f"PV {i}", key=f"pv_{i}")
+
+    codigo = col2.selectbox(
+        f"Código {i}",
+        options=["-"] + codigos_disponiveis,
+        key=f"cod_{i}"
+    )
+
+    qtd = col3.number_input(f"Qtd {i}", min_value=1, value=1, key=f"qtd_{i}")
+
+    entrega = col4.date_input(f"Entrega {i}", key=f"entrega_{i}")
+
+    urgente = col5.checkbox("🔥 Urgente", key=f"urg_{i}")
 
     if codigo != "-":
         ordens.append({
@@ -52,19 +61,24 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# APS
+# PROCESSAMENTO APS
 # ===============================
 if st.button("Gerar APS"):
 
-    if not ordens:
+    if len(ordens) == 0:
         st.error("Nenhuma ordem válida")
         st.stop()
 
     df_ordens = pd.DataFrame(ordens)
 
-    df_ordens = df_ordens.sort_values(by=["URGENTE", "ENTREGA"], ascending=[False, True])
+    # Ordenação correta
+    df_ordens = df_ordens.sort_values(
+        by=["URGENTE", "ENTREGA"],
+        ascending=[False, True]
+    )
 
     inicio_global = datetime.now()
+
     gantt = []
 
     for _, ordem in df_ordens.iterrows():
@@ -84,23 +98,27 @@ if st.button("Gerar APS"):
 
             tempo_min = float(produto.iloc[0][col])
 
-            # IGNORA ZERO
+            # Ignora zero
             if tempo_min <= 0:
                 continue
 
-            # 🚨 LIMITADOR DE SEGURANÇA
+            # 🔥 PROTEÇÃO CONTRA DADOS ERRADOS
             if tempo_min > 10000:
-                st.warning(f"Tempo absurdo detectado em {col}: {tempo_min}")
+                st.warning(f"Valor inválido ignorado em {col}: {tempo_min}")
                 continue
 
             duracao_h = (tempo_min * ordem["QTD"]) / 60
 
-            # 🚨 LIMITADOR FINAL
-            if duracao_h > 500:
-                st.warning(f"Operação muito longa ignorada ({col} - {round(duracao_h,1)}h)")
+            # 🔥 PROTEÇÃO CONTRA OVERFLOW
+            if duracao_h > 200:
+                st.warning(f"Operação ignorada (tempo alto): {col} ({round(duracao_h,1)}h)")
                 continue
 
-            tempo_fim = tempo_inicio + timedelta(hours=duracao_h)
+            try:
+                tempo_fim = tempo_inicio + timedelta(hours=duracao_h)
+            except:
+                st.warning(f"Erro de tempo ignorado em {col}")
+                continue
 
             gantt.append({
                 "PV": ordem["PV"],
@@ -112,7 +130,7 @@ if st.button("Gerar APS"):
 
             tempo_inicio = tempo_fim
 
-    if not gantt:
+    if len(gantt) == 0:
         st.error("Nenhum processo válido gerado")
         st.stop()
 
@@ -152,7 +170,7 @@ if st.button("Gerar APS"):
     st.error(f"Gargalo: {gargalo}")
 
     # ===============================
-    # DASHBOARD
+    # SALVAR PARA DASHBOARD
     # ===============================
     st.session_state["dados_dashboard"] = gantt_df
     st.session_state["total_horas"] = total_horas
