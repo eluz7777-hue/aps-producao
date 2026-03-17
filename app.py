@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS COMPLETO - Planejamento Profissional")
+st.title("APS + DASHBOARD INDUSTRIAL")
 
 # =========================
 # CONFIG
@@ -66,13 +66,12 @@ df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 df_base = df_base.fillna(0)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
-# 👉 LISTA DE CÓDIGOS PARA DROPDOWN
 lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # =========================
 # FORMULÁRIO
 # =========================
-st.subheader("Ordens")
+st.subheader("Cadastro de Ordens")
 
 num_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
 
@@ -80,17 +79,13 @@ ordens = []
 
 for i in range(num_ordens):
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         pv = st.text_input(f"PV {i}", key=f"pv_{i}")
 
     with col2:
-        codigo = st.selectbox(
-            f"Código {i}",
-            options=lista_codigos,
-            key=f"cod_{i}"
-        )
+        codigo = st.selectbox(f"Código {i}", lista_codigos, key=f"cod_{i}")
 
     with col3:
         qtd = st.number_input(f"Qtd {i}", 1, key=f"qtd_{i}")
@@ -98,11 +93,15 @@ for i in range(num_ordens):
     with col4:
         data = st.date_input(f"Entrega {i}", key=f"data_{i}")
 
+    with col5:
+        urgente = st.checkbox("🔥 Urgente", key=f"urg_{i}")
+
     ordens.append({
         "pv": pv,
         "codigo": normalizar_codigo(codigo),
         "qtd": qtd,
-        "data": pd.to_datetime(data)
+        "data": pd.to_datetime(data),
+        "urgente": urgente
     })
 
 # =========================
@@ -127,7 +126,12 @@ def pode_rodar(processo, ativos):
 # =========================
 if st.button("Gerar APS"):
 
-    pedidos = sorted(ordens, key=lambda x: x["data"])
+    urgentes = [o for o in ordens if o["urgente"]]
+    normais = [o for o in ordens if not o["urgente"]]
+
+    normais = sorted(normais, key=lambda x: x["data"])
+
+    pedidos = urgentes + normais
 
     timeline = []
     resumo = []
@@ -189,8 +193,7 @@ if st.button("Gerar APS"):
 
         resumo.append({
             "PV": pedido["pv"],
-            "Entrega": pedido["data"],
-            "Fim": tempo_anterior,
+            "Urgente": "🔥" if pedido["urgente"] else "Padrão",
             "Atraso (h)": round(atraso_h,1),
             "Status": "🔴 Atrasado" if atraso_h > 0 else "🟢 Em dia"
         })
@@ -198,6 +201,39 @@ if st.button("Gerar APS"):
     df_gantt = pd.DataFrame(timeline)
     df_resumo = pd.DataFrame(resumo)
 
+    # =========================
+    # DASHBOARD
+    # =========================
+    st.subheader("Dashboard")
+
+    total_ordens = len(df_resumo)
+    atrasadas = len(df_resumo[df_resumo["Status"] == "🔴 Atrasado"])
+    taxa_atraso = (atrasadas / total_ordens * 100) if total_ordens > 0 else 0
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total Ordens", total_ordens)
+    col2.metric("Atrasadas", atrasadas)
+    col3.metric("% Atraso", f"{round(taxa_atraso,1)}%")
+
+    # =========================
+    # GARGALO
+    # =========================
+    carga_proc = df_gantt.groupby("Processo")["Duracao"].sum().reset_index()
+
+    gargalo = carga_proc.sort_values(by="Duracao", ascending=False).iloc[0]
+
+    st.error(f"GARGALO PRINCIPAL: {gargalo['Processo']} ({round(gargalo['Duracao'],1)} h)")
+
+    # =========================
+    # GRÁFICO
+    # =========================
+    fig_bar = px.bar(carga_proc, x="Processo", y="Duracao", title="Carga por Processo")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # =========================
+    # GANTT
+    # =========================
     st.subheader("Gantt")
 
     fig = px.timeline(
@@ -214,22 +250,8 @@ if st.button("Gerar APS"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Status")
+    # =========================
+    # STATUS
+    # =========================
+    st.subheader("Status das Ordens")
     st.dataframe(df_resumo, use_container_width=True)
-
-    st.subheader("Gargalos")
-
-    df_gantt["Dia"] = df_gantt["Inicio"].dt.date
-    df_gantt["Semana"] = df_gantt["Inicio"].dt.isocalendar().week
-    df_gantt["Mes"] = df_gantt["Inicio"].dt.month
-
-    tipo = st.selectbox("Tipo de análise", ["Dia", "Semana", "Mês"])
-
-    if tipo == "Dia":
-        analise = df_gantt.groupby(["Dia","Processo"])["Duracao"].sum().reset_index()
-    elif tipo == "Semana":
-        analise = df_gantt.groupby(["Semana","Processo"])["Duracao"].sum().reset_index()
-    else:
-        analise = df_gantt.groupby(["Mes","Processo"])["Duracao"].sum().reset_index()
-
-    st.dataframe(analise, use_container_width=True)
