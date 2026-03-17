@@ -5,11 +5,21 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Planejamento da Produção")
+st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
 # ===============================
-# PROCESSOS VÁLIDOS
+# CONFIGURAÇÃO REAL
 # ===============================
+EFICIENCIA = 0.8
+
+HORAS_DIA = {
+    0: 9,  # segunda
+    1: 9,
+    2: 9,
+    3: 9,
+    4: 8   # sexta
+}
+
 PROCESSOS_VALIDOS = [
     "CORTE - SERRA",
     "CORTE-LASER",
@@ -20,34 +30,50 @@ PROCESSOS_VALIDOS = [
     "TORNO CNC"
 ]
 
-# ===============================
-# RESTRIÇÕES
-# ===============================
 RESTRICOES = {
     "CORTE-LASER": ["PLASMA"],
-    "PLASMA": ["CORTE-LASER"],
+    "PLASMA": ["CORTE-LASER"]
 }
+
+# ===============================
+# FUNÇÃO TURNO
+# ===============================
+def ajustar_para_turno(data):
+    while data.weekday() > 4:
+        data += timedelta(days=1)
+
+    hora_inicio = 7
+    hora_fim = 17 if data.weekday() < 4 else 16
+
+    if data.hour < hora_inicio:
+        return data.replace(hour=hora_inicio, minute=0)
+
+    if data.hour >= hora_fim:
+        data += timedelta(days=1)
+        return ajustar_para_turno(data)
+
+    return data
+
+# ===============================
+# CAPACIDADE DIÁRIA
+# ===============================
+def capacidade_dia(data):
+    horas = HORAS_DIA.get(data.weekday(), 0)
+    return horas * EFICIENCIA
 
 # ===============================
 # CARREGAR BASE
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-
-# limpar colunas lixo
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
-
-# preencher vazio com zero
 df_base.fillna(0, inplace=True)
 
-# normalizar código
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
-# garantir numéricos
 for col in PROCESSOS_VALIDOS:
     if col in df_base.columns:
         df_base[col] = pd.to_numeric(df_base[col], errors="coerce").fillna(0)
 
-# lista de códigos
 codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
@@ -78,40 +104,31 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# FUNÇÃO DE CONFLITO
+# CONFLITO
 # ===============================
-def verifica_conflito(processo, inicio, fim, agenda):
+def conflito(processo, inicio, fim, agenda):
     for p, blocos in agenda.items():
-
-        conflito = p == processo or p in RESTRICOES.get(processo, [])
-
-        if conflito:
-            for (i, f) in blocos:
+        if p == processo or p in RESTRICOES.get(processo, []):
+            for i, f in blocos:
                 if not (fim <= i or inicio >= f):
                     return True
     return False
 
 # ===============================
-# EXECUÇÃO APS
+# APS
 # ===============================
 if st.button("Gerar APS"):
 
-    if not ordens:
-        st.error("Nenhuma ordem válida")
-        st.stop()
-
     df_ordens = pd.DataFrame(ordens)
 
-    # ordenação inteligente
     df_ordens = df_ordens.sort_values(
         by=["URGENTE", "ENTREGA"],
         ascending=[False, True]
     )
 
-    # agenda das máquinas
     agenda = {p: [] for p in PROCESSOS_VALIDOS}
 
-    inicio_global = datetime.now()
+    inicio_global = ajustar_para_turno(datetime.now())
 
     gantt = []
 
@@ -120,7 +137,6 @@ if st.button("Gerar APS"):
         produto = df_base[df_base["CODIGO"] == ordem["CODIGO"]]
 
         if produto.empty:
-            st.warning(f"Código não encontrado: {ordem['CODIGO']}")
             continue
 
         tempo_inicio = inicio_global
@@ -130,53 +146,52 @@ if st.button("Gerar APS"):
             if processo not in df_base.columns:
                 continue
 
-            tempo_min = float(produto.iloc[0][processo])
+            tempo_min = produto.iloc[0][processo]
 
-            # ignora zero ou inválido
             if tempo_min <= 0:
                 continue
 
-            # cálculo seguro
-            try:
-                duracao_h = (tempo_min * ordem["QTD"]) / 60
-            except:
-                continue
+            duracao_h = (tempo_min * ordem["QTD"]) / 60
 
-            # trava contra valores absurdos (proteção overflow)
-            if duracao_h <= 0 or duracao_h > 200:
-                continue
+            restante = duracao_h
+            atual = tempo_inicio
 
-            # respeitar restrições
-            tentativa = tempo_inicio
+            while restante > 0:
 
-            while True:
-                tempo_fim = tentativa + timedelta(hours=float(duracao_h))
+                atual = ajustar_para_turno(atual)
 
-                if not verifica_conflito(processo, tentativa, tempo_fim, agenda):
-                    break
+                cap_dia = capacidade_dia(atual)
 
-                tentativa += timedelta(minutes=10)
+                if cap_dia == 0:
+                    atual += timedelta(days=1)
+                    continue
 
-            # salvar agenda
-            agenda[processo].append((tentativa, tempo_fim))
+                horas_exec = min(restante, cap_dia)
 
-            # definir máquina (por enquanto = processo)
-            maquina = processo
+                fim = atual + timedelta(hours=horas_exec)
 
-            gantt.append({
-                "PV": ordem["PV"],
-                "Processo": processo,
-                "Maquina": maquina,
-                "Início": tentativa,
-                "Fim": tempo_fim,
-                "Duração (h)": round(duracao_h, 2)
-            })
+                tentativa = atual
 
-            tempo_inicio = tempo_fim
+                while conflito(processo, tentativa, fim, agenda):
+                    tentativa += timedelta(minutes=10)
+                    tentativa = ajustar_para_turno(tentativa)
+                    fim = tentativa + timedelta(hours=horas_exec)
 
-    if not gantt:
-        st.error("Nenhuma operação gerada")
-        st.stop()
+                agenda[processo].append((tentativa, fim))
+
+                gantt.append({
+                    "PV": ordem["PV"],
+                    "Processo": processo,
+                    "Maquina": processo,
+                    "Início": tentativa,
+                    "Fim": fim,
+                    "Duração (h)": round(horas_exec, 2)
+                })
+
+                restante -= horas_exec
+                atual = fim
+
+            tempo_inicio = atual
 
     gantt_df = pd.DataFrame(gantt)
 
@@ -199,24 +214,31 @@ if st.button("Gerar APS"):
     st.plotly_chart(fig, use_container_width=True)
 
     # ===============================
-    # RESUMO
+    # OCUPAÇÃO
     # ===============================
-    total = gantt_df["Duração (h)"].sum()
+    st.subheader("Ocupação por Máquina (%)")
 
-    gargalo = (
-        gantt_df.groupby("Processo")["Duração (h)"]
+    ocupacao = (
+        gantt_df.groupby("Maquina")["Duração (h)"]
         .sum()
-        .sort_values(ascending=False)
-        .index[0]
+        .reset_index()
     )
 
-    st.success(f"Tempo total da fábrica: {round(total,2)} h")
-    st.error(f"GARGALO GLOBAL: {gargalo}")
+    dias = gantt_df["Início"].dt.date.nunique()
+    capacidade_total = dias * 9 * EFICIENCIA
+
+    ocupacao["Ocupação (%)"] = (ocupacao["Duração (h)"] / capacidade_total) * 100
+
+    fig2 = px.bar(
+        ocupacao,
+        x="Maquina",
+        y="Ocupação (%)",
+        text_auto=True
+    )
+
+    st.plotly_chart(fig2, use_container_width=True)
 
     # ===============================
-    # SALVAR PARA DASHBOARD
+    # SALVAR
     # ===============================
     st.session_state["dados_dashboard"] = gantt_df
-    st.session_state["total_horas"] = total
-    st.session_state["gargalo"] = gargalo
-    st.session_state["ordens"] = df_ordens["PV"].nunique()
