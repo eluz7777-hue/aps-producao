@@ -7,6 +7,7 @@ st.title("APS - Simulador com Base Real")
 
 # CARREGAR PLANILHA
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+df_base = df_base.fillna(0)
 st.write(df_base.columns)
 
 # LIMPEZA BÁSICA
