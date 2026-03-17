@@ -16,13 +16,12 @@ if "dados_dashboard" not in st.session_state:
 df = st.session_state["dados_dashboard"].copy()
 
 # ===============================
-# GARANTE DATETIME
+# DATETIME
 # ===============================
 df["Início"] = pd.to_datetime(df["Início"])
-df["Fim"] = pd.to_datetime(df["Fim"])
 
 # ===============================
-# SELETOR DE PERÍODO
+# FILTRO PERÍODO
 # ===============================
 st.subheader("Análise por Período")
 
@@ -31,9 +30,6 @@ periodo = st.selectbox(
     ["Diário", "Semanal", "Mensal"]
 )
 
-# ===============================
-# AGRUPAMENTO CORRETO
-# ===============================
 if periodo == "Diário":
     df["Periodo"] = df["Início"].dt.date.astype(str)
 
@@ -44,25 +40,25 @@ elif periodo == "Mensal":
     df["Periodo"] = df["Início"].dt.to_period("M").astype(str)
 
 # ===============================
-# AGRUPA
+# AGRUPAMENTO POR MÁQUINA
 # ===============================
-df_group = (
-    df.groupby(["Periodo", "Processo"])["Duração (h)"]
+df_maquina = (
+    df.groupby(["Periodo", "Maquina"])["Duração (h)"]
     .sum()
     .reset_index()
 )
 
 # ===============================
-# GRÁFICO DE CARGA
+# GRÁFICO DE CARGA (VERTICAL)
 # ===============================
-st.subheader("Carga por Processo")
+st.subheader("Carga por Máquina")
 
 fig = px.bar(
-    df_group,
+    df_maquina,
     x="Periodo",
     y="Duração (h)",
-    color="Processo",
-    barmode="stack",
+    color="Maquina",
+    barmode="group",
     text_auto=True
 )
 
@@ -71,10 +67,10 @@ st.plotly_chart(fig, use_container_width=True)
 # ===============================
 # GARGALO POR PERÍODO
 # ===============================
-st.subheader("Gargalo por Período")
+st.subheader("Gargalo por Máquina")
 
 gargalo = (
-    df_group.sort_values(["Periodo", "Duração (h)"], ascending=[True, False])
+    df_maquina.sort_values(["Periodo", "Duração (h)"], ascending=[True, False])
     .groupby("Periodo")
     .first()
     .reset_index()
@@ -84,23 +80,44 @@ fig2 = px.bar(
     gargalo,
     x="Periodo",
     y="Duração (h)",
-    color="Processo",
+    color="Maquina",
     text_auto=True
 )
 
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# KPIs
+# RANKING GERAL
+# ===============================
+st.subheader("Ranking de Gargalos")
+
+ranking = (
+    df.groupby("Maquina")["Duração (h)"]
+    .sum()
+    .sort_values(ascending=False)
+    .reset_index()
+)
+
+fig3 = px.bar(
+    ranking,
+    x="Maquina",
+    y="Duração (h)",
+    text_auto=True
+)
+
+st.plotly_chart(fig3, use_container_width=True)
+
+# ===============================
+# KPI
 # ===============================
 st.subheader("Indicadores")
 
 total = df["Duração (h)"].sum()
 ordens = df["PV"].nunique()
-processos = df["Processo"].nunique()
+maquinas = df["Maquina"].nunique()
 
 c1, c2, c3 = st.columns(3)
 
-c1.metric("Total de Horas", round(total, 2))
+c1.metric("Horas Totais", round(total, 2))
 c2.metric("Ordens", ordens)
-c3.metric("Processos Ativos", processos)
+c3.metric("Máquinas Ativas", maquinas)

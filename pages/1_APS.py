@@ -155,20 +155,17 @@ if st.button("Gerar APS"):
     # ===============================
     # GANTT
     # ===============================
-    st.subheader("Gantt com Restrições")
+    # DEFINIR MÁQUINA (SIMPLES POR ENQUANTO)
+maquina = processo
 
-    fig = px.timeline(
-        gantt_df,
-        x_start="Início",
-        x_end="Fim",
-        y="Processo",
-        color="PV",
-        text="Duração (h)"
-    )
-
-    fig.update_yaxes(autorange="reversed")
-
-    st.plotly_chart(fig, use_container_width=True)
+gantt.append({
+    "PV": ordem["PV"],
+    "Processo": processo,
+    "Maquina": maquina,
+    "Início": tentativa,
+    "Fim": tempo_fim,
+    "Duração (h)": round(duracao_h, 2)
+})
 
     # ===============================
     # RESUMO
