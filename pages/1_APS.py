@@ -8,9 +8,10 @@ st.set_page_config(layout="wide")
 st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
 # ===============================
-# CONFIGURAÇÃO REAL
+# CONFIG
 # ===============================
 EFICIENCIA = 0.8
+LEAD_TIME_PADRAO = 21  # dias
 
 HORAS_DIA = {
     0: 9,
@@ -20,9 +21,6 @@ HORAS_DIA = {
     4: 8
 }
 
-# ===============================
-# MÁQUINAS REAIS
-# ===============================
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
     "FRESADORAS": ["FRESA_1", "FRESA_2", "FRESA_3"],
@@ -36,27 +34,26 @@ MAQUINAS = {
 PROCESSOS_VALIDOS = list(MAQUINAS.keys())
 
 # ===============================
-# TURNOS
+# TURNO
 # ===============================
-def ajustar_para_turno(data):
+def ajustar_turno(data):
 
     while True:
-
         if data.weekday() > 4:
-            data += timedelta(days=1)
-            data = data.replace(hour=7, minute=0)
+            data -= timedelta(days=1)
+            data = data.replace(hour=17)
             continue
 
         inicio = 7
         fim = 17 if data.weekday() < 4 else 16
 
         if data.hour < inicio:
-            return data.replace(hour=inicio, minute=0)
+            data -= timedelta(days=1)
+            data = data.replace(hour=fim)
+            continue
 
         if data.hour >= fim:
-            data += timedelta(days=1)
-            data = data.replace(hour=7, minute=0)
-            continue
+            return data.replace(hour=fim)
 
         return data
 
@@ -106,42 +103,25 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# CONFLITO
-# ===============================
-def conflito(maquina, inicio, fim, agenda):
-    for (i, f) in agenda[maquina]:
-        if not (fim <= i or inicio >= f):
-            return True
-    return False
-
-# ===============================
-# APS
+# APS BACKWARD
 # ===============================
 if st.button("Gerar APS"):
-
-    df_ordens = pd.DataFrame(ordens)
-
-    df_ordens = df_ordens.sort_values(
-        by=["URGENTE", "ENTREGA"],
-        ascending=[False, True]
-    )
 
     agenda = {m: [] for maquinas in MAQUINAS.values() for m in maquinas}
 
     gantt = []
 
-    inicio_global = ajustar_para_turno(datetime.now())
-
-    for _, ordem in df_ordens.iterrows():
+    for ordem in ordens:
 
         produto = df_base[df_base["CODIGO"] == ordem["CODIGO"]]
 
         if produto.empty:
             continue
 
-        tempo_inicio = inicio_global
+        # 🔥 COMEÇA DA ENTREGA PARA TRÁS
+        tempo_fim = ajustar_turno(ordem["ENTREGA"] + timedelta(hours=17))
 
-        for processo in PROCESSOS_VALIDOS:
+        for processo in reversed(PROCESSOS_VALIDOS):
 
             if processo not in df_base.columns:
                 continue
@@ -151,60 +131,39 @@ if st.button("Gerar APS"):
             if tempo_min <= 0:
                 continue
 
-            duracao_total = (tempo_min * ordem["QTD"]) / 60
+            duracao = (tempo_min * ordem["QTD"]) / 60
 
             maquinas = MAQUINAS[processo]
+            maquina = maquinas[0]
 
-            # 🔥 ESCOLHE MÁQUINA MENOS CARREGADA
-            cargas = {
-                m: sum([(f - i).total_seconds() for i, f in agenda[m]])
-                for m in maquinas
-            }
-
-            maquina_escolhida = min(cargas, key=cargas.get)
-
-            restante = duracao_total
-            atual = tempo_inicio
+            restante = duracao
 
             while restante > 0:
 
-                atual = ajustar_para_turno(atual)
-
-                cap = capacidade_dia(atual)
-
-                if cap <= 0:
-                    atual += timedelta(days=1)
-                    continue
+                cap = capacidade_dia(tempo_fim)
 
                 horas_exec = min(restante, cap)
 
-                tentativa = atual
-                fim = tentativa + timedelta(hours=horas_exec)
-
-                while conflito(maquina_escolhida, tentativa, fim, agenda):
-                    tentativa += timedelta(minutes=10)
-                    tentativa = ajustar_para_turno(tentativa)
-                    fim = tentativa + timedelta(hours=horas_exec)
-
-                agenda[maquina_escolhida].append((tentativa, fim))
+                inicio = tempo_fim - timedelta(hours=horas_exec)
 
                 gantt.append({
                     "PV": ordem["PV"],
                     "Processo": processo,
-                    "Maquina": maquina_escolhida,
-                    "Início": tentativa,
-                    "Fim": fim,
+                    "Maquina": maquina,
+                    "Início": inicio,
+                    "Fim": tempo_fim,
                     "Duração (h)": round(horas_exec, 2)
                 })
 
                 restante -= horas_exec
-                atual = fim
-
-            tempo_inicio = atual
+                tempo_fim = inicio
 
     gantt_df = pd.DataFrame(gantt)
 
-    st.subheader("Gantt de Produção")
+    # ===============================
+    # GANTT
+    # ===============================
+    st.subheader("Gantt (Real - Backward)")
 
     fig = px.timeline(
         gantt_df,
@@ -218,30 +177,5 @@ if st.button("Gerar APS"):
     fig.update_yaxes(autorange="reversed")
 
     st.plotly_chart(fig, use_container_width=True)
-
-    # ===============================
-    # OCUPAÇÃO REAL
-    # ===============================
-    st.subheader("Ocupação Real (%)")
-
-    ocup = (
-        gantt_df.groupby("Maquina")["Duração (h)"]
-        .sum()
-        .reset_index()
-    )
-
-    dias = gantt_df["Início"].dt.date.nunique()
-    capacidade_total = dias * 9 * EFICIENCIA
-
-    ocup["Ocupação (%)"] = (ocup["Duração (h)"] / capacidade_total) * 100
-
-    fig2 = px.bar(
-        ocup,
-        x="Maquina",
-        y="Ocupação (%)",
-        text_auto=True
-    )
-
-    st.plotly_chart(fig2, use_container_width=True)
 
     st.session_state["dados_dashboard"] = gantt_df
