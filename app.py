@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Planejamento Avançado com Calendário Real")
+st.title("APS - Planejamento Avançado com Interface Profissional")
 
 # =========================
 # CONFIGURAÇÃO FÁBRICA
@@ -36,7 +36,6 @@ def somar_horas(data_inicio, horas):
 
     while horas_restantes > 0:
 
-        # pula fim de semana
         if data.weekday() >= 5:
             data += timedelta(days=1)
             data = data.replace(hour=inicio_turno, minute=0)
@@ -78,16 +77,37 @@ df_base = df_base.fillna(0)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
 # =========================
-# INPUT
+# FORMULÁRIO DE ORDENS
 # =========================
-st.subheader("Ordens de Produção")
+st.subheader("Cadastro de Ordens")
 
-st.write("Formato: CODIGO,QUANTIDADE,DATA_ENTREGA (AAAA-MM-DD)")
+num_ordens = st.number_input("Quantidade de ordens", min_value=1, max_value=20, value=3)
 
-ordens = st.text_area(
-    "",
-    "15494625,5,2026-03-20\nHVHV311697-01,5,2026-03-18\n16323723,9,2026-03-25"
-)
+ordens = []
+
+for i in range(num_ordens):
+    st.markdown(f"### Ordem {i+1}")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        pv = st.text_input(f"PV {i}", key=f"pv_{i}")
+
+    with col2:
+        codigo = st.text_input(f"Código {i}", key=f"cod_{i}")
+
+    with col3:
+        qtd = st.number_input(f"Qtd {i}", min_value=1, value=1, key=f"qtd_{i}")
+
+    with col4:
+        data = st.date_input(f"Entrega {i}", key=f"data_{i}")
+
+    ordens.append({
+        "pv": pv,
+        "codigo": normalizar_codigo(codigo),
+        "qtd": qtd,
+        "data": pd.to_datetime(data)
+    })
 
 # =========================
 # RESTRIÇÕES
@@ -115,24 +135,10 @@ def pode_rodar(processo, ativos):
 # =========================
 if st.button("Gerar APS"):
 
-    pedidos = []
-
-    for linha in ordens.strip().split("\n"):
-        try:
-            cod, qtd, data = linha.split(",")
-            pedidos.append({
-                "codigo": normalizar_codigo(cod),
-                "qtd": int(qtd),
-                "data": pd.to_datetime(data)
-            })
-        except:
-            continue
-
-    # ordenar por data (prioridade)
-    pedidos = sorted(pedidos, key=lambda x: x["data"])
+    # ordenar por data de entrega
+    pedidos = sorted(ordens, key=lambda x: x["data"])
 
     timeline = []
-
     inicio_base = datetime.now().replace(hour=inicio_turno, minute=0)
 
     fila_maquinas = {
@@ -167,7 +173,6 @@ if st.button("Gerar APS"):
 
                     inicio = max(maquinas_proc[idx], tempo_anterior)
 
-                    # restrições
                     ativos = [
                         p["Processo"]
                         for p in timeline
@@ -188,6 +193,7 @@ if st.button("Gerar APS"):
                     tempo_anterior = fim
 
                     timeline.append({
+                        "PV": pedido["pv"],
                         "Ordem": pedido["codigo"],
                         "Processo": processo,
                         "Inicio": inicio,
@@ -201,49 +207,28 @@ if st.button("Gerar APS"):
         st.error("Nenhuma ordem válida.")
     else:
 
-        # =========================
-        # GANTT COM LABELS
-        # =========================
-        st.subheader("Gantt com Datas Reais")
+        st.subheader("Gantt de Produção")
 
         fig = px.timeline(
             df_gantt,
             x_start="Inicio",
             x_end="Fim",
             y="Processo",
-            color="Ordem",
+            color="PV",
             text=df_gantt["Duracao"].astype(str) + " h"
         )
 
-        fig.update_traces(
-            textposition="inside",
-            textfont_size=12
-        )
-
+        fig.update_traces(textposition="inside", textfont_size=12)
         fig.update_yaxes(autorange="reversed")
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # =========================
-        # GARGALOS
-        # =========================
-        st.subheader("Análise de Gargalos")
+        st.subheader("Resumo")
 
-        df_gantt["Dia"] = df_gantt["Inicio"].dt.date
-        df_gantt["Semana"] = df_gantt["Inicio"].dt.isocalendar().week
-        df_gantt["Mes"] = df_gantt["Inicio"].dt.month
+        total = df_gantt["Fim"].max()
+        st.success(f"Tempo total da fábrica: {round((total - inicio_base).total_seconds()/3600,2)} horas")
 
-        st.write("🔴 Gargalo Diário")
+        st.write("🔴 Gargalo por Processo")
         st.dataframe(
-            df_gantt.groupby(["Dia","Processo"])["Duracao"].sum().reset_index()
-        )
-
-        st.write("🟠 Gargalo Semanal")
-        st.dataframe(
-            df_gantt.groupby(["Semana","Processo"])["Duracao"].sum().reset_index()
-        )
-
-        st.write("🟢 Gargalo Mensal")
-        st.dataframe(
-            df_gantt.groupby(["Mes","Processo"])["Duracao"].sum().reset_index()
+            df_gantt.groupby("Processo")["Duracao"].sum().sort_values(ascending=False)
         )
