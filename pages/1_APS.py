@@ -13,11 +13,11 @@ st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 EFICIENCIA = 0.8
 
 HORAS_DIA = {
-    0: 9,  # segunda
+    0: 9,
     1: 9,
     2: 9,
     3: 9,
-    4: 8   # sexta
+    4: 8
 }
 
 PROCESSOS_VALIDOS = [
@@ -36,33 +36,42 @@ RESTRICOES = {
 }
 
 # ===============================
-# FUNÇÃO TURNO
+# FUNÇÃO TURNO (CORRIGIDA - SEM RECURSÃO)
 # ===============================
 def ajustar_para_turno(data):
-    while data.weekday() > 4:
-        data += timedelta(days=1)
 
-    hora_inicio = 7
-    hora_fim = 17 if data.weekday() < 4 else 16
+    while True:
 
-    if data.hour < hora_inicio:
-        return data.replace(hour=hora_inicio, minute=0)
+        # pula fim de semana
+        if data.weekday() > 4:
+            data += timedelta(days=1)
+            data = data.replace(hour=7, minute=0)
+            continue
 
-    if data.hour >= hora_fim:
-        data += timedelta(days=1)
-        return ajustar_para_turno(data)
+        hora_inicio = 7
+        hora_fim = 17 if data.weekday() < 4 else 16
 
-    return data
+        # antes do turno
+        if data.hour < hora_inicio:
+            data = data.replace(hour=hora_inicio, minute=0)
+            return data
+
+        # depois do turno
+        if data.hour >= hora_fim:
+            data += timedelta(days=1)
+            data = data.replace(hour=7, minute=0)
+            continue
+
+        return data
 
 # ===============================
-# CAPACIDADE DIÁRIA
+# CAPACIDADE
 # ===============================
 def capacidade_dia(data):
-    horas = HORAS_DIA.get(data.weekday(), 0)
-    return horas * EFICIENCIA
+    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 # ===============================
-# CARREGAR BASE
+# BASE
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
@@ -77,7 +86,7 @@ for col in PROCESSOS_VALIDOS:
 codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# ENTRADA
+# INPUT
 # ===============================
 st.subheader("Ordens")
 
@@ -137,6 +146,7 @@ if st.button("Gerar APS"):
         produto = df_base[df_base["CODIGO"] == ordem["CODIGO"]]
 
         if produto.empty:
+            st.warning(f"Código não encontrado: {ordem['CODIGO']}")
             continue
 
         tempo_inicio = inicio_global
@@ -151,26 +161,25 @@ if st.button("Gerar APS"):
             if tempo_min <= 0:
                 continue
 
-            duracao_h = (tempo_min * ordem["QTD"]) / 60
+            duracao_total = (tempo_min * ordem["QTD"]) / 60
 
-            restante = duracao_h
+            restante = duracao_total
             atual = tempo_inicio
 
             while restante > 0:
 
                 atual = ajustar_para_turno(atual)
 
-                cap_dia = capacidade_dia(atual)
+                cap = capacidade_dia(atual)
 
-                if cap_dia == 0:
+                if cap <= 0:
                     atual += timedelta(days=1)
                     continue
 
-                horas_exec = min(restante, cap_dia)
-
-                fim = atual + timedelta(hours=horas_exec)
+                horas_exec = min(restante, cap)
 
                 tentativa = atual
+                fim = tentativa + timedelta(hours=horas_exec)
 
                 while conflito(processo, tentativa, fim, agenda):
                     tentativa += timedelta(minutes=10)
@@ -195,9 +204,6 @@ if st.button("Gerar APS"):
 
     gantt_df = pd.DataFrame(gantt)
 
-    # ===============================
-    # GANTT
-    # ===============================
     st.subheader("Gantt de Produção")
 
     fig = px.timeline(
@@ -213,32 +219,4 @@ if st.button("Gerar APS"):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ===============================
-    # OCUPAÇÃO
-    # ===============================
-    st.subheader("Ocupação por Máquina (%)")
-
-    ocupacao = (
-        gantt_df.groupby("Maquina")["Duração (h)"]
-        .sum()
-        .reset_index()
-    )
-
-    dias = gantt_df["Início"].dt.date.nunique()
-    capacidade_total = dias * 9 * EFICIENCIA
-
-    ocupacao["Ocupação (%)"] = (ocupacao["Duração (h)"] / capacidade_total) * 100
-
-    fig2 = px.bar(
-        ocupacao,
-        x="Maquina",
-        y="Ocupação (%)",
-        text_auto=True
-    )
-
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # ===============================
-    # SALVAR
-    # ===============================
     st.session_state["dados_dashboard"] = gantt_df
