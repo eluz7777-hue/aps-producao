@@ -4,55 +4,26 @@ import plotly.express as px
 
 st.set_page_config(layout="wide")
 
-st.title("📊 DASHBOARD - APS ELOHIM")
+st.title("📊 Dashboard APS Elohim")
 
 # ===============================
-# VERIFICA SE TEM DADOS DO APS
+# VERIFICA DADOS
 # ===============================
-
 if "dados_dashboard" not in st.session_state:
-    st.warning("⚠️ Execute o APS primeiro")
+    st.warning("Execute o APS primeiro")
     st.stop()
 
-df = st.session_state["dados_dashboard"]
-
-total_horas = st.session_state.get("total_horas", 0)
-gargalo = st.session_state.get("gargalo", "N/A")
-ordens = st.session_state.get("ordens", 0)
+df = st.session_state["dados_dashboard"].copy()
 
 # ===============================
-# KPIs
+# GARANTE DATETIME
 # ===============================
-
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("⏱️ Total de Horas", f"{round(total_horas,2)} h")
-col2.metric("🚨 Gargalo", gargalo)
-col3.metric("📦 Ordens", ordens)
-col4.metric("⚙️ Ocupação Média", "Calculando...")
+df["Início"] = pd.to_datetime(df["Início"])
+df["Fim"] = pd.to_datetime(df["Fim"])
 
 # ===============================
-# CARGA POR PROCESSO
+# SELETOR DE PERÍODO
 # ===============================
-
-st.subheader("Carga por Processo")
-
-carga_processo = df.groupby("Processo")["Duração (h)"].sum().reset_index()
-
-fig = px.bar(
-    carga_processo,
-    x="Processo",
-    y="Duração (h)",
-    text="Duração (h)",
-    color="Processo"
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# ===============================
-# PERÍODO
-# ===============================
-
 st.subheader("Análise por Período")
 
 periodo = st.selectbox(
@@ -60,31 +31,76 @@ periodo = st.selectbox(
     ["Diário", "Semanal", "Mensal"]
 )
 
-df["Inicio"] = pd.to_datetime(df["Início"])
-
+# ===============================
+# AGRUPAMENTO CORRETO
+# ===============================
 if periodo == "Diário":
-    agrupado = df.groupby(df["Inicio"].dt.date)["Duração (h)"].sum().reset_index()
+    df["Periodo"] = df["Início"].dt.date.astype(str)
+
 elif periodo == "Semanal":
-    agrupado = df.groupby(df["Inicio"].dt.to_period("W"))["Duração (h)"].sum().reset_index()
-else:
-    agrupado = df.groupby(df["Inicio"].dt.to_period("M"))["Duração (h)"].sum().reset_index()
+    df["Periodo"] = df["Início"].dt.to_period("W").astype(str)
+
+elif periodo == "Mensal":
+    df["Periodo"] = df["Início"].dt.to_period("M").astype(str)
+
+# ===============================
+# AGRUPA
+# ===============================
+df_group = (
+    df.groupby(["Periodo", "Processo"])["Duração (h)"]
+    .sum()
+    .reset_index()
+)
+
+# ===============================
+# GRÁFICO DE CARGA
+# ===============================
+st.subheader("Carga por Processo")
+
+fig = px.bar(
+    df_group,
+    x="Periodo",
+    y="Duração (h)",
+    color="Processo",
+    barmode="stack",
+    text_auto=True
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# GARGALO POR PERÍODO
+# ===============================
+st.subheader("Gargalo por Período")
+
+gargalo = (
+    df_group.sort_values(["Periodo", "Duração (h)"], ascending=[True, False])
+    .groupby("Periodo")
+    .first()
+    .reset_index()
+)
 
 fig2 = px.bar(
-    agrupado,
-    x=agrupado.columns[0],
+    gargalo,
+    x="Periodo",
     y="Duração (h)",
-    text="Duração (h)"
+    color="Processo",
+    text_auto=True
 )
 
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# ALERTAS
+# KPIs
 # ===============================
+st.subheader("Indicadores")
 
-st.subheader("Alertas")
+total = df["Duração (h)"].sum()
+ordens = df["PV"].nunique()
+processos = df["Processo"].nunique()
 
-if total_horas > 100:
-    st.error("🔥 Alta carga na fábrica")
-else:
-    st.success("Fábrica dentro da capacidade")
+c1, c2, c3 = st.columns(3)
+
+c1.metric("Total de Horas", round(total, 2))
+c2.metric("Ordens", ordens)
+c3.metric("Processos Ativos", processos)
