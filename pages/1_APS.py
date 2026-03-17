@@ -219,3 +219,11 @@ if st.button("Gerar APS"):
     # =========================
     st.subheader("Status")
     st.dataframe(df_resumo, use_container_width=True)
+# ===============================
+# SALVAR DADOS PARA DASHBOARD
+# ===============================
+
+st.session_state["dados_dashboard"] = gantt_df
+st.session_state["total_horas"] = tempo_total
+st.session_state["gargalo"] = gargalo_global
+st.session_state["ordens"] = df_ordens["PV"].nunique()

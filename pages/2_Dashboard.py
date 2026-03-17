@@ -7,17 +7,18 @@ st.set_page_config(layout="wide")
 st.title("📊 DASHBOARD - APS ELOHIM")
 
 # ===============================
-# DADOS SIMULADOS (TEMPORÁRIO)
-# depois vamos ligar com o APS real
+# VERIFICA SE TEM DADOS DO APS
 # ===============================
 
-dados = pd.DataFrame({
-    "Processo": ["Corte", "Laser", "Fresa", "Solda", "Acabamento"],
-    "Carga (h)": [20, 35, 50, 80, 25]
-})
+if "dados_dashboard" not in st.session_state:
+    st.warning("⚠️ Execute o APS primeiro")
+    st.stop()
 
-total_horas = dados["Carga (h)"].sum()
-gargalo = dados.sort_values("Carga (h)", ascending=False).iloc[0]
+df = st.session_state["dados_dashboard"]
+
+total_horas = st.session_state.get("total_horas", 0)
+gargalo = st.session_state.get("gargalo", "N/A")
+ordens = st.session_state.get("ordens", 0)
 
 # ===============================
 # KPIs
@@ -25,22 +26,24 @@ gargalo = dados.sort_values("Carga (h)", ascending=False).iloc[0]
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("⏱️ Total de Horas", f"{total_horas} h")
-col2.metric("🚨 Gargalo", gargalo["Processo"])
-col3.metric("📦 Ordens", "12")
-col4.metric("⚙️ Ocupação Média", "78%")
+col1.metric("⏱️ Total de Horas", f"{round(total_horas,2)} h")
+col2.metric("🚨 Gargalo", gargalo)
+col3.metric("📦 Ordens", ordens)
+col4.metric("⚙️ Ocupação Média", "Calculando...")
 
 # ===============================
-# GRÁFICO DE CARGA
+# CARGA POR PROCESSO
 # ===============================
 
 st.subheader("Carga por Processo")
 
+carga_processo = df.groupby("Processo")["Duração (h)"].sum().reset_index()
+
 fig = px.bar(
-    dados,
+    carga_processo,
     x="Processo",
-    y="Carga (h)",
-    text="Carga (h)",
+    y="Duração (h)",
+    text="Duração (h)",
     color="Processo"
 )
 
@@ -57,12 +60,23 @@ periodo = st.selectbox(
     ["Diário", "Semanal", "Mensal"]
 )
 
+df["Inicio"] = pd.to_datetime(df["Início"])
+
 if periodo == "Diário":
-    st.info("Visão detalhada do dia")
+    agrupado = df.groupby(df["Inicio"].dt.date)["Duração (h)"].sum().reset_index()
 elif periodo == "Semanal":
-    st.info("Visão consolidada da semana")
+    agrupado = df.groupby(df["Inicio"].dt.to_period("W"))["Duração (h)"].sum().reset_index()
 else:
-    st.info("Visão estratégica mensal")
+    agrupado = df.groupby(df["Inicio"].dt.to_period("M"))["Duração (h)"].sum().reset_index()
+
+fig2 = px.bar(
+    agrupado,
+    x=agrupado.columns[0],
+    y="Duração (h)",
+    text="Duração (h)"
+)
+
+st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
 # ALERTAS
@@ -70,7 +84,7 @@ else:
 
 st.subheader("Alertas")
 
-if gargalo["Carga (h)"] > 60:
-    st.error(f"Gargalo crítico em {gargalo['Processo']}")
+if total_horas > 100:
+    st.error("🔥 Alta carga na fábrica")
 else:
     st.success("Fábrica dentro da capacidade")
