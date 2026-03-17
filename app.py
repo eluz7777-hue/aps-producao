@@ -5,7 +5,10 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS + DASHBOARD INDUSTRIAL")
+st.markdown(
+    "<h1 style='text-align: center;'>APS ELOHIM - ANÁLISE DE CAPACIDADE</h1>",
+    unsafe_allow_html=True
+)
 
 # =========================
 # CONFIG
