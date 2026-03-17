@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
-st.title("APS - Planejamento com Análise de Prazo")
+st.title("APS COMPLETO - Planejamento + Capacidade + Prazo")
 
 # =========================
-# CONFIGURAÇÃO
+# CONFIG
 # =========================
 eficiencia = 0.8
 
@@ -42,12 +42,12 @@ def somar_horas(data_inicio, horas):
             continue
 
         hora_atual = data.hour + data.minute / 60
-        horas_disponiveis = fim_turno - hora_atual
+        horas_disp = fim_turno - hora_atual
 
-        if horas_restantes <= horas_disponiveis:
+        if horas_restantes <= horas_disp:
             return data + timedelta(hours=horas_restantes)
         else:
-            horas_restantes -= horas_disponiveis
+            horas_restantes -= horas_disp
             data += timedelta(days=1)
             data = data.replace(hour=inicio_turno, minute=0)
 
@@ -58,17 +58,12 @@ def normalizar_codigo(x):
         return ""
     x = str(x)
     x = x.replace(".0", "")
-    x = x.replace(" ", "")
     return x.strip().upper()
 
 # =========================
 # BASE
 # =========================
-df_base = pd.read_excel(
-    "Processos_de_Fabricacao.xlsx",
-    dtype={"CODIGO": str}
-)
-
+df_base = pd.read_excel("Processos_de_Fabricacao.xlsx", dtype={"CODIGO": str})
 df_base = df_base.loc[:, ~df_base.columns.astype(str).str.contains("Unnamed")]
 df_base = df_base.fillna(0)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
@@ -76,15 +71,13 @@ df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 # =========================
 # FORMULÁRIO
 # =========================
-st.subheader("Cadastro de Ordens")
+st.subheader("Ordens")
 
 num_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
 
 ordens = []
 
 for i in range(num_ordens):
-
-    st.markdown(f"### Ordem {i+1}")
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -114,10 +107,6 @@ def pode_rodar(processo, ativos):
 
     if processo == "CORTE-PLASMA":
         if "CORTE-LASER" in ativos or "SOLDAGEM" in ativos:
-            return False
-
-    if processo == "CORTE-LASER":
-        if "CORTE-PLASMA" in ativos:
             return False
 
     if processo == "SOLDAGEM":
@@ -191,17 +180,14 @@ if st.button("Gerar APS"):
                         "Duracao": round(tempo_real, 2)
                     })
 
-        # 🔥 FINAL DA ORDEM
-        atraso_horas = (tempo_anterior - pedido["data"]).total_seconds() / 3600
-
-        status = "🟢 Em dia" if atraso_horas <= 0 else "🔴 Atrasado"
+        atraso_h = (tempo_anterior - pedido["data"]).total_seconds() / 3600
 
         resumo.append({
             "PV": pedido["pv"],
-            "Entrega Cliente": pedido["data"],
-            "Fim Produção": tempo_anterior,
-            "Atraso (h)": round(atraso_horas, 1),
-            "Status": status
+            "Entrega": pedido["data"],
+            "Fim": tempo_anterior,
+            "Atraso (h)": round(atraso_h,1),
+            "Status": "🔴 Atrasado" if atraso_h > 0 else "🟢 Em dia"
         })
 
     df_gantt = pd.DataFrame(timeline)
@@ -210,7 +196,7 @@ if st.button("Gerar APS"):
     # =========================
     # GANTT
     # =========================
-    st.subheader("Gantt de Produção")
+    st.subheader("Gantt")
 
     fig = px.timeline(
         df_gantt,
@@ -218,17 +204,41 @@ if st.button("Gerar APS"):
         x_end="Fim",
         y="Processo",
         color="PV",
-        text=df_gantt["Duracao"].astype(str) + " h"
+        text=df_gantt["Duracao"].astype(str) + "h"
     )
 
-    fig.update_traces(textposition="inside", textfont_size=12)
+    fig.update_traces(textposition="inside")
     fig.update_yaxes(autorange="reversed")
 
     st.plotly_chart(fig, use_container_width=True)
 
     # =========================
-    # RESUMO DE PRAZO
+    # STATUS
     # =========================
     st.subheader("Status das Ordens")
-
     st.dataframe(df_resumo, use_container_width=True)
+
+    # =========================
+    # ANÁLISE DE CAPACIDADE
+    # =========================
+    st.subheader("Análise de Gargalos")
+
+    df_gantt["Dia"] = df_gantt["Inicio"].dt.date
+    df_gantt["Semana"] = df_gantt["Inicio"].dt.isocalendar().week
+    df_gantt["Mes"] = df_gantt["Inicio"].dt.month
+
+    tipo = st.selectbox(
+        "Visualização",
+        ["Diário", "Semanal", "Mensal"]
+    )
+
+    if tipo == "Diário":
+        analise = df_gantt.groupby(["Dia","Processo"])["Duracao"].sum().reset_index()
+
+    elif tipo == "Semanal":
+        analise = df_gantt.groupby(["Semana","Processo"])["Duracao"].sum().reset_index()
+
+    else:
+        analise = df_gantt.groupby(["Mes","Processo"])["Duracao"].sum().reset_index()
+
+    st.dataframe(analise, use_container_width=True)
