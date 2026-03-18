@@ -27,14 +27,12 @@ df["Data"] = pd.to_datetime(df["Início"])
 HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
 EFICIENCIA = 0.8
 
-# 🔥 QUANTIDADE DE MÁQUINAS
 MAQUINAS_QTD = {
     "PLASMA_1": 1,
     "SERRA_1": 1,
     "ACAB_1": 1,
     "ACAB_2": 1,
     "PINTURA_1": 1
-    # 👉 ajuste conforme sua fábrica
 }
 
 def capacidade_dia(data):
@@ -70,7 +68,6 @@ capacidade = []
 
 for (p, po, m), g in df.groupby(["Periodo", "Periodo_ord", "Maquina"]):
 
-    # 🔥 pega TODOS os dias do período
     if tipo == "Semanal":
         ano = int(str(po)[:4])
         semana = int(str(po)[4:])
@@ -89,7 +86,6 @@ for (p, po, m), g in df.groupby(["Periodo", "Periodo_ord", "Maquina"]):
     total = sum(capacidade_dia(d) for d in dias if d.weekday() <= 4)
 
     qtd = MAQUINAS_QTD.get(m, 1)
-
     total = total * qtd
 
     capacidade.append({
@@ -133,7 +129,7 @@ df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 df_final = df_final.sort_values("Periodo_ord")
 
 # ===============================
-# GRÁFICO
+# GRÁFICO PRINCIPAL
 # ===============================
 df_plot = (
     df_final.groupby(["Periodo", "Periodo_ord", "Maquina"])
@@ -161,10 +157,30 @@ fig = px.bar(
 )
 
 fig.add_hline(y=100, line_dash="dash")
-
 fig.update_traces(textposition="outside", cliponaxis=False)
 
 st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# 🔥 GRÁFICO DE PIZZA (RESTAURADO)
+# ===============================
+st.subheader("🥧 Distribuição de Carga por Recurso")
+
+pizza = (
+    df_plot.groupby("Maquina")["Duração (h)"]
+    .sum()
+    .reset_index()
+)
+
+fig2 = px.pie(
+    pizza,
+    names="Maquina",
+    values="Duração (h)"
+)
+
+fig2.update_traces(textinfo="label+percent")
+
+st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
 # TABELA
