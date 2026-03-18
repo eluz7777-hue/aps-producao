@@ -31,10 +31,15 @@ def capacidade_dia(data):
 tipo = st.selectbox("Visualização", ["Semanal", "Mensal"])
 
 if tipo == "Semanal":
-    df["Periodo_ord"] = df["Data"].dt.strftime("%Y%U")
-    df["Periodo"] = "Sem " + df["Data"].dt.isocalendar().week.astype(str)
+    df["Ano"] = df["Data"].dt.year
+    df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
+
+    df["Periodo_ord"] = df["Ano"] * 100 + df["Semana"]  # 🔥 chave numérica
+
+    df["Periodo"] = "Sem " + df["Semana"].astype(str)
+
 else:
-    df["Periodo_ord"] = df["Data"].dt.strftime("%Y%m")
+    df["Periodo_ord"] = df["Data"].dt.year * 100 + df["Data"].dt.month  # 🔥 chave numérica
     df["Periodo"] = df["Data"].dt.strftime("%b/%Y")
 
 # ===============================
@@ -92,7 +97,6 @@ df_final["Ocupação (%)"] = df_final["Ocupação (%)"].round(0)
 
 df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
 
-# STATUS
 def status(x):
     if x <= 85:
         return "🟢"
@@ -103,6 +107,7 @@ def status(x):
 
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
+# 🔥 ORDENAÇÃO REAL
 df_final = df_final.sort_values("Periodo_ord")
 
 # ===============================
@@ -117,12 +122,14 @@ df_plot = (
     .reset_index()
 )
 
+df_plot = df_plot.sort_values("Periodo_ord")  # 🔥 importante
+
 df_plot["Label"] = (
     df_plot["Duração (h)"].astype(int).astype(str) + "h"
 )
 
 # ===============================
-# 🔥 GRÁFICO PRINCIPAL (CORRIGIDO)
+# GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("📊 Carga por Máquina")
 
@@ -132,13 +139,12 @@ fig = px.bar(
     y="Ocupação (%)",
     color="Maquina",
     text="Label",
-    barmode="group"
+    barmode="group",
+    category_orders={"Periodo": df_plot["Periodo"].unique()}  # 🔥 força ordem correta
 )
 
-# 🔴 LINHA DE CAPACIDADE
 fig.add_hline(y=100, line_dash="dash")
 
-# 🔥 MELHORIA DE VISUAL
 fig.update_traces(
     textposition="outside",
     cliponaxis=False
@@ -146,9 +152,7 @@ fig.update_traces(
 
 fig.update_layout(
     uniformtext_minsize=10,
-    uniformtext_mode='show',
-    xaxis_title="Período",
-    yaxis_title="Ocupação (%)"
+    uniformtext_mode='show'
 )
 
 st.plotly_chart(fig, use_container_width=True)
