@@ -98,6 +98,9 @@ df_final["Ocupação (%)"] = (
     df_final["Duração (h)"] / df_final["Capacidade (h)"]
 ) * 100
 
+# 🔥 NOVA COLUNA
+df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
+
 def classificar(c):
     if c <= 85:
         return "🟢 Normal"
@@ -139,8 +142,9 @@ st.dataframe(
 # ===============================
 st.subheader("Resumo Geral")
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("Carga Total (h)", round(df_final["Duração (h)"].sum(), 2))
 col2.metric("Capacidade Total (h)", round(df_final["Capacidade (h)"].sum(), 2))
 col3.metric("Ocupação Média (%)", round(df_final["Ocupação (%)"].mean(), 1))
+col4.metric("Disponível Médio (%)", round(df_final["Disponível (%)"].mean(), 1))
