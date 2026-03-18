@@ -15,35 +15,33 @@ if "dados_dashboard" not in st.session_state:
 
 df = st.session_state["dados_dashboard"].copy()
 
-# ===============================
-# TRATAMENTO
-# ===============================
 df["Data"] = pd.to_datetime(df["Início"])
 
 # ===============================
-# FILTRO DE VISUALIZAÇÃO
+# FILTRO DE MÊS
 # ===============================
-tipo = st.selectbox(
-    "Selecione o período",
-    ["Diário", "Semanal", "Mensal"]
-)
+meses = sorted(df["Data"].dt.strftime("%Y-%m").unique())
+mes_sel = st.selectbox("Filtrar mês", ["Todos"] + meses)
+
+if mes_sel != "Todos":
+    df = df[df["Data"].dt.strftime("%Y-%m") == mes_sel]
 
 # ===============================
-# CRIA PERÍODOS
+# PERÍODO (SEM DIÁRIO)
 # ===============================
-if tipo == "Diário":
-    df["Periodo"] = df["Data"].dt.strftime("%d/%m")
+tipo = st.selectbox("Período", ["Semanal", "Mensal"])
 
-elif tipo == "Semanal":
+if tipo == "Semanal":
     df["Periodo"] = (
-        "Semana " + df["Data"].dt.isocalendar().week.astype(str)
+        df["Data"].dt.strftime("%Y") +
+        "-S" +
+        df["Data"].dt.isocalendar().week.astype(str).str.zfill(2)
     )
-
-elif tipo == "Mensal":
+else:
     df["Periodo"] = df["Data"].dt.strftime("%Y-%m")
 
 # ===============================
-# AGRUPAMENTO DEMANDA
+# DEMANDA
 # ===============================
 demanda = (
     df.groupby(["Periodo", "Maquina"])["Duração (h)"]
@@ -54,30 +52,26 @@ demanda = (
 # ===============================
 # CAPACIDADE
 # ===============================
-HORAS_DIA = {
-    0: 9,
-    1: 9,
-    2: 9,
-    3: 9,
-    4: 8
-}
-
+HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
 EFICIENCIA = 0.8
 
 def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
-# calcula capacidade por período
 capacidade = []
 
 for (periodo, maquina), grupo in df.groupby(["Periodo", "Maquina"]):
 
-    datas_unicas = grupo["Data"].dt.date.unique()
+    inicio = grupo["Data"].min().date()
+    fim = grupo["Data"].max().date()
+
+    dias = pd.date_range(start=inicio, end=fim)
 
     total = 0
 
-    for d in datas_unicas:
-        total += capacidade_dia(pd.Timestamp(d))
+    for d in dias:
+        if d.weekday() <= 4:
+            total += capacidade_dia(d)
 
     capacidade.append({
         "Periodo": periodo,
@@ -97,9 +91,6 @@ df_final = pd.merge(
     how="left"
 )
 
-# 🔥 NOVA COLUNA (IMPORTANTE)
-df_final["Capacidade Disponível (h)"] = df_final["Capacidade (h)"]
-
 # ===============================
 # MÉTRICAS
 # ===============================
@@ -107,54 +98,49 @@ df_final["Ocupação (%)"] = (
     df_final["Duração (h)"] / df_final["Capacidade (h)"]
 ) * 100
 
-df_final["Excesso (h)"] = (
-    df_final["Duração (h)"] - df_final["Capacidade (h)"]
-)
+def classificar(c):
+    if c <= 85:
+        return "🟢 Normal"
+    elif c <= 100:
+        return "🟡 Atenção"
+    else:
+        return "🔴 Sobrecarga"
+
+df_final["Status"] = df_final["Ocupação (%)"].apply(classificar)
 
 # ===============================
-# FILTRO DE MÊS (NOVO)
+# GRÁFICO
 # ===============================
-meses = sorted(df["Data"].dt.strftime("%Y-%m").unique())
-
-mes_selecionado = st.selectbox("Filtrar mês", ["Todos"] + meses)
-
-if mes_selecionado != "Todos":
-    df_final = df_final[df_final["Periodo"].str.contains(mes_selecionado)]
-
-# ===============================
-# GRÁFICO PRINCIPAL
-# ===============================
-st.subheader("Carga vs Capacidade")
+st.subheader("📊 Ocupação por Máquina")
 
 fig = px.bar(
     df_final,
     x="Periodo",
-    y=["Duração (h)", "Capacidade Disponível (h)"],
-    color="Maquina",
-    barmode="group",
-    text_auto=True
+    y="Ocupação (%)",
+    color="Status",
+    facet_col="Maquina",
+    text="Ocupação (%)"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# GARGALOS
+# TABELA
 # ===============================
-st.subheader("🔥 Gargalos")
+st.subheader("📋 Situação da Capacidade")
 
-gargalos = df_final[df_final["Excesso (h)"] > 0]
-
-if gargalos.empty:
-    st.success("Sem gargalos")
-else:
-    st.dataframe(gargalos)
+st.dataframe(
+    df_final.sort_values("Ocupação (%)", ascending=False),
+    use_container_width=True
+)
 
 # ===============================
-# RESUMO
+# KPI
 # ===============================
 st.subheader("Resumo Geral")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 col1.metric("Carga Total (h)", round(df_final["Duração (h)"].sum(), 2))
 col2.metric("Capacidade Total (h)", round(df_final["Capacidade (h)"].sum(), 2))
+col3.metric("Ocupação Média (%)", round(df_final["Ocupação (%)"].mean(), 1))
