@@ -89,7 +89,7 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        tempo = ordem["ENTREGA"]
+        tempo = ordem["ENTREGA"] - timedelta(days=21)
 
         for processo in reversed(PROCESSOS_VALIDOS):
 
