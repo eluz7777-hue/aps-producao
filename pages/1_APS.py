@@ -6,9 +6,6 @@ st.set_page_config(layout="wide")
 
 st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
-# ===============================
-# CONFIG
-# ===============================
 EFICIENCIA = 0.8
 
 HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
@@ -28,25 +25,19 @@ MAQUINAS = {
 }
 
 def capacidade_dia(data):
+    if data.weekday() > 4:
+        return 0
     return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 # ===============================
-# BASE (CARREGA PRIMEIRO!)
+# BASE
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.fillna(0, inplace=True)
-
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
-# ===============================
-# PROCESSOS NA ORDEM DO EXCEL
-# ===============================
 colunas = list(df_base.columns)
-
-PROCESSOS_VALIDOS = [
-    c for c in colunas
-    if c != "CODIGO" and c in MAQUINAS
-]
+PROCESSOS_VALIDOS = [c for c in colunas if c != "CODIGO" and c in MAQUINAS]
 
 # ===============================
 # INPUT
@@ -76,15 +67,15 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# APS
+# APS COM NIVELAMENTO
 # ===============================
 if st.button("Gerar APS"):
 
-    carga = {}
+    carga_semana = {}  # 🔥 controle semanal
     gantt = []
 
-    def key(maquina, data):
-        return f"{maquina}_{data.date()}"
+    def semana_key(data):
+        return f"{data.year}_{data.isocalendar().week}"
 
     for ordem in ordens:
 
@@ -95,7 +86,6 @@ if st.button("Gerar APS"):
 
         tempo = ordem["ENTREGA"]
 
-        # 🔥 RESPEITA SEQUÊNCIA DO EXCEL
         for processo in reversed(PROCESSOS_VALIDOS):
 
             tempo_min = produto.iloc[0].get(processo, 0)
@@ -108,48 +98,44 @@ if st.button("Gerar APS"):
 
             while restante > 0:
 
-                cap_dia = capacidade_dia(tempo)
-                alocado = False
+                semana = semana_key(tempo)
 
-                for maquina in maquinas:
+                # 🔥 capacidade semanal (35h base)
+                cap_semana = sum(capacidade_dia(tempo - timedelta(days=i)) for i in range(5))
 
-                    k = key(maquina, tempo)
-                    usado = carga.get(k, 0)
+                usado = carga_semana.get((processo, semana), 0)
 
-                    disponivel = cap_dia - usado
+                disponivel = cap_semana - usado
 
-                    if disponivel <= 0:
-                        continue
+                if disponivel <= 0:
+                    tempo -= timedelta(days=7)
+                    continue
 
-                    horas = min(restante, disponivel)
+                horas = min(restante, disponivel)
 
-                    inicio = tempo - timedelta(hours=horas)
+                maquina = maquinas[0]  # mantém lógica simples
 
-                    gantt.append({
-                        "PV": ordem["PV"],
-                        "Processo": processo,
-                        "Maquina": maquina,
-                        "Início": inicio,
-                        "Fim": tempo,
-                        "Duração (h)": round(horas)
-                    })
+                inicio = tempo - timedelta(hours=horas)
 
-                    carga[k] = usado + horas
-                    restante -= horas
-                    tempo = inicio
+                gantt.append({
+                    "PV": ordem["PV"],
+                    "Processo": processo,
+                    "Maquina": maquina,
+                    "Início": inicio,
+                    "Fim": tempo,
+                    "Duração (h)": round(horas)
+                })
 
-                    alocado = True
-                    break
-
-                if not alocado:
-                    tempo -= timedelta(days=1)
+                carga_semana[(processo, semana)] = usado + horas
+                restante -= horas
+                tempo = inicio
 
     gantt_df = pd.DataFrame(gantt)
 
     if gantt_df.empty:
-        st.error("Nenhum dado gerado. Verifique a planilha.")
+        st.error("Nenhum dado gerado.")
         st.stop()
 
     st.session_state["dados_dashboard"] = gantt_df
 
-    st.success("APS gerado com sucesso")
+    st.success("APS com nivelamento gerado")
