@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import holidays
 
 st.set_page_config(layout="wide")
 
@@ -21,14 +22,24 @@ if "Início" not in df.columns:
 
 df["Data"] = pd.to_datetime(df["Início"])
 
-# 🔥 CRIA PROCESSO BASEADO NO NOME DA MÁQUINA
+# 🔥 PROCESSO
 df["Processo"] = df["Maquina"].str.split("_").str[0]
 
 # ===============================
-# CONFIG REAL
+# CONFIG
 # ===============================
 HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
 EFICIENCIA = 0.8
+
+# 🔥 FERIADOS BRASIL
+br_holidays = holidays.Brazil()
+
+def capacidade_dia(data):
+    if data.weekday() > 4:
+        return 0
+    if data.date() in br_holidays:
+        return 0
+    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 MAQUINAS_QTD = {
     "PLASMA_1": 1,
@@ -37,9 +48,6 @@ MAQUINAS_QTD = {
     "ACAB_2": 1,
     "PINTURA_1": 1
 }
-
-def capacidade_dia(data):
-    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 # ===============================
 # VISUALIZAÇÃO
@@ -59,24 +67,24 @@ else:
 df["Duração (h)"] = df["Duração (h)"].round(0)
 
 demanda = (
-    df.groupby(["Periodo", "Periodo_ord", "Maquina", "Processo"])["Duração (h)"]
+    df.groupby(["Periodo","Periodo_ord","Maquina","Processo"])["Duração (h)"]
     .sum()
     .reset_index()
 )
 
 # ===============================
-# CAPACIDADE
+# CAPACIDADE (COM FERIADOS)
 # ===============================
 capacidade = []
 
-for (p, po, m), g in df.groupby(["Periodo", "Periodo_ord", "Maquina"]):
+for (p,po,m),g in df.groupby(["Periodo","Periodo_ord","Maquina"]):
 
     if tipo == "Semanal":
         ano = int(str(po)[:4])
         semana = int(str(po)[4:])
         dias = pd.date_range(
             start=pd.Timestamp.fromisocalendar(ano, semana, 1),
-            periods=5
+            periods=7
         )
     else:
         ano = int(str(po)[:4])
@@ -86,16 +94,16 @@ for (p, po, m), g in df.groupby(["Periodo", "Periodo_ord", "Maquina"]):
             end=pd.Timestamp(ano, mes, 28)
         )
 
-    total = sum(capacidade_dia(d) for d in dias if d.weekday() <= 4)
+    total = sum(capacidade_dia(d) for d in dias)
 
     qtd = MAQUINAS_QTD.get(m, 1)
     total = total * qtd
 
     capacidade.append({
-        "Periodo": p,
-        "Periodo_ord": po,
-        "Maquina": m,
-        "Capacidade (h)": round(total)
+        "Periodo":p,
+        "Periodo_ord":po,
+        "Maquina":m,
+        "Capacidade (h)":round(total)
     })
 
 cap_df = pd.DataFrame(capacidade)
@@ -103,18 +111,14 @@ cap_df = pd.DataFrame(capacidade)
 # ===============================
 # JOIN
 # ===============================
-df_final = pd.merge(
-    demanda,
-    cap_df,
-    on=["Periodo", "Periodo_ord", "Maquina"]
-)
+df_final = pd.merge(demanda,cap_df,on=["Periodo","Periodo_ord","Maquina"])
 
 # ===============================
 # MÉTRICAS
 # ===============================
 df_final["Ocupação (%)"] = (
-    df_final["Duração (h)"] / df_final["Capacidade (h)"]
-) * 100
+    df_final["Duração (h)"]/df_final["Capacidade (h)"]
+)*100
 
 df_final["Ocupação (%)"] = df_final["Ocupação (%)"].round(0)
 df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
@@ -132,113 +136,48 @@ df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 df_final = df_final.sort_values("Periodo_ord")
 
 # ===============================
-# 📊 GRÁFICO POR MÁQUINA (MANTIDO)
+# 🔥 GARGALO MÉDIO E PICO
 # ===============================
-st.subheader("📊 Carga por Máquina")
-
-df_plot = (
-    df_final.groupby(["Periodo", "Periodo_ord", "Maquina"])
-    .agg({
-        "Duração (h)": "sum",
-        "Ocupação (%)": "mean"
-    })
+ranking_proc = (
+    df_final.groupby("Processo")["Ocupação (%)"]
+    .agg(["mean","max"])
     .reset_index()
 )
 
-df_plot = df_plot.sort_values("Periodo_ord")
-df_plot["Label"] = df_plot["Duração (h)"].astype(int).astype(str) + "h"
+ranking_proc.columns = ["Processo","Gargalo Médio (%)","Gargalo Pico (%)"]
 
-fig = px.bar(
-    df_plot,
-    x="Periodo",
-    y="Ocupação (%)",
-    color="Maquina",
-    text="Label",
-    barmode="group",
-    category_orders={"Periodo": df_plot["Periodo"].unique()}
-)
+ranking_proc = ranking_proc.sort_values("Gargalo Pico (%)", ascending=False)
 
-fig.add_hline(y=100, line_dash="dash")
-fig.update_traces(textposition="outside", cliponaxis=False)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# ===============================
-# 🥧 PIZZA MÁQUINA (MANTIDO)
-# ===============================
-st.subheader("🥧 Distribuição por Máquina")
-
-pizza = df_plot.groupby("Maquina")["Duração (h)"].sum().reset_index()
-fig2 = px.pie(pizza, names="Maquina", values="Duração (h)")
-fig2.update_traces(textinfo="label+percent")
-
-st.plotly_chart(fig2, use_container_width=True)
-
-# ===============================
-# 🔥 NOVO: VISÃO POR PROCESSO
-# ===============================
-st.subheader("📊 Carga por Processo")
-
-proc_plot = (
-    df_final.groupby(["Periodo", "Periodo_ord", "Processo"])
-    .agg({
-        "Duração (h)": "sum",
-        "Capacidade (h)": "sum"
-    })
-    .reset_index()
-)
-
-proc_plot["Ocupação (%)"] = (
-    proc_plot["Duração (h)"] / proc_plot["Capacidade (h)"]
-) * 100
-
-proc_plot = proc_plot.sort_values("Periodo_ord")
-proc_plot["Label"] = proc_plot["Duração (h)"].astype(int).astype(str) + "h"
-
-fig_proc = px.bar(
-    proc_plot,
-    x="Periodo",
-    y="Ocupação (%)",
-    color="Processo",
-    text="Label",
-    barmode="group",
-    category_orders={"Periodo": proc_plot["Periodo"].unique()}
-)
-
-fig_proc.add_hline(y=100, line_dash="dash")
-fig_proc.update_traces(textposition="outside", cliponaxis=False)
-
-st.plotly_chart(fig_proc, use_container_width=True)
-
-# ===============================
-# 🥧 PIZZA PROCESSO
-# ===============================
-st.subheader("🥧 Distribuição por Processo")
-
-pizza_proc = (
-    proc_plot.groupby("Processo")["Duração (h)"]
-    .sum()
-    .reset_index()
-)
-
-fig3 = px.pie(pizza_proc, names="Processo", values="Duração (h)")
-fig3.update_traces(textinfo="label+percent")
-
-st.plotly_chart(fig3, use_container_width=True)
-
-# ===============================
-# 📊 RANKING PROCESSO
-# ===============================
 st.subheader("📊 Ranking de Gargalos por Processo")
 
-ranking_proc = (
-    proc_plot.groupby("Processo")["Ocupação (%)"]
-    .mean()
-    .sort_values(ascending=False)
-    .reset_index()
+st.dataframe(ranking_proc, use_container_width=True)
+
+# ===============================
+# 🔥 GRÁFICO GARGALO
+# ===============================
+st.subheader("📊 Gargalo Médio vs Pico")
+
+df_melt = ranking_proc.melt(
+    id_vars="Processo",
+    value_vars=["Gargalo Médio (%)","Gargalo Pico (%)"],
+    var_name="Tipo",
+    value_name="Ocupação (%)"
 )
 
-st.dataframe(ranking_proc, use_container_width=True)
+fig_gargalo = px.bar(
+    df_melt,
+    x="Processo",
+    y="Ocupação (%)",
+    color="Tipo",
+    barmode="group",
+    text="Ocupação (%)"
+)
+
+fig_gargalo.add_hline(y=100, line_dash="dash")
+
+fig_gargalo.update_traces(textposition="outside")
+
+st.plotly_chart(fig_gargalo, use_container_width=True)
 
 # ===============================
 # TABELA FINAL
