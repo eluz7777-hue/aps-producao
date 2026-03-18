@@ -92,6 +92,7 @@ df_final["Ocupação (%)"] = df_final["Ocupação (%)"].round(0)
 
 df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
 
+# STATUS
 def status(x):
     if x <= 85:
         return "🟢"
@@ -105,7 +106,7 @@ df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 df_final = df_final.sort_values("Periodo_ord")
 
 # ===============================
-# AGRUPAMENTO PARA GRÁFICO
+# AGRUPAMENTO GRÁFICO
 # ===============================
 df_plot = (
     df_final.groupby(["Periodo", "Periodo_ord", "Maquina"])
@@ -117,15 +118,11 @@ df_plot = (
 )
 
 df_plot["Label"] = (
-    df_plot["Maquina"] + "<br>" +
     df_plot["Duração (h)"].astype(int).astype(str) + "h"
 )
 
-# 🔴 FLAG DE SOBRECARGA
-df_plot["Critico"] = df_plot["Ocupação (%)"] > 100
-
 # ===============================
-# GRÁFICO PRINCIPAL
+# 🔥 GRÁFICO PRINCIPAL (CORRIGIDO)
 # ===============================
 st.subheader("📊 Carga por Máquina")
 
@@ -133,18 +130,26 @@ fig = px.bar(
     df_plot,
     x="Periodo",
     y="Ocupação (%)",
-    color="Critico",  # 🔥 destaque automático
+    color="Maquina",
     text="Label",
-    barmode="group",
-    color_discrete_map={
-        True: "red",
-        False: "blue"
-    }
+    barmode="group"
 )
 
+# 🔴 LINHA DE CAPACIDADE
 fig.add_hline(y=100, line_dash="dash")
 
-fig.update_traces(textposition="outside")
+# 🔥 MELHORIA DE VISUAL
+fig.update_traces(
+    textposition="outside",
+    cliponaxis=False
+)
+
+fig.update_layout(
+    uniformtext_minsize=10,
+    uniformtext_mode='show',
+    xaxis_title="Período",
+    yaxis_title="Ocupação (%)"
+)
 
 st.plotly_chart(fig, use_container_width=True)
 
@@ -170,7 +175,7 @@ fig2.update_traces(textinfo="label+percent")
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# 📊 RANKING DE MÁQUINAS
+# 📊 RANKING
 # ===============================
 st.subheader("📊 Ranking de Recursos Críticos")
 
