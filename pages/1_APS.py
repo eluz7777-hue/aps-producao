@@ -29,8 +29,18 @@ MAQUINAS = {
     "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
 }
 
-PROCESSOS_VALIDOS = list(MAQUINAS.keys())
+# ===============================
+# PROCESSOS NA ORDEM DO EXCEL
+# ===============================
+colunas = list(df_base.columns)
 
+# remove colunas que não são processos
+colunas_remover = ["CODIGO"]
+
+PROCESSOS_VALIDOS = [
+    c for c in colunas
+    if c not in colunas_remover and c in MAQUINAS
+]
 # ===============================
 # FUNÇÕES
 # ===============================
