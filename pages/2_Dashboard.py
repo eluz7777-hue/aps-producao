@@ -121,8 +121,11 @@ df_plot["Label"] = (
     df_plot["Duração (h)"].astype(int).astype(str) + "h"
 )
 
+# 🔴 FLAG DE SOBRECARGA
+df_plot["Critico"] = df_plot["Ocupação (%)"] > 100
+
 # ===============================
-# 🔥 GRÁFICO PRINCIPAL (VERTICAL)
+# GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("📊 Carga por Máquina")
 
@@ -130,24 +133,23 @@ fig = px.bar(
     df_plot,
     x="Periodo",
     y="Ocupação (%)",
-    color="Maquina",
+    color="Critico",  # 🔥 destaque automático
     text="Label",
-    barmode="group"  # 🔥 GARANTE COLUNA LADO A LADO
+    barmode="group",
+    color_discrete_map={
+        True: "red",
+        False: "blue"
+    }
 )
 
 fig.add_hline(y=100, line_dash="dash")
 
 fig.update_traces(textposition="outside")
 
-fig.update_layout(
-    xaxis_title="Período",
-    yaxis_title="Ocupação (%)"
-)
-
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# 🥧 GRÁFICO DE PIZZA (VOLTOU)
+# 🥧 PIZZA
 # ===============================
 st.subheader("🥧 Distribuição de Carga")
 
@@ -166,6 +168,20 @@ fig2 = px.pie(
 fig2.update_traces(textinfo="label+percent")
 
 st.plotly_chart(fig2, use_container_width=True)
+
+# ===============================
+# 📊 RANKING DE MÁQUINAS
+# ===============================
+st.subheader("📊 Ranking de Recursos Críticos")
+
+ranking = (
+    df_plot.groupby("Maquina")["Ocupação (%)"]
+    .mean()
+    .sort_values(ascending=False)
+    .reset_index()
+)
+
+st.dataframe(ranking, use_container_width=True)
 
 # ===============================
 # TABELA
