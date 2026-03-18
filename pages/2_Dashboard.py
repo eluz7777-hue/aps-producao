@@ -21,6 +21,9 @@ if "Início" not in df.columns:
 
 df["Data"] = pd.to_datetime(df["Início"])
 
+# 🔥 CRIA PROCESSO BASEADO NO NOME DA MÁQUINA
+df["Processo"] = df["Maquina"].str.split("_").str[0]
+
 # ===============================
 # CONFIG REAL
 # ===============================
@@ -56,13 +59,13 @@ else:
 df["Duração (h)"] = df["Duração (h)"].round(0)
 
 demanda = (
-    df.groupby(["Periodo", "Periodo_ord", "Maquina"])["Duração (h)"]
+    df.groupby(["Periodo", "Periodo_ord", "Maquina", "Processo"])["Duração (h)"]
     .sum()
     .reset_index()
 )
 
 # ===============================
-# CAPACIDADE CORRETA
+# CAPACIDADE
 # ===============================
 capacidade = []
 
@@ -129,8 +132,10 @@ df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 df_final = df_final.sort_values("Periodo_ord")
 
 # ===============================
-# GRÁFICO PRINCIPAL
+# 📊 GRÁFICO POR MÁQUINA (MANTIDO)
 # ===============================
+st.subheader("📊 Carga por Máquina")
+
 df_plot = (
     df_final.groupby(["Periodo", "Periodo_ord", "Maquina"])
     .agg({
@@ -141,10 +146,7 @@ df_plot = (
 )
 
 df_plot = df_plot.sort_values("Periodo_ord")
-
 df_plot["Label"] = df_plot["Duração (h)"].astype(int).astype(str) + "h"
-
-st.subheader("📊 Carga por Máquina")
 
 fig = px.bar(
     df_plot,
@@ -162,28 +164,84 @@ fig.update_traces(textposition="outside", cliponaxis=False)
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# 🔥 GRÁFICO DE PIZZA (RESTAURADO)
+# 🥧 PIZZA MÁQUINA (MANTIDO)
 # ===============================
-st.subheader("🥧 Distribuição de Carga por Recurso")
+st.subheader("🥧 Distribuição por Máquina")
 
-pizza = (
-    df_plot.groupby("Maquina")["Duração (h)"]
-    .sum()
-    .reset_index()
-)
-
-fig2 = px.pie(
-    pizza,
-    names="Maquina",
-    values="Duração (h)"
-)
-
+pizza = df_plot.groupby("Maquina")["Duração (h)"].sum().reset_index()
+fig2 = px.pie(pizza, names="Maquina", values="Duração (h)")
 fig2.update_traces(textinfo="label+percent")
 
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# TABELA
+# 🔥 NOVO: VISÃO POR PROCESSO
+# ===============================
+st.subheader("📊 Carga por Processo")
+
+proc_plot = (
+    df_final.groupby(["Periodo", "Periodo_ord", "Processo"])
+    .agg({
+        "Duração (h)": "sum",
+        "Capacidade (h)": "sum"
+    })
+    .reset_index()
+)
+
+proc_plot["Ocupação (%)"] = (
+    proc_plot["Duração (h)"] / proc_plot["Capacidade (h)"]
+) * 100
+
+proc_plot = proc_plot.sort_values("Periodo_ord")
+proc_plot["Label"] = proc_plot["Duração (h)"].astype(int).astype(str) + "h"
+
+fig_proc = px.bar(
+    proc_plot,
+    x="Periodo",
+    y="Ocupação (%)",
+    color="Processo",
+    text="Label",
+    barmode="group",
+    category_orders={"Periodo": proc_plot["Periodo"].unique()}
+)
+
+fig_proc.add_hline(y=100, line_dash="dash")
+fig_proc.update_traces(textposition="outside", cliponaxis=False)
+
+st.plotly_chart(fig_proc, use_container_width=True)
+
+# ===============================
+# 🥧 PIZZA PROCESSO
+# ===============================
+st.subheader("🥧 Distribuição por Processo")
+
+pizza_proc = (
+    proc_plot.groupby("Processo")["Duração (h)"]
+    .sum()
+    .reset_index()
+)
+
+fig3 = px.pie(pizza_proc, names="Processo", values="Duração (h)")
+fig3.update_traces(textinfo="label+percent")
+
+st.plotly_chart(fig3, use_container_width=True)
+
+# ===============================
+# 📊 RANKING PROCESSO
+# ===============================
+st.subheader("📊 Ranking de Gargalos por Processo")
+
+ranking_proc = (
+    proc_plot.groupby("Processo")["Ocupação (%)"]
+    .mean()
+    .sort_values(ascending=False)
+    .reset_index()
+)
+
+st.dataframe(ranking_proc, use_container_width=True)
+
+# ===============================
+# TABELA FINAL
 # ===============================
 st.subheader("📋 Situação da Capacidade")
 
