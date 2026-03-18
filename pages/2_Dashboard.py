@@ -14,6 +14,10 @@ if "dados_dashboard" not in st.session_state:
     st.stop()
 
 df = st.session_state["dados_dashboard"].copy()
+if "Início" not in df.columns:
+    st.error("APS não gerou dados. Execute novamente.")
+    st.stop()
+
 df["Data"] = pd.to_datetime(df["Início"])
 
 # ===============================

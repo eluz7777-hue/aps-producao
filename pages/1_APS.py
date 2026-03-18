@@ -7,15 +7,23 @@ st.set_page_config(layout="wide")
 
 st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
+# ===============================
+# CONFIG
+# ===============================
 EFICIENCIA = 0.8
 
 HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
 
+# 🔥 TODOS OS RECURSOS ATUALIZADOS
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
+    "CORTE-PLASMA": ["PLASMA_1"],
     "FRESADORAS": ["FRESA_1", "FRESA_2", "FRESA_3"],
     "TORNO CNC": ["TORNO_1", "TORNO_2"],
     "SOLDAGEM": ["SOLDA_1", "SOLDA_2", "SOLDA_3"],
+    "PINTURA": ["PINTURA_1"],
+    "JATEAMENTO": ["JATO_1"],
+    "MONTAGEM": ["MONT_1"],
     "ACABAMENTO": ["ACAB_1", "ACAB_2"],
     "CORTE - SERRA": ["SERRA_1"],
     "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
@@ -23,17 +31,24 @@ MAQUINAS = {
 
 PROCESSOS_VALIDOS = list(MAQUINAS.keys())
 
+# ===============================
+# FUNÇÕES
+# ===============================
 def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
+# ===============================
 # BASE
+# ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.fillna(0, inplace=True)
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
 codigos = sorted(df_base["CODIGO"].unique())
 
+# ===============================
 # INPUT
+# ===============================
 st.subheader("Ordens")
 
 qtd_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
@@ -56,7 +71,9 @@ for i in range(qtd_ordens):
             "ENTREGA": pd.to_datetime(entrega)
         })
 
-# APS
+# ===============================
+# APS COM BALANCEAMENTO REAL
+# ===============================
 if st.button("Gerar APS"):
 
     carga = {}
@@ -85,13 +102,11 @@ if st.button("Gerar APS"):
                 continue
 
             restante = (tempo_min * ordem["QTD"]) / 60
-
             maquinas = MAQUINAS[processo]
 
             while restante > 0:
 
                 cap_dia = capacidade_dia(tempo)
-
                 alocado = False
 
                 for maquina in maquinas:
@@ -129,6 +144,10 @@ if st.button("Gerar APS"):
 
     gantt_df = pd.DataFrame(gantt)
 
+    if gantt_df.empty:
+        st.error("Nenhuma operação foi gerada. Verifique sua planilha.")
+        st.stop()
+
     st.session_state["dados_dashboard"] = gantt_df
 
-    st.success("APS gerado com balanceamento real")
+    st.success("APS gerado com sucesso")
