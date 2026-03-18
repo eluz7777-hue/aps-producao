@@ -35,41 +35,22 @@ PROCESSOS_VALIDOS = list(MAQUINAS.keys())
 # ===============================
 # TURNO
 # ===============================
+def capacidade_dia(data):
+    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
+
 def ajustar_turno(data):
     while True:
         if data.weekday() > 4:
             data -= timedelta(days=1)
-            data = data.replace(hour=17)
             continue
-
-        inicio = 7
-        fim = 17 if data.weekday() < 4 else 16
-
-        if data.hour < inicio:
-            data -= timedelta(days=1)
-            data = data.replace(hour=fim)
-            continue
-
-        if data.hour >= fim:
-            return data.replace(hour=fim)
-
         return data
-
-def capacidade_dia(data):
-    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 # ===============================
 # BASE
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 df_base.fillna(0, inplace=True)
-
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
-
-for col in PROCESSOS_VALIDOS:
-    if col in df_base.columns:
-        df_base[col] = pd.to_numeric(df_base[col], errors="coerce").fillna(0)
 
 codigos = sorted(df_base["CODIGO"].unique())
 
@@ -96,20 +77,21 @@ for i in range(qtd_ordens):
             "PV": pv if pv else f"PV_{i}",
             "CODIGO": codigo,
             "QTD": qtd,
-            "ENTREGA": pd.to_datetime(entrega),
-            "URGENTE": urgente
+            "ENTREGA": pd.to_datetime(entrega)
         })
 
 # ===============================
-# APS BACKWARD COM BALANCEAMENTO
+# APS COM CAPACIDADE REAL
 # ===============================
 if st.button("Gerar APS"):
 
-    agenda = {m: [] for maquinas in MAQUINAS.values() for m in maquinas}
+    # controle de carga por máquina por dia
+    carga = {}
+
     gantt = []
 
-    def carga_maquina(maquina):
-        return sum(x["duracao"] for x in agenda[maquina])
+    def get_key(maquina, data):
+        return f"{maquina}_{data.date()}"
 
     for ordem in ordens:
 
@@ -118,7 +100,7 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        tempo_fim = ajustar_turno(ordem["ENTREGA"] + timedelta(hours=17))
+        tempo_fim = ordem["ENTREGA"]
 
         for processo in reversed(PROCESSOS_VALIDOS):
 
@@ -130,56 +112,67 @@ if st.button("Gerar APS"):
             if tempo_min <= 0:
                 continue
 
-            duracao_total = (tempo_min * ordem["QTD"]) / 60
+            restante = (tempo_min * ordem["QTD"]) / 60
 
             maquinas = MAQUINAS[processo]
 
-            restante = duracao_total
-
             while restante > 0:
 
-                # 🔥 ESCOLHE A MÁQUINA MENOS CARREGADA
-                maquina = min(maquinas, key=lambda m: carga_maquina(m))
+                tempo_fim = ajustar_turno(tempo_fim)
 
-                cap = capacidade_dia(tempo_fim)
-                horas_exec = min(restante, cap)
+                cap_dia = capacidade_dia(tempo_fim)
 
-                inicio = tempo_fim - timedelta(hours=horas_exec)
+                # tenta alocar em qualquer máquina disponível
+                alocado = False
 
-                gantt.append({
-                    "PV": ordem["PV"],
-                    "Processo": processo,
-                    "Maquina": maquina,
-                    "Início": inicio,
-                    "Fim": tempo_fim,
-                    "Duração (h)": round(horas_exec, 0)
-                })
+                for maquina in maquinas:
 
-                agenda[maquina].append({
-                    "duracao": horas_exec
-                })
+                    key = get_key(maquina, tempo_fim)
+                    usado = carga.get(key, 0)
 
-                restante -= horas_exec
-                tempo_fim = inicio
+                    disponivel = cap_dia - usado
+
+                    if disponivel <= 0:
+                        continue
+
+                    horas = min(restante, disponivel)
+
+                    inicio = tempo_fim - timedelta(hours=horas)
+
+                    gantt.append({
+                        "PV": ordem["PV"],
+                        "Processo": processo,
+                        "Maquina": maquina,
+                        "Início": inicio,
+                        "Fim": tempo_fim,
+                        "Duração (h)": round(horas, 0)
+                    })
+
+                    carga[key] = usado + horas
+
+                    restante -= horas
+                    tempo_fim = inicio
+
+                    alocado = True
+                    break
+
+                # se nenhuma máquina tinha espaço → volta um dia
+                if not alocado:
+                    tempo_fim -= timedelta(days=1)
 
     gantt_df = pd.DataFrame(gantt)
 
-    # ===============================
-    # GANTT
-    # ===============================
-    st.subheader("Gantt (Balanceado)")
+    st.subheader("Gantt Balanceado (REAL)")
 
     fig = px.timeline(
         gantt_df,
         x_start="Início",
         x_end="Fim",
         y="Maquina",
-        color="PV",
-        text="Duração (h)"
+        color="PV"
     )
 
     fig.update_yaxes(autorange="reversed")
-
     st.plotly_chart(fig, use_container_width=True)
 
     st.session_state["dados_dashboard"] = gantt_df

@@ -175,14 +175,14 @@ df_plot["Label"] = (
 # GRÁFICO PRINCIPAL
 # ===============================
 fig = px.bar(
-    df_plot,
+    df_plot.sort_values("Periodo_ord"),
     x="Periodo",
     y="Ocupação (%)",
     color="Maquina",
     text="Label",
     barmode="group"
 )
-# 🔥 LINHA DE CAPACIDADE (100%)
+
 fig.add_hline(y=100, line_dash="dash")
 
 fig.update_traces(textposition="outside")
