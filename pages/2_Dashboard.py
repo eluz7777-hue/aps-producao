@@ -14,8 +14,22 @@ if "dados_dashboard" not in st.session_state:
     st.stop()
 
 df = st.session_state["dados_dashboard"].copy()
-
 df["Data"] = pd.to_datetime(df["Início"])
+
+# ===============================
+# CONFIG REAL DE TURNO
+# ===============================
+HORAS_DIA = {
+    0: 9,  # seg
+    1: 9,  # ter
+    2: 9,  # qua
+    3: 9,  # qui
+    4: 8   # sex
+}
+EFICIENCIA = 0.8
+
+def capacidade_dia(data):
+    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 # ===============================
 # FILTRO DE MÊS
@@ -27,37 +41,43 @@ if mes_sel != "Todos":
     df = df[df["Data"].dt.strftime("%Y-%m") == mes_sel]
 
 # ===============================
-# PERÍODO (SEM DIÁRIO)
+# VISUALIZAÇÃO
 # ===============================
-tipo = st.selectbox("Período", ["Semanal", "Mensal"])
+tipo = st.selectbox("Visualização", ["Semanal", "Mensal"])
 
+# ===============================
+# CRIA PERÍODO
+# ===============================
 if tipo == "Semanal":
+
+    df["Semana"] = df["Data"].dt.isocalendar().week
+    df["Mes"] = df["Data"].dt.strftime("%b")
+
     df["Periodo"] = (
-        df["Data"].dt.strftime("%Y") +
-        "-S" +
-        df["Data"].dt.isocalendar().week.astype(str).str.zfill(2)
+        "Sem " + df["Semana"].astype(str) +
+        "<br>" + df["Mes"]
     )
-else:
-    df["Periodo"] = df["Data"].dt.strftime("%Y-%m")
+
+elif tipo == "Mensal":
+
+    df["Periodo"] = df["Data"].dt.strftime("%b/%Y")
 
 # ===============================
-# DEMANDA
+# DEMANDA (HORAS CHEIAS)
 # ===============================
+df["Duração (h)"] = df["Duração (h)"].round(0)
+
 demanda = (
     df.groupby(["Periodo", "Maquina"])["Duração (h)"]
     .sum()
     .reset_index()
 )
 
+demanda["Duração (h)"] = demanda["Duração (h)"].astype(int)
+
 # ===============================
 # CAPACIDADE
 # ===============================
-HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
-EFICIENCIA = 0.8
-
-def capacidade_dia(data):
-    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
-
 capacidade = []
 
 for (periodo, maquina), grupo in df.groupby(["Periodo", "Maquina"]):
@@ -76,7 +96,7 @@ for (periodo, maquina), grupo in df.groupby(["Periodo", "Maquina"]):
     capacidade.append({
         "Periodo": periodo,
         "Maquina": maquina,
-        "Capacidade (h)": total
+        "Capacidade (h)": int(round(total, 0))
     })
 
 cap_df = pd.DataFrame(capacidade)
@@ -98,31 +118,39 @@ df_final["Ocupação (%)"] = (
     df_final["Duração (h)"] / df_final["Capacidade (h)"]
 ) * 100
 
-# 🔥 NOVA COLUNA
+df_final["Ocupação (%)"] = df_final["Ocupação (%)"].round(0)
+
 df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
 
-def classificar(c):
-    if c <= 85:
-        return "🟢 Normal"
-    elif c <= 100:
-        return "🟡 Atenção"
-    else:
-        return "🔴 Sobrecarga"
-
-df_final["Status"] = df_final["Ocupação (%)"].apply(classificar)
+# ===============================
+# TEXTO NAS COLUNAS (MELHORADO)
+# ===============================
+df_final["Label"] = (
+    df_final["Maquina"] + "<br>" +
+    df_final["Duração (h)"].astype(str) + "h"
+)
 
 # ===============================
-# GRÁFICO
+# GRÁFICO LIMPO
 # ===============================
-st.subheader("📊 Ocupação por Máquina")
+st.subheader("📊 Carga por Máquina")
 
 fig = px.bar(
     df_final,
     x="Periodo",
     y="Ocupação (%)",
-    color="Status",
-    facet_col="Maquina",
-    text="Ocupação (%)"
+    color="Maquina",
+    text="Label",
+    barmode="group"
+)
+
+fig.update_traces(textposition="outside")
+
+fig.update_layout(
+    yaxis_title="Ocupação (%)",
+    xaxis_title="Período",
+    uniformtext_minsize=8,
+    uniformtext_mode='hide'
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -144,7 +172,7 @@ st.subheader("Resumo Geral")
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Carga Total (h)", round(df_final["Duração (h)"].sum(), 2))
-col2.metric("Capacidade Total (h)", round(df_final["Capacidade (h)"].sum(), 2))
-col3.metric("Ocupação Média (%)", round(df_final["Ocupação (%)"].mean(), 1))
-col4.metric("Disponível Médio (%)", round(df_final["Disponível (%)"].mean(), 1))
+col1.metric("Carga Total (h)", int(df_final["Duração (h)"].sum()))
+col2.metric("Capacidade Total (h)", int(df_final["Capacidade (h)"].sum()))
+col3.metric("Ocupação Média (%)", int(df_final["Ocupação (%)"].mean()))
+col4.metric("Disponível Médio (%)", int(df_final["Disponível (%)"].mean()))
