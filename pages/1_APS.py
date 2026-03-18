@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import timedelta
 
 st.set_page_config(layout="wide")
@@ -14,10 +13,10 @@ EFICIENCIA = 0.8
 
 HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
 
-# 🔥 TODOS OS RECURSOS ATUALIZADOS
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
     "CORTE-PLASMA": ["PLASMA_1"],
+    "CORTE - SERRA": ["SERRA_1"],
     "FRESADORAS": ["FRESA_1", "FRESA_2", "FRESA_3"],
     "TORNO CNC": ["TORNO_1", "TORNO_2"],
     "SOLDAGEM": ["SOLDA_1", "SOLDA_2", "SOLDA_3"],
@@ -25,41 +24,36 @@ MAQUINAS = {
     "JATEAMENTO": ["JATO_1"],
     "MONTAGEM": ["MONT_1"],
     "ACABAMENTO": ["ACAB_1", "ACAB_2"],
-    "CORTE - SERRA": ["SERRA_1"],
     "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
 }
+
+def capacidade_dia(data):
+    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
+
+# ===============================
+# BASE (CARREGA PRIMEIRO!)
+# ===============================
+df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+df_base.fillna(0, inplace=True)
+
+df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
 # ===============================
 # PROCESSOS NA ORDEM DO EXCEL
 # ===============================
 colunas = list(df_base.columns)
 
-# remove colunas que não são processos
-colunas_remover = ["CODIGO"]
-
 PROCESSOS_VALIDOS = [
     c for c in colunas
-    if c not in colunas_remover and c in MAQUINAS
+    if c != "CODIGO" and c in MAQUINAS
 ]
-# ===============================
-# FUNÇÕES
-# ===============================
-def capacidade_dia(data):
-    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
-
-# ===============================
-# BASE
-# ===============================
-df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-df_base.fillna(0, inplace=True)
-df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
-
-codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
 # INPUT
 # ===============================
 st.subheader("Ordens")
+
+codigos = sorted(df_base["CODIGO"].unique())
 
 qtd_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
 
@@ -82,7 +76,7 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# APS COM BALANCEAMENTO REAL
+# APS
 # ===============================
 if st.button("Gerar APS"):
 
@@ -99,14 +93,12 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        tempo = ordem["ENTREGA"] - timedelta(days=21)
+        tempo = ordem["ENTREGA"]
 
+        # 🔥 RESPEITA SEQUÊNCIA DO EXCEL
         for processo in reversed(PROCESSOS_VALIDOS):
 
-            if processo not in df_base.columns:
-                continue
-
-            tempo_min = produto.iloc[0][processo]
+            tempo_min = produto.iloc[0].get(processo, 0)
 
             if tempo_min <= 0:
                 continue
@@ -155,7 +147,7 @@ if st.button("Gerar APS"):
     gantt_df = pd.DataFrame(gantt)
 
     if gantt_df.empty:
-        st.error("Nenhuma operação foi gerada. Verifique sua planilha.")
+        st.error("Nenhum dado gerado. Verifique a planilha.")
         st.stop()
 
     st.session_state["dados_dashboard"] = gantt_df
