@@ -17,16 +17,27 @@ df = st.session_state["dados_dashboard"].copy()
 df["Data"] = pd.to_datetime(df["Início"])
 
 # ===============================
-# CONFIG REAL DE TURNO
+# CONFIG TURNOS + EFICIÊNCIA
 # ===============================
-HORAS_DIA = {
-    0: 9,  # seg
-    1: 9,  # ter
-    2: 9,  # qua
-    3: 9,  # qui
-    4: 8   # sex
-}
+HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
 EFICIENCIA = 0.8
+
+# 🔥 QUANTIDADE DE MÁQUINAS (AJUSTADO)
+MAQUINAS_QTD = {
+    "LASER_1": 1,
+    "FRESA_1": 1,
+    "FRESA_2": 1,
+    "FRESA_3": 1,
+    "TORNO_1": 1,
+    "TORNO_2": 1,
+    "SOLDA_1": 1,
+    "SOLDA_2": 1,
+    "SOLDA_3": 1,
+    "ACAB_1": 1,
+    "ACAB_2": 1,
+    "SERRA_1": 1,
+    "PRENSA_1": 1
+}
 
 def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
@@ -34,41 +45,40 @@ def capacidade_dia(data):
 # ===============================
 # FILTRO DE MÊS
 # ===============================
-meses = sorted(df["Data"].dt.strftime("%Y-%m").unique())
+meses_ordem = sorted(df["Data"].dt.to_period("M").unique())
+
+meses = [str(m) for m in meses_ordem]
+
 mes_sel = st.selectbox("Filtrar mês", ["Todos"] + meses)
 
 if mes_sel != "Todos":
-    df = df[df["Data"].dt.strftime("%Y-%m") == mes_sel]
+    df = df[df["Data"].dt.to_period("M").astype(str) == mes_sel]
 
 # ===============================
 # VISUALIZAÇÃO
 # ===============================
 tipo = st.selectbox("Visualização", ["Semanal", "Mensal"])
 
-# ===============================
-# CRIA PERÍODO
-# ===============================
 if tipo == "Semanal":
-
+    df["Ano"] = df["Data"].dt.year
     df["Semana"] = df["Data"].dt.isocalendar().week
     df["Mes"] = df["Data"].dt.strftime("%b")
 
-    df["Periodo"] = (
-        "Sem " + df["Semana"].astype(str) +
-        "<br>" + df["Mes"]
-    )
+    df["Periodo_ord"] = df["Ano"].astype(str) + df["Semana"].astype(str).str.zfill(2)
+
+    df["Periodo"] = "Sem " + df["Semana"].astype(str) + "<br>" + df["Mes"]
 
 elif tipo == "Mensal":
-
+    df["Periodo_ord"] = df["Data"].dt.to_period("M").astype(str)
     df["Periodo"] = df["Data"].dt.strftime("%b/%Y")
 
 # ===============================
-# DEMANDA (HORAS CHEIAS)
+# DEMANDA
 # ===============================
 df["Duração (h)"] = df["Duração (h)"].round(0)
 
 demanda = (
-    df.groupby(["Periodo", "Maquina"])["Duração (h)"]
+    df.groupby(["Periodo", "Periodo_ord", "Maquina", "PV"])["Duração (h)"]
     .sum()
     .reset_index()
 )
@@ -76,11 +86,11 @@ demanda = (
 demanda["Duração (h)"] = demanda["Duração (h)"].astype(int)
 
 # ===============================
-# CAPACIDADE
+# CAPACIDADE CORRETA (MULTI MÁQUINAS)
 # ===============================
 capacidade = []
 
-for (periodo, maquina), grupo in df.groupby(["Periodo", "Maquina"]):
+for (periodo, periodo_ord, maquina), grupo in df.groupby(["Periodo", "Periodo_ord", "Maquina"]):
 
     inicio = grupo["Data"].min().date()
     fim = grupo["Data"].max().date()
@@ -93,8 +103,13 @@ for (periodo, maquina), grupo in df.groupby(["Periodo", "Maquina"]):
         if d.weekday() <= 4:
             total += capacidade_dia(d)
 
+    qtd_maquinas = MAQUINAS_QTD.get(maquina, 1)
+
+    total = total * qtd_maquinas
+
     capacidade.append({
         "Periodo": periodo,
+        "Periodo_ord": periodo_ord,
         "Maquina": maquina,
         "Capacidade (h)": int(round(total, 0))
     })
@@ -107,7 +122,7 @@ cap_df = pd.DataFrame(capacidade)
 df_final = pd.merge(
     demanda,
     cap_df,
-    on=["Periodo", "Maquina"],
+    on=["Periodo", "Periodo_ord", "Maquina"],
     how="left"
 )
 
@@ -119,44 +134,85 @@ df_final["Ocupação (%)"] = (
 ) * 100
 
 df_final["Ocupação (%)"] = df_final["Ocupação (%)"].round(0)
-
 df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
 
 # ===============================
-# TEXTO NAS COLUNAS (MELHORADO)
+# STATUS BOLINHAS
 # ===============================
-df_final["Label"] = (
-    df_final["Maquina"] + "<br>" +
-    df_final["Duração (h)"].astype(str) + "h"
+def status(c):
+    if c <= 85:
+        return "🟢"
+    elif c <= 100:
+        return "🟡"
+    else:
+        return "🔴"
+
+df_final["Status"] = df_final["Ocupação (%)"].apply(status)
+
+# ===============================
+# ORDENAÇÃO CORRETA
+# ===============================
+df_final = df_final.sort_values("Periodo_ord")
+
+# ===============================
+# LABELS
+# ===============================
+df_plot = (
+    df_final.groupby(["Periodo", "Periodo_ord", "Maquina"])
+    .agg({
+        "Duração (h)": "sum",
+        "Ocupação (%)": "mean"
+    })
+    .reset_index()
+)
+
+df_plot["Label"] = (
+    df_plot["Maquina"] + "<br>" +
+    df_plot["Duração (h)"].astype(str) + "h"
 )
 
 # ===============================
-# GRÁFICO LIMPO
+# GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("📊 Carga por Máquina")
 
 fig = px.bar(
-    df_final,
+    df_plot,
     x="Periodo",
     y="Ocupação (%)",
     color="Maquina",
     text="Label",
-    barmode="group"
+    category_orders={"Periodo": df_plot["Periodo"].unique()}
 )
+
+# 🔥 LINHA DE CAPACIDADE (100%)
+fig.add_hline(y=100, line_dash="dash")
 
 fig.update_traces(textposition="outside")
-
-fig.update_layout(
-    yaxis_title="Ocupação (%)",
-    xaxis_title="Período",
-    uniformtext_minsize=8,
-    uniformtext_mode='hide'
-)
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# TABELA
+# GRÁFICO PIZZA
+# ===============================
+st.subheader("🥧 Distribuição de Carga por Recurso")
+
+pizza = (
+    df_plot.groupby("Maquina")["Duração (h)"]
+    .sum()
+    .reset_index()
+)
+
+fig2 = px.pie(
+    pizza,
+    names="Maquina",
+    values="Duração (h)"
+)
+
+st.plotly_chart(fig2, use_container_width=True)
+
+# ===============================
+# TABELA FINAL
 # ===============================
 st.subheader("📋 Situação da Capacidade")
 
