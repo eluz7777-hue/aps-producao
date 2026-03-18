@@ -6,9 +6,20 @@ st.set_page_config(layout="wide")
 
 st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
+# ===============================
+# CONFIG
+# ===============================
 EFICIENCIA = 0.8
 
-HORAS_DIA = {0: 9, 1: 9, 2: 9, 3: 9, 4: 8}
+HORAS_DIA = {
+    0: 9,
+    1: 9,
+    2: 9,
+    3: 9,
+    4: 8
+}
+
+LEAD_TIME = 21  # dias
 
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
@@ -24,6 +35,9 @@ MAQUINAS = {
     "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
 }
 
+# ===============================
+# FUNÇÃO CAPACIDADE
+# ===============================
 def capacidade_dia(data):
     if data.weekday() > 4:
         return 0
@@ -34,10 +48,15 @@ def capacidade_dia(data):
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.fillna(0, inplace=True)
+
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
+# 🔥 ORDEM DO PROCESSO VEM DO EXCEL
 colunas = list(df_base.columns)
-PROCESSOS_VALIDOS = [c for c in colunas if c != "CODIGO" and c in MAQUINAS]
+PROCESSOS_VALIDOS = [
+    c for c in colunas
+    if c != "CODIGO" and c in MAQUINAS
+]
 
 # ===============================
 # INPUT
@@ -67,15 +86,15 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# APS COM NIVELAMENTO
+# APS FORWARD NIVELADO (CORRETO)
 # ===============================
 if st.button("Gerar APS"):
 
-    carga_semana = {}  # 🔥 controle semanal
+    carga_dia = {}  # controle por máquina/dia
     gantt = []
 
-    def semana_key(data):
-        return f"{data.year}_{data.isocalendar().week}"
+    def chave(maquina, data):
+        return (maquina, data.date())
 
     for ordem in ordens:
 
@@ -84,9 +103,10 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        tempo = ordem["ENTREGA"]
+        # 🔥 COMEÇA NO INÍCIO DO LEAD TIME
+        tempo = ordem["ENTREGA"] - timedelta(days=LEAD_TIME)
 
-        for processo in reversed(PROCESSOS_VALIDOS):
+        for processo in PROCESSOS_VALIDOS:
 
             tempo_min = produto.iloc[0].get(processo, 0)
 
@@ -98,44 +118,53 @@ if st.button("Gerar APS"):
 
             while restante > 0:
 
-                semana = semana_key(tempo)
-
-                # 🔥 capacidade semanal (35h base)
-                cap_semana = sum(capacidade_dia(tempo - timedelta(days=i)) for i in range(5))
-
-                usado = carga_semana.get((processo, semana), 0)
-
-                disponivel = cap_semana - usado
-
-                if disponivel <= 0:
-                    tempo -= timedelta(days=7)
+                # pula fim de semana
+                if tempo.weekday() > 4:
+                    tempo += timedelta(days=1)
                     continue
 
-                horas = min(restante, disponivel)
+                cap_dia = capacidade_dia(tempo)
 
-                maquina = maquinas[0]  # mantém lógica simples
+                alocado = False
 
-                inicio = tempo - timedelta(hours=horas)
+                for maquina in maquinas:
 
-                gantt.append({
-                    "PV": ordem["PV"],
-                    "Processo": processo,
-                    "Maquina": maquina,
-                    "Início": inicio,
-                    "Fim": tempo,
-                    "Duração (h)": round(horas)
-                })
+                    usado = carga_dia.get(chave(maquina, tempo), 0)
+                    disponivel = cap_dia - usado
 
-                carga_semana[(processo, semana)] = usado + horas
-                restante -= horas
-                tempo = inicio
+                    if disponivel <= 0:
+                        continue
+
+                    horas = min(restante, disponivel)
+
+                    inicio = tempo
+                    fim = tempo + timedelta(hours=horas)
+
+                    gantt.append({
+                        "PV": ordem["PV"],
+                        "Processo": processo,
+                        "Maquina": maquina,
+                        "Início": inicio,
+                        "Fim": fim,
+                        "Duração (h)": round(horas)
+                    })
+
+                    carga_dia[chave(maquina, tempo)] = usado + horas
+                    restante -= horas
+                    tempo = fim
+
+                    alocado = True
+                    break
+
+                if not alocado:
+                    tempo += timedelta(days=1)
 
     gantt_df = pd.DataFrame(gantt)
 
     if gantt_df.empty:
-        st.error("Nenhum dado gerado.")
+        st.error("Nenhum dado gerado. Verifique a planilha.")
         st.stop()
 
     st.session_state["dados_dashboard"] = gantt_df
 
-    st.success("APS com nivelamento gerado")
+    st.success("APS com nivelamento real gerado com sucesso")
