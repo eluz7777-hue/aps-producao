@@ -174,17 +174,14 @@ df_plot["Label"] = (
 # ===============================
 # GRÁFICO PRINCIPAL
 # ===============================
-st.subheader("📊 Carga por Máquina")
-
 fig = px.bar(
     df_plot,
     x="Periodo",
     y="Ocupação (%)",
     color="Maquina",
     text="Label",
-    category_orders={"Periodo": df_plot["Periodo"].unique()}
+    barmode="group"
 )
-
 # 🔥 LINHA DE CAPACIDADE (100%)
 fig.add_hline(y=100, line_dash="dash")
 

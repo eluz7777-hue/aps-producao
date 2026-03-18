@@ -11,7 +11,6 @@ st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 # CONFIG
 # ===============================
 EFICIENCIA = 0.8
-LEAD_TIME_PADRAO = 21  # dias
 
 HORAS_DIA = {
     0: 9,
@@ -37,7 +36,6 @@ PROCESSOS_VALIDOS = list(MAQUINAS.keys())
 # TURNO
 # ===============================
 def ajustar_turno(data):
-
     while True:
         if data.weekday() > 4:
             data -= timedelta(days=1)
@@ -103,13 +101,15 @@ for i in range(qtd_ordens):
         })
 
 # ===============================
-# APS BACKWARD
+# APS BACKWARD COM BALANCEAMENTO
 # ===============================
 if st.button("Gerar APS"):
 
     agenda = {m: [] for maquinas in MAQUINAS.values() for m in maquinas}
-
     gantt = []
+
+    def carga_maquina(maquina):
+        return sum(x["duracao"] for x in agenda[maquina])
 
     for ordem in ordens:
 
@@ -118,7 +118,6 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        # 🔥 COMEÇA DA ENTREGA PARA TRÁS
         tempo_fim = ajustar_turno(ordem["ENTREGA"] + timedelta(hours=17))
 
         for processo in reversed(PROCESSOS_VALIDOS):
@@ -131,17 +130,18 @@ if st.button("Gerar APS"):
             if tempo_min <= 0:
                 continue
 
-            duracao = (tempo_min * ordem["QTD"]) / 60
+            duracao_total = (tempo_min * ordem["QTD"]) / 60
 
             maquinas = MAQUINAS[processo]
-            maquina = maquinas[0]
 
-            restante = duracao
+            restante = duracao_total
 
             while restante > 0:
 
-                cap = capacidade_dia(tempo_fim)
+                # 🔥 ESCOLHE A MÁQUINA MENOS CARREGADA
+                maquina = min(maquinas, key=lambda m: carga_maquina(m))
 
+                cap = capacidade_dia(tempo_fim)
                 horas_exec = min(restante, cap)
 
                 inicio = tempo_fim - timedelta(hours=horas_exec)
@@ -152,7 +152,11 @@ if st.button("Gerar APS"):
                     "Maquina": maquina,
                     "Início": inicio,
                     "Fim": tempo_fim,
-                    "Duração (h)": round(horas_exec, 2)
+                    "Duração (h)": round(horas_exec, 0)
+                })
+
+                agenda[maquina].append({
+                    "duracao": horas_exec
                 })
 
                 restante -= horas_exec
@@ -163,7 +167,7 @@ if st.button("Gerar APS"):
     # ===============================
     # GANTT
     # ===============================
-    st.subheader("Gantt (Real - Backward)")
+    st.subheader("Gantt (Balanceado)")
 
     fig = px.timeline(
         gantt_df,
