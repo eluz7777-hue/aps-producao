@@ -1,16 +1,22 @@
 import streamlit as st
 import pandas as pd
 from datetime import timedelta
+import os
 
 st.set_page_config(layout="wide")
 
 st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
+# ===============================
+# CONFIG
+# ===============================
 EFICIENCIA = 0.8
 
 HORAS_DIA = {0:9,1:9,2:9,3:9,4:8}
 
 LEAD_TIME = 21
+
+BASE_DIR = "projeto"
 
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
@@ -34,7 +40,7 @@ def capacidade_dia(data):
 # ===============================
 # BASE PROCESSOS
 # ===============================
-df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+df_base = pd.read_excel(os.path.join(BASE_DIR, "Processos_de_Fabricacao.xlsx"))
 df_base.fillna(0, inplace=True)
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
@@ -42,37 +48,34 @@ colunas = list(df_base.columns)
 PROCESSOS_VALIDOS = [c for c in colunas if c != "CODIGO" and c in MAQUINAS]
 
 # ===============================
-# CARREGAR PLANILHA DE PV
+# CARREGAR PLANILHA PV
 # ===============================
 st.subheader("📂 Carregar Ordens")
 
-usar_planilha = st.checkbox("Usar planilha Relacao_Pv.xlsx", value=True)
-
 ordens = []
 
-if usar_planilha:
-    try:
-        df_pv = pd.read_excel("Relacao_Pv.xlsx")
+try:
+    df_pv = pd.read_excel(os.path.join(BASE_DIR, "Relacao_Pv.xlsx"))
 
-        df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
-        df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
+    df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
+    df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 
-        st.success(f"{len(df_pv)} ordens carregadas")
+    st.success(f"{len(df_pv)} ordens carregadas")
 
-        for _, row in df_pv.iterrows():
-            ordens.append({
-                "PV": row["PV"],
-                "CODIGO": row["CODIGO"],
-                "QTD": row["QTD"],
-                "ENTREGA": row["ENTREGA"],
-                "CLIENTE": row.get("CLIENTE","")
-            })
+    for _, row in df_pv.iterrows():
+        ordens.append({
+            "PV": row["PV"],
+            "CODIGO": row["CODIGO"],
+            "QTD": row["QTD"],
+            "ENTREGA": row["ENTREGA"],
+            "CLIENTE": row.get("CLIENTE","")
+        })
 
-    except:
-        st.error("Erro ao carregar Relacao_Pv.xlsx")
+except Exception as e:
+    st.error(f"Erro ao carregar planilha: {e}")
 
 # ===============================
-# APS
+# APS FORWARD NIVELADO
 # ===============================
 if st.button("Gerar APS"):
 
@@ -144,6 +147,10 @@ if st.button("Gerar APS"):
                     tempo += timedelta(days=1)
 
     gantt_df = pd.DataFrame(gantt)
+
+    if gantt_df.empty:
+        st.error("Nenhum dado gerado.")
+        st.stop()
 
     st.session_state["dados_dashboard"] = gantt_df
 
