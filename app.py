@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import timedelta
 
 st.set_page_config(layout="wide")
-st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
+st.title("APS ELOHIM - CAPACIDADE INDUSTRIAL (PADRÃO SAP)")
 
 EFICIENCIA = 0.8
 LEAD_TIME = 25
@@ -31,6 +31,9 @@ MAQUINAS = {
 def horas_dia(d):
     return HORAS_DIA.get(d.weekday(),0) * EFICIENCIA
 
+def inicio_semana(d):
+    return d - timedelta(days=d.weekday())
+
 # ===============================
 # BASE
 # ===============================
@@ -57,8 +60,11 @@ df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
 
+# 🔥 PRIORIDADE EDD
+df_pv = df_pv.sort_values("ENTREGA")
+
 # ===============================
-# APS NIVELADO REAL
+# APS NIVELADO POR SEMANA
 # ===============================
 if st.button("Gerar APS"):
 
@@ -74,7 +80,10 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        data = ordem["ENTREGA"] - timedelta(days=LEAD_TIME)
+        data_base = ordem["ENTREGA"] - timedelta(days=LEAD_TIME)
+        semana = inicio_semana(data_base)
+
+        fim_anterior = semana
 
         for processo in PROCESSOS:
 
@@ -85,46 +94,54 @@ if st.button("Gerar APS"):
             restante = (tempo_min * ordem["QTD"]) / 60
             maquinas = MAQUINAS[processo]
 
+            data = fim_anterior
+
             while restante > 0:
 
-                if data.weekday() > 4:
-                    data += timedelta(days=1)
-                    continue
+                semana_atual = inicio_semana(data)
 
-                cap_dia = horas_dia(data)
+                # 🔥 NÃO AVANÇA SEMANA SEM ENCHER A ATUAL
+                dias_semana = [semana_atual + timedelta(days=i) for i in range(5)]
 
-                # 🔥 tenta TODAS as máquinas antes de avançar
-                alocado = False
+                for dia in dias_semana:
 
-                for maquina in maquinas:
+                    cap = horas_dia(dia)
 
-                    usado = carga.get(chave(maquina, data.date()), 0)
-                    disponivel = cap_dia - usado
+                    for maquina in maquinas:
 
-                    if disponivel <= 0:
-                        continue
+                        usado = carga.get(chave(maquina, dia.date()), 0)
+                        disponivel = cap - usado
 
-                    horas = min(restante, disponivel)
+                        if disponivel <= 0:
+                            continue
 
-                    gantt.append({
-                        "PV": ordem["PV"],
-                        "Cliente": ordem["CLIENTE"],
-                        "Processo": processo,
-                        "Maquina": maquina,
-                        "Início": data,
-                        "Fim": data + timedelta(hours=horas),
-                        "Duração (h)": round(horas)
-                    })
+                        horas = min(restante, disponivel)
 
-                    carga[chave(maquina, data.date())] = usado + horas
-                    restante -= horas
+                        inicio = dia + timedelta(hours=usado)
+                        fim = inicio + timedelta(hours=horas)
 
-                    alocado = True
-                    break
+                        gantt.append({
+                            "PV": ordem["PV"],
+                            "Cliente": ordem["CLIENTE"],
+                            "Processo": processo,
+                            "Maquina": maquina,
+                            "Início": inicio,
+                            "Fim": fim,
+                            "Duração (h)": round(horas,2)
+                        })
 
-                # 🔥 só avança quando TODAS estiverem cheias
-                if not alocado:
-                    data += timedelta(days=1)
+                        carga[chave(maquina, dia.date())] = usado + horas
+                        restante -= horas
+                        fim_anterior = fim
+
+                        if restante <= 0:
+                            break
+
+                    if restante <= 0:
+                        break
+
+                if restante > 0:
+                    data = semana_atual + timedelta(days=7)
 
     st.session_state["dados_dashboard"] = pd.DataFrame(gantt)
-    st.success("APS nivelado corretamente")
+    st.success("APS NIVELADO SEMANALMENTE 🚀")
