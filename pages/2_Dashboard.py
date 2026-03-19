@@ -7,18 +7,15 @@ st.set_page_config(layout="wide")
 st.title("📊 DASHBOARD DE CAPACIDADE")
 
 if "dados_dashboard" not in st.session_state:
+    st.warning("Execute o APS primeiro")
     st.stop()
 
 df = st.session_state["dados_dashboard"].copy()
 
-if "Início" not in df.columns:
-    st.error("APS não gerou dados corretamente.")
-    st.stop()
-
 df["Data"] = pd.to_datetime(df["Início"])
 
 # ===============================
-# PEDIDOS POR CLIENTE
+# CLIENTE
 # ===============================
 st.subheader("📊 Pedidos por Cliente (Mensal)")
 
@@ -32,24 +29,14 @@ if "Cliente" in df.columns:
         .reset_index(name="Qtd PV")
     )
 
-    fig_cliente = px.bar(
+    fig = px.bar(
         pedidos_cliente,
         x="Mes",
         y="Qtd PV",
         color="Cliente",
-        barmode="group",
         text="Qtd PV"
     )
 
-    fig_cliente.update_traces(textposition="outside")
+    fig.update_traces(textposition="outside")
 
-    st.plotly_chart(fig_cliente, use_container_width=True)
-
-# ===============================
-# DADOS CAPACIDADE
-# ===============================
-df["Processo"] = df["Maquina"].str.split("_").str[0]
-
-st.subheader("📋 Dados")
-
-st.dataframe(df, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)

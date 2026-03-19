@@ -11,12 +11,8 @@ st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 # CONFIG
 # ===============================
 EFICIENCIA = 0.8
-
 HORAS_DIA = {0:9,1:9,2:9,3:9,4:8}
-
 LEAD_TIME = 21
-
-BASE_DIR = "projeto"
 
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
@@ -38,9 +34,29 @@ def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(),0) * EFICIENCIA
 
 # ===============================
-# BASE PROCESSOS
+# LOCALIZAÇÃO AUTOMÁTICA
 # ===============================
-df_base = pd.read_excel(os.path.join(BASE_DIR, "Processos_de_Fabricacao.xlsx"))
+def encontrar_arquivo(nome):
+    caminhos = [
+        nome,
+        f"projeto/{nome}",
+        f"./projeto/{nome}"
+    ]
+    for c in caminhos:
+        if os.path.exists(c):
+            return c
+    return None
+
+# ===============================
+# CARREGAR PROCESSOS
+# ===============================
+path_proc = encontrar_arquivo("Processos_de_Fabricacao.xlsx")
+
+if not path_proc:
+    st.error("Arquivo Processos_de_Fabricacao.xlsx não encontrado")
+    st.stop()
+
+df_base = pd.read_excel(path_proc)
 df_base.fillna(0, inplace=True)
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
@@ -48,34 +64,36 @@ colunas = list(df_base.columns)
 PROCESSOS_VALIDOS = [c for c in colunas if c != "CODIGO" and c in MAQUINAS]
 
 # ===============================
-# CARREGAR PLANILHA PV
+# CARREGAR PV
 # ===============================
 st.subheader("📂 Carregar Ordens")
 
+path_pv = encontrar_arquivo("Relacao_Pv.xlsx")
+
 ordens = []
 
-try:
-    df_pv = pd.read_excel(os.path.join(BASE_DIR, "Relacao_Pv.xlsx"))
+if not path_pv:
+    st.error("Arquivo Relacao_Pv.xlsx não encontrado")
+    st.stop()
 
-    df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
-    df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
+df_pv = pd.read_excel(path_pv)
 
-    st.success(f"{len(df_pv)} ordens carregadas")
+df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
+df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 
-    for _, row in df_pv.iterrows():
-        ordens.append({
-            "PV": row["PV"],
-            "CODIGO": row["CODIGO"],
-            "QTD": row["QTD"],
-            "ENTREGA": row["ENTREGA"],
-            "CLIENTE": row.get("CLIENTE","")
-        })
+st.success(f"{len(df_pv)} ordens carregadas")
 
-except Exception as e:
-    st.error(f"Erro ao carregar planilha: {e}")
+for _, row in df_pv.iterrows():
+    ordens.append({
+        "PV": row["PV"],
+        "CODIGO": row["CODIGO"],
+        "QTD": row["QTD"],
+        "ENTREGA": row["ENTREGA"],
+        "CLIENTE": row.get("CLIENTE","")
+    })
 
 # ===============================
-# APS FORWARD NIVELADO
+# APS
 # ===============================
 if st.button("Gerar APS"):
 
@@ -147,10 +165,6 @@ if st.button("Gerar APS"):
                     tempo += timedelta(days=1)
 
     gantt_df = pd.DataFrame(gantt)
-
-    if gantt_df.empty:
-        st.error("Nenhum dado gerado.")
-        st.stop()
 
     st.session_state["dados_dashboard"] = gantt_df
 
