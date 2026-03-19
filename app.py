@@ -28,56 +28,52 @@ def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(),0) * EFICIENCIA
 
 # ===============================
-# LER PROCESSOS
+# PROCESSOS
 # ===============================
-try:
-    df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-except Exception as e:
-    st.error("Erro ao ler Processos_de_Fabricacao.xlsx")
-    st.exception(e)
-    st.stop()
-
+df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.fillna(0, inplace=True)
+df_base.columns = [c.strip().upper() for c in df_base.columns]
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.upper()
 
 PROCESSOS = [c for c in df_base.columns if c != "CODIGO" and c in MAQUINAS]
 
 # ===============================
-# LER PV
+# PV (AGORA COM CLIENTE CORRETO)
 # ===============================
-try:
-    df_pv = pd.read_excel("Relacao_Pv.xlsx")
-except Exception as e:
-    st.error("Erro ao ler Relacao_Pv.xlsx")
-    st.exception(e)
-    st.stop()
+df_pv = pd.read_excel("Relacao_Pv.xlsx")
 
+# normaliza
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 
+# mapeamento completo
 df_pv = df_pv.rename(columns={
     "CÓDIGO": "CODIGO",
     "DATA DE ENTREGA": "ENTREGA",
-    "QUANTIDADE": "QTD"
+    "QUANTIDADE": "QTD",
+    "CLIENTE": "CLIENTE"
 })
 
-for col in ["PV","CODIGO","QTD","ENTREGA"]:
+# validação
+for col in ["PV","CODIGO","QTD","ENTREGA","CLIENTE"]:
     if col not in df_pv.columns:
         st.error(f"Coluna faltando: {col}")
         st.write(df_pv.columns.tolist())
         st.stop()
 
+# tratamento
+df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
+df_pv["CLIENTE"] = df_pv["CLIENTE"].astype(str)
 
 st.success(f"{len(df_pv)} ordens carregadas")
 
 # ===============================
-# GERAR APS
+# APS
 # ===============================
 if st.button("Gerar APS"):
 
     gantt = []
-    carga = {}
 
     for _, ordem in df_pv.iterrows():
 
@@ -104,11 +100,11 @@ if st.button("Gerar APS"):
                     continue
 
                 cap = capacidade_dia(tempo)
-
                 horas = min(restante, cap)
 
                 gantt.append({
                     "PV": ordem["PV"],
+                    "Cliente": ordem["CLIENTE"],  # 🔥 CORREÇÃO AQUI
                     "Processo": processo,
                     "Maquina": MAQUINAS[processo][0],
                     "Início": tempo,
@@ -120,6 +116,10 @@ if st.button("Gerar APS"):
                 tempo += timedelta(hours=horas)
 
     df_gantt = pd.DataFrame(gantt)
+
+    if df_gantt.empty:
+        st.error("APS não gerou dados")
+        st.stop()
 
     st.session_state["dados_dashboard"] = df_gantt
 
