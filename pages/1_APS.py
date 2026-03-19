@@ -6,91 +6,77 @@ st.set_page_config(layout="wide")
 
 st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 
-# ===============================
-# CONFIG
-# ===============================
 EFICIENCIA = 0.8
 
-HORAS_DIA = {
-    0: 9,
-    1: 9,
-    2: 9,
-    3: 9,
-    4: 8
-}
+HORAS_DIA = {0:9,1:9,2:9,3:9,4:8}
 
-LEAD_TIME = 21  # dias
+LEAD_TIME = 21
 
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
     "CORTE-PLASMA": ["PLASMA_1"],
     "CORTE - SERRA": ["SERRA_1"],
-    "FRESADORAS": ["FRESA_1", "FRESA_2", "FRESA_3"],
-    "TORNO CNC": ["TORNO_1", "TORNO_2"],
-    "SOLDAGEM": ["SOLDA_1", "SOLDA_2", "SOLDA_3"],
+    "FRESADORAS": ["FRESA_1","FRESA_2","FRESA_3"],
+    "TORNO CNC": ["TORNO_1","TORNO_2"],
+    "SOLDAGEM": ["SOLDA_1","SOLDA_2","SOLDA_3"],
     "PINTURA": ["PINTURA_1"],
     "JATEAMENTO": ["JATO_1"],
     "MONTAGEM": ["MONT_1"],
-    "ACABAMENTO": ["ACAB_1", "ACAB_2"],
+    "ACABAMENTO": ["ACAB_1","ACAB_2"],
     "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
 }
 
-# ===============================
-# FUNÇÃO CAPACIDADE
-# ===============================
 def capacidade_dia(data):
     if data.weekday() > 4:
         return 0
-    return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
+    return HORAS_DIA.get(data.weekday(),0) * EFICIENCIA
 
 # ===============================
-# BASE
+# BASE PROCESSOS
 # ===============================
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.fillna(0, inplace=True)
-
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
-# 🔥 ORDEM DO PROCESSO VEM DO EXCEL
 colunas = list(df_base.columns)
-PROCESSOS_VALIDOS = [
-    c for c in colunas
-    if c != "CODIGO" and c in MAQUINAS
-]
+PROCESSOS_VALIDOS = [c for c in colunas if c != "CODIGO" and c in MAQUINAS]
 
 # ===============================
-# INPUT
+# CARREGAR PLANILHA DE PV
 # ===============================
-st.subheader("Ordens")
+st.subheader("📂 Carregar Ordens")
 
-codigos = sorted(df_base["CODIGO"].unique())
-
-qtd_ordens = st.number_input("Quantidade de ordens", 1, 20, 3)
+usar_planilha = st.checkbox("Usar planilha Relacao_Pv.xlsx", value=True)
 
 ordens = []
 
-for i in range(qtd_ordens):
-    c1, c2, c3, c4 = st.columns(4)
+if usar_planilha:
+    try:
+        df_pv = pd.read_excel("Relacao_Pv.xlsx")
 
-    pv = c1.text_input(f"PV {i}", key=f"pv_{i}")
-    codigo = c2.selectbox(f"Código {i}", ["-"] + codigos, key=f"cod_{i}")
-    qtd = c3.number_input(f"Qtd {i}", 1, 10000, 1, key=f"qtd_{i}")
-    entrega = c4.date_input(f"Entrega {i}", key=f"entrega_{i}")
+        df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
+        df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 
-    if codigo != "-":
-        ordens.append({
-            "PV": pv if pv else f"PV_{i}",
-            "CODIGO": codigo,
-            "QTD": qtd,
-            "ENTREGA": pd.to_datetime(entrega)
-        })
+        st.success(f"{len(df_pv)} ordens carregadas")
+
+        for _, row in df_pv.iterrows():
+            ordens.append({
+                "PV": row["PV"],
+                "CODIGO": row["CODIGO"],
+                "QTD": row["QTD"],
+                "ENTREGA": row["ENTREGA"],
+                "CLIENTE": row.get("CLIENTE","")
+            })
+
+    except:
+        st.error("Erro ao carregar Relacao_Pv.xlsx")
 
 # ===============================
-# APS FORWARD NIVELADO (CORRETO)
+# APS
 # ===============================
 if st.button("Gerar APS"):
 
-    carga_dia = {}  # controle por máquina/dia
+    carga_dia = {}
     gantt = []
 
     def chave(maquina, data):
@@ -103,7 +89,6 @@ if st.button("Gerar APS"):
         if produto.empty:
             continue
 
-        # 🔥 COMEÇA NO INÍCIO DO LEAD TIME
         tempo = ordem["ENTREGA"] - timedelta(days=LEAD_TIME)
 
         for processo in PROCESSOS_VALIDOS:
@@ -118,19 +103,17 @@ if st.button("Gerar APS"):
 
             while restante > 0:
 
-                # pula fim de semana
                 if tempo.weekday() > 4:
                     tempo += timedelta(days=1)
                     continue
 
-                cap_dia = capacidade_dia(tempo)
-
+                cap = capacidade_dia(tempo)
                 alocado = False
 
                 for maquina in maquinas:
 
                     usado = carga_dia.get(chave(maquina, tempo), 0)
-                    disponivel = cap_dia - usado
+                    disponivel = cap - usado
 
                     if disponivel <= 0:
                         continue
@@ -142,6 +125,7 @@ if st.button("Gerar APS"):
 
                     gantt.append({
                         "PV": ordem["PV"],
+                        "Cliente": ordem["CLIENTE"],
                         "Processo": processo,
                         "Maquina": maquina,
                         "Início": inicio,
@@ -161,10 +145,6 @@ if st.button("Gerar APS"):
 
     gantt_df = pd.DataFrame(gantt)
 
-    if gantt_df.empty:
-        st.error("Nenhum dado gerado. Verifique a planilha.")
-        st.stop()
-
     st.session_state["dados_dashboard"] = gantt_df
 
-    st.success("APS com nivelamento real gerado com sucesso")
+    st.success("APS gerado com sucesso")
