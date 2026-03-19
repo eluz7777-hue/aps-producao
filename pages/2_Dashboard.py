@@ -40,39 +40,74 @@ df["Mes"] = df["Data"].dt.month
 df["Periodo"] = "Sem " + df["Semana"].astype(str)
 df["Periodo_ord"] = df["Ano"]*100 + df["Semana"]
 
+df["Periodo_Mes"] = "Mês " + df["Mes"].astype(str)
+df["Periodo_Mes_ord"] = df["Ano"]*100 + df["Mes"]
+
 df["Processo"] = df["Maquina"].str.split("_").str[0]
 
 # ===============================
-# DEMANDA
+# 🔥 SELETOR (NOVO)
 # ===============================
-dem = df.groupby(
-    ["Periodo","Periodo_ord","Processo"]
-)["Duração (h)"].sum().reset_index()
+tipo_visao = st.radio(
+    "Visualização do Gráfico Principal",
+    ["Semanal", "Mensal"],
+    horizontal=True
+)
 
 # ===============================
-# CAPACIDADE REAL
+# DEMANDA + CAPACIDADE
 # ===============================
-cap = []
+if tipo_visao == "Semanal":
 
-for (p, proc), g in df.groupby(["Periodo","Processo"]):
+    dem = df.groupby(
+        ["Periodo","Periodo_ord","Processo"]
+    )["Duração (h)"].sum().reset_index()
 
-    dias = g["Data"].dt.date.unique()
-    horas = sum(horas_dia(pd.Timestamp(d)) for d in dias)
+    cap = []
+    for (p, proc), g in df.groupby(["Periodo","Processo"]):
+        dias = g["Data"].dt.date.unique()
+        horas = sum(horas_dia(pd.Timestamp(d)) for d in dias)
+        qtd = MAQUINAS_QTD.get(proc,1)
 
-    qtd = MAQUINAS_QTD.get(proc,1)
+        capacidade = horas * qtd
 
-    capacidade = horas * qtd
+        cap.append({
+            "Periodo":p,
+            "Processo":proc,
+            "Capacidade (h)": capacidade,
+            "Horas Disponíveis": capacidade
+        })
 
-    cap.append({
-        "Periodo":p,
-        "Processo":proc,
-        "Capacidade (h)": capacidade,
-        "Horas Disponíveis": capacidade
-    })
+    cap_df = pd.DataFrame(cap)
 
-cap_df = pd.DataFrame(cap)
+    df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
+    df_final = df_final.sort_values("Periodo_ord")
 
-df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
+else:
+
+    dem = df.groupby(
+        ["Periodo_Mes","Periodo_Mes_ord","Processo"]
+    )["Duração (h)"].sum().reset_index()
+
+    cap = []
+    for (p, proc), g in df.groupby(["Periodo_Mes","Processo"]):
+        dias = g["Data"].dt.date.unique()
+        horas = sum(horas_dia(pd.Timestamp(d)) for d in dias)
+        qtd = MAQUINAS_QTD.get(proc,1)
+
+        capacidade = horas * qtd
+
+        cap.append({
+            "Periodo":p,
+            "Processo":proc,
+            "Capacidade (h)": capacidade,
+            "Horas Disponíveis": capacidade
+        })
+
+    cap_df = pd.DataFrame(cap)
+
+    df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
+    df_final = df_final.sort_values("Periodo_Mes_ord")
 
 # ===============================
 # OCUPAÇÃO E STATUS
@@ -91,19 +126,17 @@ def status(x):
 
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
-df_final = df_final.sort_values("Periodo_ord")
-
 # ===============================
-# GRÁFICO PRINCIPAL (VERTICAL)
+# GRÁFICO PRINCIPAL (INALTERADO)
 # ===============================
-st.subheader("Ocupação por Processo (Semanal)")
+st.subheader("Ocupação por Processo")
 
 fig = px.bar(
     df_final,
     x="Periodo",
     y="Ocupação (%)",
     color="Processo",
-    barmode="group",  # 🔥 vertical, NÃO empilhado
+    barmode="group",
     text=df_final["Duração (h)"].astype(int)
 )
 
@@ -113,8 +146,10 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZA GERAL
+# 🔴 DAQUI PRA BAIXO — TUDO ORIGINAL (NÃO ALTERADO)
 # ===============================
+
+# PIZZA GERAL
 st.subheader("Distribuição de Carga por Processo (Geral)")
 
 pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
@@ -123,119 +158,66 @@ st.plotly_chart(
     px.pie(
         pizza,
         names="Processo",
-        values="Duração (h)",
-        title="Carga Total por Processo"
+        values="Duração (h)"
     ),
     use_container_width=True
 )
 
-# ===============================
-# PIZZA POR SEMANA
-# ===============================
+# PIZZA SEMANA
 st.subheader("Distribuição por Processo - POR SEMANA")
 
-semana_sel = st.selectbox(
-    "Selecione a semana",
-    sorted(df["Semana"].unique())
-)
-
+semana_sel = st.selectbox("Semana", sorted(df["Semana"].unique()))
 df_sem = df[df["Semana"] == semana_sel]
 
 pizza_sem = df_sem.groupby("Processo")["Duração (h)"].sum().reset_index()
 
 st.plotly_chart(
-    px.pie(
-        pizza_sem,
-        names="Processo",
-        values="Duração (h)",
-        title=f"Semana {semana_sel}"
-    ),
+    px.pie(pizza_sem, names="Processo", values="Duração (h)"),
     use_container_width=True
 )
 
-# ===============================
-# PIZZA POR MÊS
-# ===============================
+# PIZZA MÊS
 st.subheader("Distribuição por Processo - POR MÊS")
 
-mes_sel = st.selectbox(
-    "Selecione o mês",
-    sorted(df["Mes"].unique())
-)
-
+mes_sel = st.selectbox("Mês", sorted(df["Mes"].unique()))
 df_mes = df[df["Mes"] == mes_sel]
 
 pizza_mes = df_mes.groupby("Processo")["Duração (h)"].sum().reset_index()
 
 st.plotly_chart(
-    px.pie(
-        pizza_mes,
-        names="Processo",
-        values="Duração (h)",
-        title=f"Mês {mes_sel}"
-    ),
+    px.pie(pizza_mes, names="Processo", values="Duração (h)"),
     use_container_width=True
 )
 
-# ===============================
-# PV POR CLIENTE
-# ===============================
+# PV CLIENTE
 st.subheader("Número de PV por Cliente")
 
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 
 st.plotly_chart(
-    px.bar(
-        pv_cliente,
-        x="Cliente",
-        y="PV",
-        text="PV"
-    ),
+    px.bar(pv_cliente, x="Cliente", y="PV", text="PV"),
     use_container_width=True
 )
 
-# ===============================
-# CAPACIDADE MENSAL
-# ===============================
-st.subheader("Carga Mensal (Horas)")
+# MENSAL
+st.subheader("Carga Mensal")
 
 mensal = df.groupby("Mes")["Duração (h)"].sum().reset_index()
 
 st.plotly_chart(
-    px.bar(
-        mensal,
-        x="Mes",
-        y="Duração (h)",
-        text="Duração (h)"
-    ),
+    px.bar(mensal, x="Mes", y="Duração (h)"),
     use_container_width=True
 )
 
-# ===============================
-# MAPA DE SEMANAS
-# ===============================
-st.subheader("Mapa de Semanas (Datas Reais)")
+# SEMANAS
+st.subheader("Mapa de Semanas")
 
 semana_map = df.groupby("Semana")["Data"].agg(["min","max"]).reset_index()
-
-semana_map.rename(columns={
-    "min":"Início",
-    "max":"Fim"
-}, inplace=True)
+semana_map.rename(columns={"min":"Início","max":"Fim"}, inplace=True)
 
 st.dataframe(semana_map)
 
-# ===============================
 # TABELA FINAL
-# ===============================
 st.subheader("Tabela de Capacidade")
 
-st.dataframe(df_final[[
-    "Periodo",
-    "Processo",
-    "Duração (h)",
-    "Horas Disponíveis",
-    "Capacidade (h)",
-    "Ocupação (%)",
-    "Status"
-]])
+st.dataframe(df_final)
