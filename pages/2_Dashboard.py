@@ -7,19 +7,32 @@ st.set_page_config(layout="wide")
 st.title("📊 DASHBOARD DE CAPACIDADE")
 
 # ===============================
-# VERIFICA DADOS
+# DADOS
 # ===============================
 if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
     st.stop()
 
 df = st.session_state["dados_dashboard"].copy()
+df["Data"] = pd.to_datetime(df["Início"])
 
 # ===============================
-# TRATAMENTO
+# CONFIG
 # ===============================
-df["Data"] = pd.to_datetime(df["Início"])
-df["Processo"] = df["Maquina"].str.split("_").str[0]
+EFICIENCIA = 0.8
+
+HORAS_DIA = {0:9,1:9,2:9,3:9,4:8}
+
+MAQUINAS_QTD = {
+    "PLASMA":1,
+    "SERRA":1,
+    "SOLDA":3,
+    "PINTURA":1,
+    "ACAB":2
+}
+
+def horas_dia(data):
+    return HORAS_DIA.get(data.weekday(),0) * EFICIENCIA
 
 # ===============================
 # FILTROS
@@ -38,111 +51,135 @@ if cliente_sel:
 # ===============================
 # VISUALIZAÇÃO
 # ===============================
-tipo = st.selectbox("Visualização", ["Semanal", "Mensal"])
+tipo = st.selectbox("Visualização", ["Semanal","Mensal"])
 
 if tipo == "Semanal":
-    df["Periodo_ord"] = df["Data"].dt.year * 100 + df["Data"].dt.isocalendar().week
+    df["Periodo_ord"] = df["Data"].dt.year*100 + df["Data"].dt.isocalendar().week
     df["Periodo"] = "Sem " + df["Data"].dt.isocalendar().week.astype(str)
 else:
-    df["Periodo_ord"] = df["Data"].dt.year * 100 + df["Data"].dt.month
+    df["Periodo_ord"] = df["Data"].dt.year*100 + df["Data"].dt.month
     df["Periodo"] = df["Data"].dt.strftime("%b/%Y")
 
 # ===============================
-# CARGA POR MÁQUINA
+# PROCESSO
 # ===============================
-st.subheader("📊 Carga por Máquina")
+df["Processo"] = df["Maquina"].str.split("_").str[0]
 
-maq = (
-    df.groupby(["Periodo","Periodo_ord","Maquina"])["Duração (h)"]
+# ===============================
+# DEMANDA
+# ===============================
+demanda = (
+    df.groupby(["Periodo","Periodo_ord","Processo"])["Duração (h)"]
     .sum()
     .reset_index()
-    .sort_values("Periodo_ord")
 )
 
-maq["Label"] = maq["Duração (h)"].astype(int).astype(str) + "h"
+# ===============================
+# CAPACIDADE
+# ===============================
+capacidade = []
+
+for (periodo, proc), grupo in df.groupby(["Periodo","Processo"]):
+
+    dias = grupo["Data"].dt.date.unique()
+
+    total = 0
+    for d in dias:
+        dias = grupo["Data"].dt.date.unique()
+
+dias_validos = [d for d in dias if pd.Timestamp(d).weekday() <= 4]
+
+total_horas = sum(horas_dia(pd.Timestamp(d)) for d in dias_validos)
+
+qtd = MAQUINAS_QTD.get(proc,1)
+
+capacidade.append({
+    "Periodo": periodo,
+    "Processo": proc,
+    "Capacidade (h)": total_horas * qtd
+})
+    
+
+cap_df = pd.DataFrame(capacidade)
+
+# ===============================
+# JOIN
+# ===============================
+df_final = pd.merge(demanda, cap_df, on=["Periodo","Processo"], how="left")
+
+# ===============================
+# MÉTRICAS
+# ===============================
+df_final["Ocupação (%)"] = (df_final["Duração (h)"] / df_final["Capacidade (h)"]) * 100
+df_final["Disponível (%)"] = 100 - df_final["Ocupação (%)"]
+
+# ===============================
+# STATUS (BOLINHAS)
+# ===============================
+def status(x):
+    if x > 100:
+        return "🔴"
+    elif x > 80:
+        return "🟡"
+    else:
+        return "🟢"
+
+df_final["Status"] = df_final["Ocupação (%)"].apply(status)
+
+# ===============================
+# ORDENAÇÃO
+# ===============================
+df_final = df_final.sort_values("Periodo_ord")
+
+# ===============================
+# GRÁFICO (VERTICAL)
+# ===============================
+st.subheader("📊 Carga por Processo")
+
+df_final["Label"] = df_final["Duração (h)"].astype(int).astype(str) + "h"
 
 fig = px.bar(
-    maq,
+    df_final,
     x="Periodo",
-    y="Duração (h)",
-    color="Maquina",
+    y="Ocupação (%)",
+    color="Processo",
     text="Label",
     barmode="group",
-    category_orders={"Periodo": maq["Periodo"].unique()}
+    category_orders={"Periodo": df_final["Periodo"].unique()}
 )
+
+# linha de gargalo
+fig.add_hline(y=100, line_dash="dash")
 
 fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZA MÁQUINA
+# PIZZA
 # ===============================
-st.subheader("🥧 Distribuição por Máquina")
+st.subheader("🥧 Ocupação por Processo")
 
-pizza = df.groupby("Maquina")["Duração (h)"].sum().reset_index()
+pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
 
-fig2 = px.pie(pizza, names="Maquina", values="Duração (h)")
+fig2 = px.pie(pizza, names="Processo", values="Duração (h)")
 fig2.update_traces(textinfo="label+percent")
 
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# CARGA POR PROCESSO
+# TABELA
 # ===============================
-st.subheader("📊 Carga por Processo")
+st.subheader("📋 Situação da Capacidade")
 
-proc = (
-    df.groupby(["Periodo","Periodo_ord","Processo"])["Duração (h)"]
-    .sum()
-    .reset_index()
-    .sort_values("Periodo_ord")
-)
-
-proc["Label"] = proc["Duração (h)"].astype(int).astype(str) + "h"
-
-fig3 = px.bar(
-    proc,
-    x="Periodo",
-    y="Duração (h)",
-    color="Processo",
-    text="Label",
-    barmode="group",
-    category_orders={"Periodo": proc["Periodo"].unique()}
-)
-
-fig3.update_traces(textposition="outside")
-
-st.plotly_chart(fig3, use_container_width=True)
+st.dataframe(df_final, use_container_width=True)
 
 # ===============================
-# PEDIDOS POR CLIENTE
+# RESUMO
 # ===============================
-st.subheader("📊 Pedidos por Cliente")
+st.subheader("📊 Resumo")
 
-df["Mes"] = df["Data"].dt.strftime("%Y-%m")
+col1, col2 = st.columns(2)
 
-cliente = (
-    df.groupby(["Mes","Cliente"])["PV"]
-    .nunique()
-    .reset_index(name="Qtd PV")
-)
-
-fig4 = px.bar(
-    cliente,
-    x="Mes",
-    y="Qtd PV",
-    color="Cliente",
-    text="Qtd PV"
-)
-
-fig4.update_traces(textposition="outside")
-
-st.plotly_chart(fig4, use_container_width=True)
-
-# ===============================
-# TABELA FINAL
-# ===============================
-st.subheader("📋 Dados")
-
-st.dataframe(df, use_container_width=True)
+col1.metric("Carga Total (h)", int(df_final["Duração (h)"].sum()))
+col2.metric("Capacidade Total (h)", int(df_final["Capacidade (h)"].sum()))

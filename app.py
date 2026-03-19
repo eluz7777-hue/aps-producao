@@ -10,7 +10,7 @@ st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 # CONFIG
 # ===============================
 EFICIENCIA = 0.8
-LEAD_TIME = 21
+LEAD_TIME = 25  # 🔥 ATUALIZADO
 
 HORAS_DIA = {0:9,1:9,2:9,3:9,4:8}
 
@@ -38,42 +38,40 @@ df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.upper()
 PROCESSOS = [c for c in df_base.columns if c != "CODIGO" and c in MAQUINAS]
 
 # ===============================
-# PV (AGORA COM CLIENTE CORRETO)
+# PV
 # ===============================
 df_pv = pd.read_excel("Relacao_Pv.xlsx")
-
-# normaliza
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 
-# mapeamento completo
 df_pv = df_pv.rename(columns={
     "CÓDIGO": "CODIGO",
     "DATA DE ENTREGA": "ENTREGA",
-    "QUANTIDADE": "QTD",
-    "CLIENTE": "CLIENTE"
+    "QUANTIDADE": "QTD"
 })
 
-# validação
 for col in ["PV","CODIGO","QTD","ENTREGA","CLIENTE"]:
     if col not in df_pv.columns:
         st.error(f"Coluna faltando: {col}")
-        st.write(df_pv.columns.tolist())
         st.stop()
 
-# tratamento
 df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
-df_pv["CLIENTE"] = df_pv["CLIENTE"].astype(str)
 
 st.success(f"{len(df_pv)} ordens carregadas")
 
 # ===============================
-# APS
+# APS COM BALANCEAMENTO REAL
 # ===============================
 if st.button("Gerar APS"):
 
     gantt = []
+
+    # controle de carga por máquina/dia
+    carga = {}
+
+    def chave(maquina, data):
+        return (maquina, data.date())
 
     for _, ordem in df_pv.iterrows():
 
@@ -92,6 +90,7 @@ if st.button("Gerar APS"):
                 continue
 
             restante = (tempo_min * ordem["QTD"]) / 60
+            maquinas = MAQUINAS[processo]
 
             while restante > 0:
 
@@ -100,26 +99,42 @@ if st.button("Gerar APS"):
                     continue
 
                 cap = capacidade_dia(tempo)
-                horas = min(restante, cap)
 
-                gantt.append({
-                    "PV": ordem["PV"],
-                    "Cliente": ordem["CLIENTE"],  # 🔥 CORREÇÃO AQUI
-                    "Processo": processo,
-                    "Maquina": MAQUINAS[processo][0],
-                    "Início": tempo,
-                    "Fim": tempo + timedelta(hours=horas),
-                    "Duração (h)": round(horas)
-                })
+                # 🔥 tenta todas as máquinas (balanceamento real)
+                alocado = False
 
-                restante -= horas
-                tempo += timedelta(hours=horas)
+                for maquina in maquinas:
+
+                    usado = carga.get(chave(maquina, tempo), 0)
+                    disponivel = cap - usado
+
+                    if disponivel <= 0:
+                        continue
+
+                    horas = min(restante, disponivel)
+
+                    gantt.append({
+                        "PV": ordem["PV"],
+                        "Cliente": ordem["CLIENTE"],
+                        "Processo": processo,
+                        "Maquina": maquina,
+                        "Início": tempo,
+                        "Fim": tempo + timedelta(hours=horas),
+                        "Duração (h)": round(horas)
+                    })
+
+                    carga[chave(maquina, tempo)] = usado + horas
+                    restante -= horas
+                    tempo += timedelta(hours=horas)
+
+                    alocado = True
+                    break
+
+                # 🔴 se nenhuma máquina disponível → próximo dia
+                if not alocado:
+                    tempo += timedelta(days=1)
 
     df_gantt = pd.DataFrame(gantt)
-
-    if df_gantt.empty:
-        st.error("APS não gerou dados")
-        st.stop()
 
     st.session_state["dados_dashboard"] = df_gantt
 
