@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import timedelta
-import os
+from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide")
 
@@ -11,6 +10,7 @@ st.title("APS ELOHIM - ANÁLISE DE CAPACIDADE")
 # CONFIG
 # ===============================
 EFICIENCIA = 0.8
+LEAD_TIME = 21
 
 HORAS_DIA = {
     0: 9,
@@ -20,19 +20,17 @@ HORAS_DIA = {
     4: 8
 }
 
-LEAD_TIME = 21
-
 MAQUINAS = {
     "CORTE-LASER": ["LASER_1"],
     "CORTE-PLASMA": ["PLASMA_1"],
     "CORTE - SERRA": ["SERRA_1"],
-    "FRESADORAS": ["FRESA_1","FRESA_2","FRESA_3"],
-    "TORNO CNC": ["TORNO_1","TORNO_2"],
-    "SOLDAGEM": ["SOLDA_1","SOLDA_2","SOLDA_3"],
+    "FRESADORAS": ["FRESA_1", "FRESA_2", "FRESA_3"],
+    "TORNO CNC": ["TORNO_1", "TORNO_2"],
+    "SOLDAGEM": ["SOLDA_1", "SOLDA_2", "SOLDA_3"],
     "PINTURA": ["PINTURA_1"],
     "JATEAMENTO": ["JATO_1"],
     "MONTAGEM": ["MONT_1"],
-    "ACABAMENTO": ["ACAB_1","ACAB_2"],
+    "ACABAMENTO": ["ACAB_1", "ACAB_2"],
     "PRENSA (AMASSAMENTO)": ["PRENSA_1"]
 }
 
@@ -42,103 +40,49 @@ def capacidade_dia(data):
     return HORAS_DIA.get(data.weekday(), 0) * EFICIENCIA
 
 # ===============================
-# LOCALIZA ARQUIVOS
+# BASE PROCESSOS
 # ===============================
-def encontrar_arquivo(nome):
-    caminhos = [
-        nome,
-        f"projeto/{nome}",
-        f"./projeto/{nome}"
-    ]
-    for c in caminhos:
-        if os.path.exists(c):
-            return c
-    return None
-
-# ===============================
-# CARREGAR PROCESSOS
-# ===============================
-path_proc = encontrar_arquivo("Processos_de_Fabricacao.xlsx")
-
-if not path_proc:
-    st.error("❌ Arquivo Processos_de_Fabricacao.xlsx não encontrado")
-    st.stop()
-
-df_base = pd.read_excel(path_proc)
+df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+df_base = df_base.loc[:, ~df_base.columns.str.contains("Unnamed")]
 df_base.fillna(0, inplace=True)
 
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip().str.upper()
 
-# 🔥 ORDEM DO PROCESSO = ORDEM DO EXCEL
-colunas = list(df_base.columns)
+# ordem do Excel = ordem do processo
 PROCESSOS_VALIDOS = [
-    c for c in colunas if c != "CODIGO" and c in MAQUINAS
+    c for c in df_base.columns if c != "CODIGO" and c in MAQUINAS
 ]
 
 # ===============================
-# CARREGAR PV
+# LEITURA PLANILHA PV (CORRIGIDO)
 # ===============================
-st.subheader("📂 Carregar Ordens")
+st.subheader("📂 Ordens carregadas")
 
-path_pv = encontrar_arquivo("Relacao_Pv.xlsx")
+df_pv = pd.read_excel("Relacao_Pv.xlsx")
 
-ordens = []
-
-if not path_pv:
-    st.error("❌ Arquivo Relacao_Pv.xlsx não encontrado")
-    st.stop()
-
-df_pv = pd.read_excel(path_pv)
-
-# ===============================
-# NORMALIZA COLUNAS
-# ===============================
+# normaliza nomes
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 
-col_map = {
-    "PV": "PV",
-    "CLIENTE": "CLIENTE",
+# mapeia nomes reais
+df_pv = df_pv.rename(columns={
     "CÓDIGO": "CODIGO",
-    "CODIGO": "CODIGO",
     "DATA DE ENTREGA": "ENTREGA",
-    "ENTREGA": "ENTREGA",
-    "QUANTIDADE": "QTD",
-    "QTD": "QTD"
-}
+    "QUANTIDADE": "QTD"
+})
 
-df_pv = df_pv.rename(columns=col_map)
-
-# ===============================
-# VALIDAÇÃO
-# ===============================
-colunas_necessarias = ["PV", "CODIGO", "QTD", "ENTREGA"]
-
-for col in colunas_necessarias:
+# valida
+for col in ["PV", "CODIGO", "QTD", "ENTREGA"]:
     if col not in df_pv.columns:
-        st.error(f"❌ Coluna obrigatória não encontrada: {col}")
-        st.write("Colunas encontradas:", df_pv.columns.tolist())
+        st.error(f"Coluna faltando: {col}")
+        st.write(df_pv.columns.tolist())
         st.stop()
 
-# ===============================
-# TRATAMENTO
-# ===============================
+# tratamento
 df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.upper()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
 
 st.success(f"{len(df_pv)} ordens carregadas")
-
-# ===============================
-# LISTA DE ORDENS
-# ===============================
-for _, row in df_pv.iterrows():
-    ordens.append({
-        "PV": row["PV"],
-        "CODIGO": row["CODIGO"],
-        "QTD": row["QTD"],
-        "ENTREGA": row["ENTREGA"],
-        "CLIENTE": row.get("CLIENTE", "")
-    })
 
 # ===============================
 # APS FORWARD NIVELADO
@@ -151,7 +95,7 @@ if st.button("Gerar APS"):
     def chave(maquina, data):
         return (maquina, data.date())
 
-    for ordem in ordens:
+    for _, ordem in df_pv.iterrows():
 
         produto = df_base[df_base["CODIGO"] == ordem["CODIGO"]]
 
@@ -195,7 +139,7 @@ if st.button("Gerar APS"):
 
                     gantt.append({
                         "PV": ordem["PV"],
-                        "Cliente": ordem["CLIENTE"],
+                        "Cliente": ordem.get("CLIENTE", ""),
                         "Processo": processo,
                         "Maquina": maquina,
                         "Início": inicio,
@@ -216,7 +160,7 @@ if st.button("Gerar APS"):
     gantt_df = pd.DataFrame(gantt)
 
     if gantt_df.empty:
-        st.error("Nenhum dado gerado. Verifique os dados.")
+        st.error("Nenhum dado gerado")
         st.stop()
 
     st.session_state["dados_dashboard"] = gantt_df
