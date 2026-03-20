@@ -14,12 +14,12 @@ if "dados_dashboard" not in st.session_state:
 
 df = st.session_state["dados_dashboard"].copy()
 
-# 🔥 CORREÇÃO DE DATA (ERRO NA)
+# 🔥 TRATAMENTO ROBUSTO DE DATA
 df["Data"] = pd.to_datetime(df["Início"], errors="coerce")
 df = df.dropna(subset=["Data"])
 
 # ===============================
-# 🔥 CARREGA CÓDIGOS DO ROTEIRO
+# 🔥 CARREGA CÓDIGOS
 # ===============================
 try:
     df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
@@ -29,7 +29,7 @@ except:
     lista_codigos = []
 
 # ===============================
-# 🔥 SIMULAÇÃO DE PV (CORRIGIDA)
+# 🔥 SIMULAÇÃO (SOMA NA CARGA REAL)
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
@@ -48,10 +48,7 @@ with col1:
 
         pv = st.text_input("PV")
 
-        codigo = st.selectbox(
-            "Código da Peça",
-            lista_codigos
-        )
+        codigo = st.selectbox("Código da Peça", lista_codigos)
 
         qtd = st.number_input("Quantidade", min_value=1, step=1)
 
@@ -76,12 +73,13 @@ with col1:
                     "Duração (h)": float(qtd)
                 })
 
+            # 🔥 SOMA NA CARGA EXISTENTE
             st.session_state["df_simulado"] = pd.concat(
                 [df, pd.DataFrame(novas_linhas)],
                 ignore_index=True
             )
 
-            st.success("PV simulada adicionada")
+            st.success("PV adicionada e somada à carga atual")
 
 # ➖ REMOVER PV
 with col2:
@@ -99,6 +97,19 @@ with col2:
 df = st.session_state["df_simulado"]
 
 # ===============================
+# DATAS (CORREÇÃO DEFINITIVA)
+# ===============================
+df["Semana"] = df["Data"].dt.isocalendar().week
+df["Semana"] = pd.to_numeric(df["Semana"], errors="coerce")
+
+df["Ano"] = pd.to_numeric(df["Data"].dt.year, errors="coerce")
+df["Mes"] = pd.to_numeric(df["Data"].dt.month, errors="coerce")
+
+df = df.dropna(subset=["Semana","Ano","Mes"])
+
+df["Processo"] = df["Maquina"].str.split("_").str[0]
+
+# ===============================
 # PARÂMETROS
 # ===============================
 EFICIENCIA = 0.8
@@ -114,15 +125,6 @@ def horas_dia(d):
     return HORAS_DIA.get(d.weekday(),0) * EFICIENCIA
 
 # ===============================
-# DATAS (CORRIGIDO)
-# ===============================
-df["Semana"] = df["Data"].dt.isocalendar().week.astype("int64")
-df["Ano"] = df["Data"].dt.year
-df["Mes"] = df["Data"].dt.month
-
-df["Processo"] = df["Maquina"].str.split("_").str[0]
-
-# ===============================
 # SELETOR
 # ===============================
 tipo_visao = st.radio(
@@ -135,10 +137,10 @@ tipo_visao = st.radio(
 # PERIODO
 # ===============================
 if tipo_visao == "Semanal":
-    df["Periodo"] = "Sem " + df["Semana"].astype(str)
+    df["Periodo"] = "Sem " + df["Semana"].astype(int).astype(str)
     df["Periodo_ord"] = df["Ano"]*100 + df["Semana"]
 else:
-    df["Periodo"] = "Mês " + df["Mes"].astype(str)
+    df["Periodo"] = "Mês " + df["Mes"].astype(int).astype(str)
     df["Periodo_ord"] = df["Ano"]*100 + df["Mes"]
 
 # ===============================
@@ -200,7 +202,7 @@ def status(x):
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
-# GRÁFICO PRINCIPAL
+# GRÁFICO
 # ===============================
 st.subheader("Ocupação por Processo")
 
@@ -219,7 +221,7 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# RESTANTE (INALTERADO)
+# RESTANTE INTACTO
 # ===============================
 st.subheader("Distribuição de Carga por Processo (Geral)")
 pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
