@@ -13,6 +13,7 @@ if "dados_dashboard" not in st.session_state:
     st.stop()
 
 df_original = st.session_state["dados_dashboard"].copy()
+df_original["PV"] = df_original["PV"].astype(str)
 
 # ===============================
 # DATA
@@ -27,7 +28,6 @@ df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.columns = [c.strip().upper() for c in df_base.columns]
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 
-# 🔥 remove colunas indevidas
 colunas_invalidas = ["TOTAL", "TEMPO TOTAL", "OBS", "DESCRICAO"]
 
 processos_validos = [
@@ -46,6 +46,7 @@ if "df_simulado" not in st.session_state:
     st.session_state["df_simulado"] = df_original.copy()
 
 df = st.session_state["df_simulado"]
+df["PV"] = df["PV"].astype(str)
 
 col1, col2 = st.columns(2)
 
@@ -90,9 +91,10 @@ with col1:
                     ignore_index=True
                 )
 
-                st.success(f"PV {pv} simulada aplicada na carga")
+                st.success(f"PV {pv} simulada aplicada")
+                st.rerun()  # 🔥 FORÇA ATUALIZAÇÃO
 
-# ➖ REMOVER (CORRIGIDO)
+# ➖ REMOVER (100% CORRIGIDO)
 with col2:
     st.markdown("### ➖ Remover PV")
 
@@ -101,11 +103,13 @@ with col2:
 
     lista_pv = sorted(df_remocao["PV"].dropna().unique())
 
-    pv_sel = st.selectbox("PV", lista_pv)
+    # 🔥 chave dinâmica força atualização
+    pv_sel = st.selectbox("PV", lista_pv, key=f"pv_remove_{len(lista_pv)}")
 
     if st.button("Remover"):
         st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != pv_sel]
-        st.success(f"PV {pv_sel} removida com sucesso")
+        st.success(f"PV {pv_sel} removida")
+        st.rerun()  # 🔥 ATUALIZA TUDO
 
 df = st.session_state["df_simulado"]
 
@@ -120,7 +124,7 @@ df["Mes"] = df["Data"].dt.month
 df = df.dropna(subset=["Semana","Ano","Mes"])
 
 # ===============================
-# PROCESSO CORRETO
+# PROCESSO
 # ===============================
 if "Processo" not in df.columns:
     df["Processo"] = df["Maquina"].str.split("_").str[0]
@@ -190,13 +194,10 @@ for (periodo, proc), g in df.groupby(["Periodo","Processo"]):
 cap_df = pd.DataFrame(cap)
 
 # ===============================
-# MERGE
+# FINAL
 # ===============================
 df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
 
-# ===============================
-# STATUS
-# ===============================
 df_final["Ocupação (%)"] = (df_final["Duração (h)"]/df_final["Capacidade (h)"])*100
 
 def status(x):
@@ -206,72 +207,9 @@ def status(x):
 
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
-# ===============================
-# GRÁFICO PRINCIPAL
-# ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(
-    df_final,
-    x="Periodo",
-    y="Ocupação (%)",
-    color="Processo",
-    barmode="group",
-    text=df_final["Duração (h)"].astype(int)
-)
-
+fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo", barmode="group")
 fig.add_hline(y=100, line_dash="dash")
-fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
-
-# ===============================
-# PIZZAS
-# ===============================
-st.subheader("Carga por Processo")
-st.plotly_chart(px.pie(df, names="Processo", values="Duração (h)"), use_container_width=True)
-
-st.subheader("Carga por Semana")
-sem_sel = st.selectbox("Semana", sorted(df["Semana"].unique()))
-st.plotly_chart(px.pie(df[df["Semana"]==sem_sel], names="Processo", values="Duração (h)"), use_container_width=True)
-
-st.subheader("Carga por Mês")
-mes_sel = st.selectbox("Mês", sorted(df["Mes"].unique()))
-st.plotly_chart(px.pie(df[df["Mes"]==mes_sel], names="Processo", values="Duração (h)"), use_container_width=True)
-
-# ===============================
-# PV CLIENTE
-# ===============================
-st.subheader("Número de PV por Cliente")
-pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
-st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
-
-# ===============================
-# CARGA MENSAL
-# ===============================
-st.subheader("Carga Mensal")
-mensal = df.groupby("Mes")["Duração (h)"].sum().reset_index()
-st.plotly_chart(px.bar(mensal, x="Mes", y="Duração (h)"), use_container_width=True)
-
-# ===============================
-# MAPA SEMANAS
-# ===============================
-st.subheader("Mapa de Semanas")
-
-mapa = []
-for s in df["Semana"].unique():
-    ano = int(df[df["Semana"]==s]["Ano"].iloc[0])
-    inicio = pd.to_datetime(f"{ano}-W{int(s)}-1", format="%G-W%V-%u")
-    fim = inicio + pd.Timedelta(days=4)
-    mapa.append({"Semana":s,"Início":inicio.date(),"Fim":fim.date()})
-
-st.dataframe(pd.DataFrame(mapa))
-
-# ===============================
-# AUDITORIA
-# ===============================
-st.subheader("Auditoria")
-
-df_final["Saldo"] = df_final["Capacidade (h)"] - df_final["Duração (h)"]
-
-st.dataframe(df_final)
