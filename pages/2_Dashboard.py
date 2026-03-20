@@ -27,8 +27,15 @@ df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.columns = [c.strip().upper() for c in df_base.columns]
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 
+# 🔥 remove colunas indevidas
+colunas_invalidas = ["TOTAL", "TEMPO TOTAL", "OBS", "DESCRICAO"]
+
+processos_validos = [
+    c for c in df_base.columns
+    if c != "CODIGO" and c not in colunas_invalidas
+]
+
 lista_codigos = sorted(df_base["CODIGO"].unique())
-processos_validos = [c for c in df_base.columns if c != "CODIGO"]
 
 # ===============================
 # SIMULAÇÃO
@@ -47,7 +54,7 @@ with col1:
     st.markdown("### ➕ Inserir PV")
 
     with st.form("form_pv"):
-        pv = st.text_input("PV")
+        pv = str(st.text_input("PV")).strip()
         codigo = st.selectbox("Código da Peça", lista_codigos)
         qtd = st.number_input("Quantidade", min_value=1)
         entrega = st.date_input("Data de Entrega")
@@ -78,18 +85,27 @@ with col1:
                             "Duração (h)": horas
                         })
 
-                st.session_state["df_simulado"] = pd.concat([df, pd.DataFrame(novas)], ignore_index=True)
-                st.success("PV simulada aplicada na carga")
+                st.session_state["df_simulado"] = pd.concat(
+                    [df, pd.DataFrame(novas)],
+                    ignore_index=True
+                )
 
-# ➖ REMOVER
+                st.success(f"PV {pv} simulada aplicada na carga")
+
+# ➖ REMOVER (CORRIGIDO)
 with col2:
     st.markdown("### ➖ Remover PV")
 
-    pv_sel = st.selectbox("PV", df["PV"].dropna().unique())
+    df_remocao = st.session_state["df_simulado"].copy()
+    df_remocao["PV"] = df_remocao["PV"].astype(str)
+
+    lista_pv = sorted(df_remocao["PV"].dropna().unique())
+
+    pv_sel = st.selectbox("PV", lista_pv)
 
     if st.button("Remover"):
-        st.session_state["df_simulado"] = df[df["PV"] != pv_sel]
-        st.success("PV removida")
+        st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != pv_sel]
+        st.success(f"PV {pv_sel} removida com sucesso")
 
 df = st.session_state["df_simulado"]
 
@@ -104,7 +120,7 @@ df["Mes"] = df["Data"].dt.month
 df = df.dropna(subset=["Semana","Ano","Mes"])
 
 # ===============================
-# PROCESSO CORRETO (FILTRADO)
+# PROCESSO CORRETO
 # ===============================
 if "Processo" not in df.columns:
     df["Processo"] = df["Maquina"].str.split("_").str[0]
@@ -210,21 +226,15 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZA GERAL
+# PIZZAS
 # ===============================
 st.subheader("Carga por Processo")
 st.plotly_chart(px.pie(df, names="Processo", values="Duração (h)"), use_container_width=True)
 
-# ===============================
-# PIZZA SEMANA
-# ===============================
 st.subheader("Carga por Semana")
 sem_sel = st.selectbox("Semana", sorted(df["Semana"].unique()))
 st.plotly_chart(px.pie(df[df["Semana"]==sem_sel], names="Processo", values="Duração (h)"), use_container_width=True)
 
-# ===============================
-# PIZZA MÊS
-# ===============================
 st.subheader("Carga por Mês")
 mes_sel = st.selectbox("Mês", sorted(df["Mes"].unique()))
 st.plotly_chart(px.pie(df[df["Mes"]==mes_sel], names="Processo", values="Duração (h)"), use_container_width=True)
