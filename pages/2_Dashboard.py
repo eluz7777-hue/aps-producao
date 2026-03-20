@@ -12,35 +12,39 @@ if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
     st.stop()
 
-df = st.session_state["dados_dashboard"].copy()
+df_original = st.session_state["dados_dashboard"].copy()
 
 # ===============================
-# DATA (ROBUSTO)
+# DATA
 # ===============================
-df["Data"] = pd.to_datetime(df["Início"], errors="coerce")
-df = df.dropna(subset=["Data"])
+df_original["Data"] = pd.to_datetime(df_original["Início"], errors="coerce")
+df_original = df_original.dropna(subset=["Data"])
 
 # ===============================
-# CARREGA CÓDIGOS
+# CARREGA ROTEIRO
 # ===============================
 try:
     df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-    lista_codigos = sorted(df_base["CODIGO"].astype(str).unique())
+    df_base.columns = [c.strip().upper() for c in df_base.columns]
+    df_base["CODIGO"] = df_base["CODIGO"].astype(str)
+    lista_codigos = sorted(df_base["CODIGO"].unique())
 except:
-    lista_codigos = []
+    st.error("Erro ao carregar Processos_de_Fabricacao.xlsx")
+    st.stop()
 
 # ===============================
-# SIMULAÇÃO (SOMA NA CARGA)
+# SIMULAÇÃO
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
 if "df_simulado" not in st.session_state:
-    st.session_state["df_simulado"] = df.copy()
+    st.session_state["df_simulado"] = df_original.copy()
 
 df = st.session_state["df_simulado"]
 
 col1, col2 = st.columns(2)
 
+# ➕ INSERIR PV (AGORA CORRETO)
 with col1:
     st.markdown("### ➕ Inserir PV")
 
@@ -53,23 +57,41 @@ with col1:
         submitted = st.form_submit_button("Simular PV")
 
         if submitted:
-            processos = df["Processo"].unique()
-            novas_linhas = []
 
-            for proc in processos:
-                novas_linhas.append({
-                    "PV": pv,
-                    "Cliente": "SIMULADO",
-                    "Processo": proc,
-                    "Maquina": proc + "_SIM",
-                    "Início": pd.to_datetime(entrega),
-                    "Fim": pd.to_datetime(entrega),
-                    "Duração (h)": float(qtd)
-                })
+            produto = df_base[df_base["CODIGO"] == codigo]
 
-            st.session_state["df_simulado"] = pd.concat([df, pd.DataFrame(novas_linhas)], ignore_index=True)
-            st.success("PV adicionada e somada à carga atual")
+            if produto.empty:
+                st.error("Código não encontrado no roteiro")
+            else:
+                novas_linhas = []
 
+                for col in df_base.columns:
+                    if col == "CODIGO":
+                        continue
+
+                    tempo_min = produto.iloc[0][col]
+
+                    if tempo_min > 0:
+                        horas = (tempo_min * qtd) / 60
+
+                        novas_linhas.append({
+                            "PV": pv,
+                            "Cliente": "SIMULADO",
+                            "Processo": col,
+                            "Maquina": col.split()[0] + "_SIM",
+                            "Início": pd.to_datetime(entrega),
+                            "Fim": pd.to_datetime(entrega),
+                            "Duração (h)": horas
+                        })
+
+                st.session_state["df_simulado"] = pd.concat(
+                    [df, pd.DataFrame(novas_linhas)],
+                    ignore_index=True
+                )
+
+                st.success("PV simulada com base no roteiro real")
+
+# ➖ REMOVER PV
 with col2:
     st.markdown("### ➖ Remover PV")
 
@@ -80,6 +102,7 @@ with col2:
         st.session_state["df_simulado"] = df[df["PV"] != pv_remove]
         st.success("PV removida")
 
+# Atualiza df
 df = st.session_state["df_simulado"]
 
 # ===============================
@@ -129,7 +152,7 @@ else:
 dem = df.groupby(["Periodo","Periodo_ord","Processo"], as_index=False)["Duração (h)"].sum()
 
 # ===============================
-# CAPACIDADE (CORRETA)
+# CAPACIDADE
 # ===============================
 cap = []
 
@@ -140,7 +163,6 @@ for (periodo, proc), g in df.groupby(["Periodo","Processo"]):
         ano = int(g["Ano"].iloc[0])
         inicio = pd.to_datetime(f"{ano}-W{semana}-1", format="%G-W%V-%u")
         dias = [inicio + pd.Timedelta(days=i) for i in range(5)]
-
     else:
         mes = int(g["Mes"].iloc[0])
         ano = int(g["Ano"].iloc[0])
@@ -183,8 +205,14 @@ df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 # ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo", barmode="group",
-             text=df_final["Duração (h)"].fillna(0).astype(int))
+fig = px.bar(
+    df_final,
+    x="Periodo",
+    y="Ocupação (%)",
+    color="Processo",
+    barmode="group",
+    text=df_final["Duração (h)"].fillna(0).astype(int)
+)
 
 fig.add_hline(y=100, line_dash="dash")
 fig.update_traces(textposition="outside")
@@ -192,45 +220,13 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZAS
+# AUDITORIA
 # ===============================
-st.subheader("Distribuição de Carga por Processo (Geral)")
-st.plotly_chart(px.pie(df.groupby("Processo")["Duração (h)"].sum().reset_index(),
-                       names="Processo", values="Duração (h)"),
-                use_container_width=True)
+st.subheader("Auditoria Completa")
 
-# ===============================
-# AUDITORIA COMPLETA
-# ===============================
-st.subheader("Auditoria Completa de Capacidade")
+df_final["Saldo (h)"] = df_final["Capacidade (h)"] - df_final["Duração (h)"]
 
-auditoria = df_final.copy()
-auditoria["Saldo (h)"] = auditoria["Capacidade (h)"] - auditoria["Duração (h)"]
-
-def status_auditoria(row):
-    if row["Duração (h)"] > row["Capacidade (h)"]:
-        return "🔴 Sobrecarga"
-    elif row["Duração (h)"] > 0.8 * row["Capacidade (h)"]:
-        return "🟡 Atenção"
-    else:
-        return "🟢 Normal"
-
-auditoria["Status Auditoria"] = auditoria.apply(status_auditoria, axis=1)
-
-st.dataframe(auditoria)
-
-# ===============================
-# RESUMO
-# ===============================
-st.subheader("Resumo Executivo")
-
-resumo = auditoria.groupby("Periodo").agg({
-    "Duração (h)": "sum",
-    "Capacidade (h)": "sum",
-    "Saldo (h)": "sum"
-}).reset_index()
-
-st.dataframe(resumo)
+st.dataframe(df_final)
 
 # ===============================
 # MAPA DE SEMANAS
@@ -247,6 +243,10 @@ for _, row in semanas.iterrows():
     inicio = pd.to_datetime(f"{ano}-W{semana}-1", format="%G-W%V-%u")
     fim = inicio + pd.Timedelta(days=4)
 
-    mapa.append({"Semana": semana, "Início": inicio.date(), "Fim": fim.date()})
+    mapa.append({
+        "Semana": semana,
+        "Início": inicio.date(),
+        "Fim": fim.date()
+    })
 
 st.dataframe(pd.DataFrame(mapa))
