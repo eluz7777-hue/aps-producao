@@ -167,21 +167,44 @@ for (periodo, proc), g in df.groupby(["Periodo","Processo"]):
 
 cap_df = pd.DataFrame(cap)
 
+# ===============================
+# MERGE
+# ===============================
 df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
+
+# ===============================
+# OCUPAÇÃO + STATUS (🔴🟡🟢)
+# ===============================
 df_final["Ocupação (%)"] = (df_final["Duração (h)"]/df_final["Capacidade (h)"])*100
+
+def status(x):
+    if x > 100:
+        return "🔴"
+    elif x > 80:
+        return "🟡"
+    else:
+        return "🟢"
+
+df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
 # GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("Ocupação por Processo")
 
-st.plotly_chart(px.bar(
+fig = px.bar(
     df_final,
     x="Periodo",
     y="Ocupação (%)",
     color="Processo",
-    barmode="group"
-), use_container_width=True)
+    barmode="group",
+    text=df_final["Duração (h)"].astype(int)
+)
+
+fig.add_hline(y=100, line_dash="dash")
+fig.update_traces(textposition="outside")
+
+st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
 # PIZZA GERAL
@@ -211,7 +234,7 @@ pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
 
 # ===============================
-# 🔥 CARGA MENSAL (RESTAURADO)
+# CARGA MENSAL
 # ===============================
 st.subheader("Carga Mensal")
 mensal = df.groupby("Mes")["Duração (h)"].sum().reset_index()
@@ -237,4 +260,5 @@ st.dataframe(pd.DataFrame(mapa))
 st.subheader("Auditoria")
 
 df_final["Saldo"] = df_final["Capacidade (h)"] - df_final["Duração (h)"]
+
 st.dataframe(df_final)
