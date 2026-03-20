@@ -26,11 +26,10 @@ df_original = df_original.dropna(subset=["Data"])
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.columns = [c.strip().upper() for c in df_base.columns]
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
-
 lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# SIMULAÇÃO
+# SIMULAÇÃO (CORRIGIDA)
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
@@ -54,7 +53,6 @@ with col1:
         submitted = st.form_submit_button("Simular PV")
 
         if submitted:
-
             produto = df_base[df_base["CODIGO"] == codigo]
 
             if produto.empty:
@@ -66,7 +64,7 @@ with col1:
                     if col == "CODIGO":
                         continue
 
-                    # 🔥 CORREÇÃO AQUI
+                    # 🔥 CORREÇÃO DO ERRO
                     tempo_min = pd.to_numeric(produto.iloc[0][col], errors="coerce")
 
                     if pd.notna(tempo_min) and tempo_min > 0:
@@ -88,7 +86,7 @@ with col1:
                     ignore_index=True
                 )
 
-                st.success("PV simulada com base no roteiro real")
+                st.success("PV simulada com impacto real no APS")
 
 # ➖ REMOVER PV
 with col2:
@@ -101,6 +99,7 @@ with col2:
         st.session_state["df_simulado"] = df[df["PV"] != pv_remove]
         st.success("PV removida")
 
+# Atualiza df
 df = st.session_state["df_simulado"]
 
 # ===============================
@@ -150,7 +149,7 @@ else:
 dem = df.groupby(["Periodo","Periodo_ord","Processo"], as_index=False)["Duração (h)"].sum()
 
 # ===============================
-# CAPACIDADE
+# CAPACIDADE CORRETA
 # ===============================
 cap = []
 
@@ -199,15 +198,65 @@ def status(x):
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
-# GRÁFICO
+# GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo",
-             barmode="group",
-             text=df_final["Duração (h)"].fillna(0).astype(int))
+fig = px.bar(
+    df_final,
+    x="Periodo",
+    y="Ocupação (%)",
+    color="Processo",
+    barmode="group",
+    text=df_final["Duração (h)"].fillna(0).astype(int)
+)
 
 fig.add_hline(y=100, line_dash="dash")
 fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# PIZZAS
+# ===============================
+st.subheader("Distribuição de Carga por Processo (Geral)")
+pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
+st.plotly_chart(px.pie(pizza, names="Processo", values="Duração (h)"), use_container_width=True)
+
+# ===============================
+# PV CLIENTE
+# ===============================
+st.subheader("Número de PV por Cliente")
+pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
+st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
+
+# ===============================
+# MAPA DE SEMANAS CORRETO
+# ===============================
+st.subheader("Mapa de Semanas")
+
+semanas = df[["Ano","Semana"]].drop_duplicates().sort_values(["Ano","Semana"])
+
+mapa = []
+for _, row in semanas.iterrows():
+    ano = int(row["Ano"])
+    semana = int(row["Semana"])
+    inicio = pd.to_datetime(f"{ano}-W{semana}-1", format="%G-W%V-%u")
+    fim = inicio + pd.Timedelta(days=4)
+
+    mapa.append({
+        "Semana": semana,
+        "Início": inicio.date(),
+        "Fim": fim.date()
+    })
+
+st.dataframe(pd.DataFrame(mapa))
+
+# ===============================
+# AUDITORIA
+# ===============================
+st.subheader("Auditoria de Capacidade")
+
+df_final["Saldo (h)"] = df_final["Capacidade (h)"] - df_final["Duração (h)"]
+
+st.dataframe(df_final)
