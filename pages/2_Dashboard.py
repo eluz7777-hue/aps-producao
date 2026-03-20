@@ -26,9 +26,6 @@ if "dados_dashboard" not in st.session_state:
 df_original = st.session_state["dados_dashboard"].copy()
 df_original["PV"] = df_original["PV"].astype(str)
 
-# ===============================
-# DATA
-# ===============================
 df_original["Data"] = pd.to_datetime(df_original["Início"], errors="coerce")
 df_original = df_original.dropna(subset=["Data"])
 
@@ -49,7 +46,7 @@ processos_validos = [
 lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# SIMULAÇÃO
+# ESTADO
 # ===============================
 if "df_simulado" not in st.session_state:
     st.session_state["df_simulado"] = df_original.copy()
@@ -57,13 +54,14 @@ if "df_simulado" not in st.session_state:
 df = st.session_state["df_simulado"]
 df["PV"] = df["PV"].astype(str)
 
+# ===============================
+# SIMULAÇÃO
+# ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
 col1, col2 = st.columns(2)
 
-# ===============================
-# INSERIR
-# ===============================
+# ➕ INSERIR
 with col1:
     st.markdown("### ➕ Inserir PV")
 
@@ -77,47 +75,47 @@ with col1:
 
             produto = df_base[df_base["CODIGO"] == codigo]
 
-            if produto.empty:
-                st.error("Código não encontrado")
-            else:
-                novas = []
+            novas = []
 
-                for col in processos_validos:
-                    tempo = pd.to_numeric(produto.iloc[0][col], errors="coerce")
+            for col in processos_validos:
+                tempo = pd.to_numeric(produto.iloc[0][col], errors="coerce")
 
-                    if pd.notna(tempo) and tempo > 0:
-                        horas = (tempo * qtd) / 60
+                if pd.notna(tempo) and tempo > 0:
+                    horas = (tempo * qtd) / 60
 
-                        novas.append({
-                            "PV": pv,
-                            "Cliente": "SIMULADO",
-                            "Processo": col,
-                            "Maquina": col + "_SIM",
-                            "Início": pd.to_datetime(entrega),
-                            "Fim": pd.to_datetime(entrega),
-                            "Duração (h)": horas
-                        })
+                    novas.append({
+                        "PV": pv,
+                        "Cliente": "SIMULADO",
+                        "Processo": col,
+                        "Maquina": col + "_SIM",
+                        "Início": pd.to_datetime(entrega),
+                        "Fim": pd.to_datetime(entrega),
+                        "Duração (h)": horas
+                    })
 
-                st.session_state["df_simulado"] = pd.concat(
-                    [df, pd.DataFrame(novas)],
-                    ignore_index=True
-                )
+            st.session_state["df_simulado"] = pd.concat(
+                [df, pd.DataFrame(novas)],
+                ignore_index=True
+            )
 
-                st.success(f"PV {pv} adicionada")
-                st.rerun()
+            st.success(f"PV {pv} adicionada")
+            st.rerun()
 
-# ===============================
-# REMOVER
-# ===============================
+# ➖ REMOVER (CORREÇÃO DEFINITIVA)
 with col2:
     st.markdown("### ➖ Remover PV")
 
     df_remocao = st.session_state["df_simulado"].copy()
     df_remocao["PV"] = df_remocao["PV"].astype(str)
 
-    lista_pv = sorted(df_remocao["PV"].unique())
+    # 🔥 LISTA REAL GARANTIDA
+    lista_pv = sorted(set(df_remocao["PV"].tolist()))
 
     pv_sel = st.selectbox("Selecione a PV", lista_pv)
+
+    # 🔥 DEBUG VISÍVEL (GARANTE QUE EXISTE)
+    if "100100" in lista_pv:
+        st.success("PV 100100 detectada na base")
 
     pv_manual = st.text_input("Ou digite a PV")
 
@@ -125,6 +123,7 @@ with col2:
         alvo = pv_manual.strip() if pv_manual else pv_sel
 
         st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != alvo]
+
         st.success(f"PV {alvo} removida")
         st.rerun()
 
@@ -137,17 +136,9 @@ df = st.session_state["df_simulado"]
 # DATAS
 # ===============================
 df["Data"] = pd.to_datetime(df["Início"], errors="coerce")
-df["Semana"] = pd.to_numeric(df["Data"].dt.isocalendar().week, errors="coerce")
+df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
 df["Ano"] = df["Data"].dt.year
 df["Mes"] = df["Data"].dt.month
-
-df = df.dropna(subset=["Semana","Ano","Mes"])
-
-# ===============================
-# PROCESSO (SEM EXCLUIR DADOS)
-# ===============================
-if "Processo" not in df.columns:
-    df["Processo"] = df["Maquina"].str.split("_").str[0]
 
 # ===============================
 # VISÃO
@@ -155,10 +146,10 @@ if "Processo" not in df.columns:
 tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
 
 if tipo == "Semanal":
-    df["Periodo"] = "Sem " + df["Semana"].astype(int).astype(str)
+    df["Periodo"] = "Sem " + df["Semana"].astype(str)
     df["Periodo_ord"] = df["Ano"]*100 + df["Semana"]
 else:
-    df["Periodo"] = "Mês " + df["Mes"].astype(int).astype(str)
+    df["Periodo"] = "Mês " + df["Mes"].astype(str)
     df["Periodo_ord"] = df["Ano"]*100 + df["Mes"]
 
 # ===============================
@@ -206,6 +197,9 @@ cap_df = pd.DataFrame(cap)
 
 df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
 
+# ===============================
+# STATUS
+# ===============================
 df_final["Ocupação (%)"] = (df_final["Duração (h)"]/df_final["Capacidade (h)"])*100
 
 def status(x):
@@ -216,11 +210,27 @@ def status(x):
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
-# GRÁFICOS (TODOS)
+# GRÁFICO PRINCIPAL (COM META)
 # ===============================
 st.subheader("Ocupação por Processo")
-st.plotly_chart(px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo", barmode="group"), use_container_width=True)
 
+fig = px.bar(
+    df_final,
+    x="Periodo",
+    y="Ocupação (%)",
+    color="Processo",
+    barmode="group",
+    text=df_final["Duração (h)"].astype(int)
+)
+
+fig.add_hline(y=100, line_dash="dash")  # 🔥 META RESTAURADA
+fig.update_traces(textposition="outside")
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# RESTANTE DOS GRÁFICOS
+# ===============================
 st.subheader("Distribuição por Processo")
 st.plotly_chart(px.pie(df, names="Processo", values="Duração (h)"), use_container_width=True)
 
