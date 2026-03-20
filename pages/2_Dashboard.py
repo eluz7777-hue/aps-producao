@@ -20,6 +20,9 @@ if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
     st.stop()
 
+# ===============================
+# BASE ORIGINAL
+# ===============================
 df_original = st.session_state["dados_dashboard"].copy()
 df_original["PV"] = df_original["PV"].astype(str)
 
@@ -96,7 +99,7 @@ with col1:
                         })
 
                 st.session_state["df_simulado"] = pd.concat(
-                    [st.session_state["df_simulado"], pd.DataFrame(novas)],
+                    [df, pd.DataFrame(novas)],
                     ignore_index=True
                 )
 
@@ -104,7 +107,7 @@ with col1:
                 st.rerun()
 
 # ===============================
-# REMOVER (ROBUSTO)
+# REMOVER
 # ===============================
 with col2:
     st.markdown("### ➖ Remover PV")
@@ -114,29 +117,16 @@ with col2:
 
     lista_pv = sorted(df_remocao["PV"].unique())
 
-    st.write(f"🔍 PVs disponíveis: {len(lista_pv)}")
+    pv_sel = st.selectbox("Selecione a PV", lista_pv)
 
-    # 🔥 SELECTBOX
-    pv_sel = st.selectbox(
-        "Selecione a PV",
-        options=lista_pv,
-        index=0 if lista_pv else None,
-        key=f"pv_remove_{len(lista_pv)}"
-    )
-
-    # 🔥 FALLBACK (ANTI-BUG)
-    pv_manual = st.text_input("Ou digite a PV para remover")
+    pv_manual = st.text_input("Ou digite a PV")
 
     if st.button("Remover PV"):
-
         alvo = pv_manual.strip() if pv_manual else pv_sel
 
-        if alvo not in lista_pv:
-            st.error(f"PV {alvo} não encontrada")
-        else:
-            st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != alvo]
-            st.success(f"PV {alvo} removida com sucesso")
-            st.rerun()
+        st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != alvo]
+        st.success(f"PV {alvo} removida")
+        st.rerun()
 
 # ===============================
 # BASE FINAL
@@ -147,22 +137,37 @@ df = st.session_state["df_simulado"]
 # DATAS
 # ===============================
 df["Data"] = pd.to_datetime(df["Início"], errors="coerce")
-df["Semana"] = df["Data"].dt.isocalendar().week
+df["Semana"] = pd.to_numeric(df["Data"].dt.isocalendar().week, errors="coerce")
 df["Ano"] = df["Data"].dt.year
 df["Mes"] = df["Data"].dt.month
 
 df = df.dropna(subset=["Semana","Ano","Mes"])
 
 # ===============================
-# PROCESSO
+# PROCESSO (SEM EXCLUIR DADOS)
 # ===============================
 if "Processo" not in df.columns:
     df["Processo"] = df["Maquina"].str.split("_").str[0]
 
-df = df[df["Processo"].isin(processos_validos)]
+# ===============================
+# VISÃO
+# ===============================
+tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
+
+if tipo == "Semanal":
+    df["Periodo"] = "Sem " + df["Semana"].astype(int).astype(str)
+    df["Periodo_ord"] = df["Ano"]*100 + df["Semana"]
+else:
+    df["Periodo"] = "Mês " + df["Mes"].astype(int).astype(str)
+    df["Periodo_ord"] = df["Ano"]*100 + df["Mes"]
 
 # ===============================
-# PARÂMETROS
+# DEMANDA
+# ===============================
+dem = df.groupby(["Periodo","Periodo_ord","Processo"], as_index=False)["Duração (h)"].sum()
+
+# ===============================
+# CAPACIDADE
 # ===============================
 EFICIENCIA = 0.8
 HORAS_DIA = {0:9,1:9,2:9,3:9,4:8}
@@ -176,26 +181,6 @@ MAQUINAS_QTD = {
 def horas_dia(d):
     return HORAS_DIA.get(d.weekday(),0) * EFICIENCIA
 
-# ===============================
-# VISÃO
-# ===============================
-tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
-
-if tipo == "Semanal":
-    df["Periodo"] = "Sem " + df["Semana"].astype(int)
-    df["Periodo_ord"] = df["Ano"]*100 + df["Semana"]
-else:
-    df["Periodo"] = "Mês " + df["Mes"].astype(int)
-    df["Periodo_ord"] = df["Ano"]*100 + df["Mes"]
-
-# ===============================
-# DEMANDA
-# ===============================
-dem = df.groupby(["Periodo","Periodo_ord","Processo"], as_index=False)["Duração (h)"].sum()
-
-# ===============================
-# CAPACIDADE
-# ===============================
 cap = []
 
 for (periodo, proc), g in df.groupby(["Periodo","Processo"]):
