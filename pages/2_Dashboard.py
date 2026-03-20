@@ -23,14 +23,11 @@ df_original = df_original.dropna(subset=["Data"])
 # ===============================
 # CARREGA ROTEIRO
 # ===============================
-try:
-    df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-    df_base.columns = [c.strip().upper() for c in df_base.columns]
-    df_base["CODIGO"] = df_base["CODIGO"].astype(str)
-    lista_codigos = sorted(df_base["CODIGO"].unique())
-except:
-    st.error("Erro ao carregar Processos_de_Fabricacao.xlsx")
-    st.stop()
+df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+df_base.columns = [c.strip().upper() for c in df_base.columns]
+df_base["CODIGO"] = df_base["CODIGO"].astype(str)
+
+lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
 # SIMULAÇÃO
@@ -44,7 +41,7 @@ df = st.session_state["df_simulado"]
 
 col1, col2 = st.columns(2)
 
-# ➕ INSERIR PV (AGORA CORRETO)
+# ➕ INSERIR PV
 with col1:
     st.markdown("### ➕ Inserir PV")
 
@@ -69,9 +66,11 @@ with col1:
                     if col == "CODIGO":
                         continue
 
-                    tempo_min = produto.iloc[0][col]
+                    # 🔥 CORREÇÃO AQUI
+                    tempo_min = pd.to_numeric(produto.iloc[0][col], errors="coerce")
 
-                    if tempo_min > 0:
+                    if pd.notna(tempo_min) and tempo_min > 0:
+
                         horas = (tempo_min * qtd) / 60
 
                         novas_linhas.append({
@@ -102,7 +101,6 @@ with col2:
         st.session_state["df_simulado"] = df[df["PV"] != pv_remove]
         st.success("PV removida")
 
-# Atualiza df
 df = st.session_state["df_simulado"]
 
 # ===============================
@@ -201,52 +199,15 @@ def status(x):
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
-# GRÁFICO PRINCIPAL
+# GRÁFICO
 # ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(
-    df_final,
-    x="Periodo",
-    y="Ocupação (%)",
-    color="Processo",
-    barmode="group",
-    text=df_final["Duração (h)"].fillna(0).astype(int)
-)
+fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo",
+             barmode="group",
+             text=df_final["Duração (h)"].fillna(0).astype(int))
 
 fig.add_hline(y=100, line_dash="dash")
 fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
-
-# ===============================
-# AUDITORIA
-# ===============================
-st.subheader("Auditoria Completa")
-
-df_final["Saldo (h)"] = df_final["Capacidade (h)"] - df_final["Duração (h)"]
-
-st.dataframe(df_final)
-
-# ===============================
-# MAPA DE SEMANAS
-# ===============================
-st.subheader("Mapa de Semanas")
-
-semanas = df[["Ano","Semana"]].drop_duplicates().sort_values(["Ano","Semana"])
-
-mapa = []
-
-for _, row in semanas.iterrows():
-    ano = int(row["Ano"])
-    semana = int(row["Semana"])
-    inicio = pd.to_datetime(f"{ano}-W{semana}-1", format="%G-W%V-%u")
-    fim = inicio + pd.Timedelta(days=4)
-
-    mapa.append({
-        "Semana": semana,
-        "Início": inicio.date(),
-        "Fim": fim.date()
-    })
-
-st.dataframe(pd.DataFrame(mapa))
