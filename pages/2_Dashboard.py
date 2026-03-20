@@ -6,19 +6,19 @@ st.set_page_config(layout="wide")
 st.title("📊 DASHBOARD INDUSTRIAL - APS ELOHIM")
 
 # ===============================
-# RESET
-# ===============================
-if st.button("🔄 Resetar Simulação"):
-    if "dados_dashboard" in st.session_state:
-        st.session_state["df_simulado"] = st.session_state["dados_dashboard"].copy()
-        st.rerun()
-
-# ===============================
 # VALIDAÇÃO
 # ===============================
 if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
     st.stop()
+
+# ===============================
+# RESET (CORRIGIDO)
+# ===============================
+if st.button("🔄 Resetar Simulação"):
+    st.session_state["df_simulado"] = st.session_state["dados_dashboard"].copy()
+    st.success("Simulação resetada")
+    st.rerun()
 
 # ===============================
 # BASE ORIGINAL
@@ -101,31 +101,33 @@ with col1:
             st.success(f"PV {pv} adicionada")
             st.rerun()
 
-# ➖ REMOVER (CORREÇÃO DEFINITIVA)
+# ➖ REMOVER (100% ROBUSTO)
 with col2:
     st.markdown("### ➖ Remover PV")
 
     df_remocao = st.session_state["df_simulado"].copy()
     df_remocao["PV"] = df_remocao["PV"].astype(str)
 
-    # 🔥 LISTA REAL GARANTIDA
-    lista_pv = sorted(set(df_remocao["PV"].tolist()))
+    lista_pv = sorted(df_remocao["PV"].unique())
 
-    pv_sel = st.selectbox("Selecione a PV", lista_pv)
+    st.write(f"📌 Total PVs: {len(lista_pv)}")
 
-    # 🔥 DEBUG VISÍVEL (GARANTE QUE EXISTE)
-    if "100100" in lista_pv:
-        st.success("PV 100100 detectada na base")
+    # 🔥 LISTA VISUAL
+    st.dataframe(pd.DataFrame(lista_pv, columns=["PVs disponíveis"]))
 
-    pv_manual = st.text_input("Ou digite a PV")
+    # 🔥 REMOÇÃO DIRETA (FUNCIONA SEMPRE)
+    pv_manual = st.text_input("Digite a PV para remover (ex: 100100)")
 
     if st.button("Remover PV"):
-        alvo = pv_manual.strip() if pv_manual else pv_sel
+        if pv_manual.strip() == "":
+            st.error("Digite uma PV válida")
+        else:
+            st.session_state["df_simulado"] = df_remocao[
+                df_remocao["PV"] != pv_manual.strip()
+            ]
 
-        st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != alvo]
-
-        st.success(f"PV {alvo} removida")
-        st.rerun()
+            st.success(f"PV {pv_manual} removida com sucesso")
+            st.rerun()
 
 # ===============================
 # BASE FINAL
@@ -210,26 +212,17 @@ def status(x):
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
-# GRÁFICO PRINCIPAL (COM META)
+# GRÁFICO PRINCIPAL (META OK)
 # ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(
-    df_final,
-    x="Periodo",
-    y="Ocupação (%)",
-    color="Processo",
-    barmode="group",
-    text=df_final["Duração (h)"].astype(int)
-)
-
-fig.add_hline(y=100, line_dash="dash")  # 🔥 META RESTAURADA
-fig.update_traces(textposition="outside")
+fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo", barmode="group")
+fig.add_hline(y=100, line_dash="dash")
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# RESTANTE DOS GRÁFICOS
+# RESTANTE
 # ===============================
 st.subheader("Distribuição por Processo")
 st.plotly_chart(px.pie(df, names="Processo", values="Duração (h)"), use_container_width=True)
