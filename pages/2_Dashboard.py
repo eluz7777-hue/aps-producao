@@ -26,7 +26,9 @@ df_original = df_original.dropna(subset=["Data"])
 df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
 df_base.columns = [c.strip().upper() for c in df_base.columns]
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
+
 lista_codigos = sorted(df_base["CODIGO"].unique())
+processos_validos = [c for c in df_base.columns if c != "CODIGO"]
 
 # ===============================
 # SIMULAÇÃO
@@ -59,9 +61,7 @@ with col1:
             else:
                 novas = []
 
-                for col in df_base.columns:
-                    if col == "CODIGO":
-                        continue
+                for col in processos_validos:
 
                     tempo = pd.to_numeric(produto.iloc[0][col], errors="coerce")
 
@@ -72,7 +72,7 @@ with col1:
                             "PV": pv,
                             "Cliente": "SIMULADO",
                             "Processo": col,
-                            "Maquina": col.split()[0] + "_SIM",
+                            "Maquina": col + "_SIM",
                             "Início": pd.to_datetime(entrega),
                             "Fim": pd.to_datetime(entrega),
                             "Duração (h)": horas
@@ -103,7 +103,13 @@ df["Mes"] = df["Data"].dt.month
 
 df = df.dropna(subset=["Semana","Ano","Mes"])
 
-df["Processo"] = df["Maquina"].str.split("_").str[0]
+# ===============================
+# PROCESSO CORRETO (FILTRADO)
+# ===============================
+if "Processo" not in df.columns:
+    df["Processo"] = df["Maquina"].str.split("_").str[0]
+
+df = df[df["Processo"].isin(processos_validos)]
 
 # ===============================
 # PARÂMETROS
@@ -173,17 +179,14 @@ cap_df = pd.DataFrame(cap)
 df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"])
 
 # ===============================
-# OCUPAÇÃO + STATUS (🔴🟡🟢)
+# STATUS
 # ===============================
 df_final["Ocupação (%)"] = (df_final["Duração (h)"]/df_final["Capacidade (h)"])*100
 
 def status(x):
-    if x > 100:
-        return "🔴"
-    elif x > 80:
-        return "🟡"
-    else:
-        return "🟢"
+    if x > 100: return "🔴"
+    elif x > 80: return "🟡"
+    else: return "🟢"
 
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
