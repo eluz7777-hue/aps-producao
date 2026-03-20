@@ -6,12 +6,24 @@ st.set_page_config(layout="wide")
 st.title("📊 DASHBOARD INDUSTRIAL - APS ELOHIM")
 
 # ===============================
+# RESET OPCIONAL (SEGURANÇA)
+# ===============================
+if st.button("🔄 Resetar Simulação"):
+    if "dados_dashboard" in st.session_state:
+        st.session_state["df_simulado"] = st.session_state["dados_dashboard"].copy()
+        st.success("Simulação resetada")
+        st.rerun()
+
+# ===============================
 # VALIDAÇÃO
 # ===============================
 if "dados_dashboard" not in st.session_state:
     st.warning("Execute o APS primeiro")
     st.stop()
 
+# ===============================
+# BASE ORIGINAL
+# ===============================
 df_original = st.session_state["dados_dashboard"].copy()
 df_original["PV"] = df_original["PV"].astype(str)
 
@@ -38,23 +50,25 @@ processos_validos = [
 lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# SIMULAÇÃO
+# SIMULAÇÃO (ESTADO CONSISTENTE)
 # ===============================
-st.subheader("Simulação de PV (Entrada / Exclusão)")
-
 if "df_simulado" not in st.session_state:
     st.session_state["df_simulado"] = df_original.copy()
 
 df = st.session_state["df_simulado"]
 df["PV"] = df["PV"].astype(str)
 
+st.subheader("Simulação de PV (Entrada / Exclusão)")
+
 col1, col2 = st.columns(2)
 
-# ➕ INSERIR
+# ===============================
+# INSERIR PV
+# ===============================
 with col1:
     st.markdown("### ➕ Inserir PV")
 
-    with st.form("form_pv"):
+    with st.form("form_pv", clear_on_submit=True):
         pv = str(st.text_input("PV")).strip()
         codigo = st.selectbox("Código da Peça", lista_codigos)
         qtd = st.number_input("Quantidade", min_value=1)
@@ -70,7 +84,6 @@ with col1:
                 novas = []
 
                 for col in processos_validos:
-
                     tempo = pd.to_numeric(produto.iloc[0][col], errors="coerce")
 
                     if pd.notna(tempo) and tempo > 0:
@@ -86,31 +99,40 @@ with col1:
                             "Duração (h)": horas
                         })
 
+                # 🔥 concatenação segura
                 st.session_state["df_simulado"] = pd.concat(
-                    [df, pd.DataFrame(novas)],
+                    [st.session_state["df_simulado"], pd.DataFrame(novas)],
                     ignore_index=True
                 )
 
-                st.success(f"PV {pv} simulada aplicada")
-                st.rerun()  # 🔥 FORÇA ATUALIZAÇÃO
+                st.success(f"PV {pv} adicionada corretamente")
+                st.rerun()
 
-# ➖ REMOVER (100% CORRIGIDO)
+# ===============================
+# REMOVER PV (AGORA FUNCIONA 100%)
+# ===============================
 with col2:
     st.markdown("### ➖ Remover PV")
 
     df_remocao = st.session_state["df_simulado"].copy()
     df_remocao["PV"] = df_remocao["PV"].astype(str)
 
-    lista_pv = sorted(df_remocao["PV"].dropna().unique())
+    lista_pv = sorted(df_remocao["PV"].unique())
 
-    # 🔥 chave dinâmica força atualização
-    pv_sel = st.selectbox("PV", lista_pv, key=f"pv_remove_{len(lista_pv)}")
+    pv_sel = st.selectbox(
+        "Selecione a PV",
+        lista_pv,
+        key=f"remove_{len(lista_pv)}"  # 🔥 força atualização
+    )
 
-    if st.button("Remover"):
+    if st.button("Remover PV"):
         st.session_state["df_simulado"] = df_remocao[df_remocao["PV"] != pv_sel]
         st.success(f"PV {pv_sel} removida")
-        st.rerun()  # 🔥 ATUALIZA TUDO
+        st.rerun()
 
+# ===============================
+# BASE FINAL
+# ===============================
 df = st.session_state["df_simulado"]
 
 # ===============================
@@ -124,7 +146,7 @@ df["Mes"] = df["Data"].dt.month
 df = df.dropna(subset=["Semana","Ano","Mes"])
 
 # ===============================
-# PROCESSO
+# PROCESSOS VALIDOS
 # ===============================
 if "Processo" not in df.columns:
     df["Processo"] = df["Maquina"].str.split("_").str[0]
@@ -207,9 +229,66 @@ def status(x):
 
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
+# ===============================
+# GRÁFICO PRINCIPAL
+# ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo", barmode="group")
+fig = px.bar(
+    df_final,
+    x="Periodo",
+    y="Ocupação (%)",
+    color="Processo",
+    barmode="group",
+    text=df_final["Duração (h)"].astype(int)
+)
+
 fig.add_hline(y=100, line_dash="dash")
+fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# TODOS OS GRÁFICOS RESTAURADOS
+# ===============================
+st.subheader("Distribuição de Carga por Processo")
+st.plotly_chart(px.pie(df, names="Processo", values="Duração (h)"), use_container_width=True)
+
+st.subheader("Distribuição por Semana")
+sem_sel = st.selectbox("Semana", sorted(df["Semana"].unique()))
+st.plotly_chart(px.pie(df[df["Semana"]==sem_sel], names="Processo", values="Duração (h)"), use_container_width=True)
+
+st.subheader("Distribuição por Mês")
+mes_sel = st.selectbox("Mês", sorted(df["Mes"].unique()))
+st.plotly_chart(px.pie(df[df["Mes"]==mes_sel], names="Processo", values="Duração (h)"), use_container_width=True)
+
+st.subheader("Número de PV por Cliente")
+pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
+st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
+
+st.subheader("Carga Mensal")
+mensal = df.groupby("Mes")["Duração (h)"].sum().reset_index()
+st.plotly_chart(px.bar(mensal, x="Mes", y="Duração (h)"), use_container_width=True)
+
+# ===============================
+# MAPA SEMANAS
+# ===============================
+st.subheader("Mapa de Semanas")
+
+mapa = []
+for s in sorted(df["Semana"].unique()):
+    ano = int(df[df["Semana"]==s]["Ano"].iloc[0])
+    inicio = pd.to_datetime(f"{ano}-W{int(s)}-1", format="%G-W%V-%u")
+    fim = inicio + pd.Timedelta(days=4)
+    mapa.append({"Semana":s,"Início":inicio.date(),"Fim":fim.date()})
+
+st.dataframe(pd.DataFrame(mapa))
+
+# ===============================
+# AUDITORIA
+# ===============================
+st.subheader("Auditoria")
+
+df_final["Saldo"] = df_final["Capacidade (h)"] - df_final["Duração (h)"]
+
+st.dataframe(df_final)
