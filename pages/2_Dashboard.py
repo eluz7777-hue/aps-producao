@@ -14,22 +14,23 @@ if "dados_dashboard" not in st.session_state:
 
 df = st.session_state["dados_dashboard"].copy()
 
-# 🔥 TRATAMENTO ROBUSTO DE DATA
+# ===============================
+# DATA (ROBUSTO)
+# ===============================
 df["Data"] = pd.to_datetime(df["Início"], errors="coerce")
 df = df.dropna(subset=["Data"])
 
 # ===============================
-# 🔥 CARREGA CÓDIGOS
+# CARREGA CÓDIGOS
 # ===============================
 try:
     df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
-    df_base["CODIGO"] = df_base["CODIGO"].astype(str)
-    lista_codigos = sorted(df_base["CODIGO"].unique())
+    lista_codigos = sorted(df_base["CODIGO"].astype(str).unique())
 except:
     lista_codigos = []
 
 # ===============================
-# 🔥 SIMULAÇÃO (SOMA NA CARGA REAL)
+# SIMULAÇÃO (SOMA NA CARGA)
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
@@ -40,27 +41,20 @@ df = st.session_state["df_simulado"]
 
 col1, col2 = st.columns(2)
 
-# ➕ INSERIR PV
 with col1:
     st.markdown("### ➕ Inserir PV")
 
     with st.form("form_pv"):
-
         pv = st.text_input("PV")
-
         codigo = st.selectbox("Código da Peça", lista_codigos)
-
         qtd = st.number_input("Quantidade", min_value=1, step=1)
-
         entrega = st.date_input("Data de Entrega")
 
         submitted = st.form_submit_button("Simular PV")
 
         if submitted:
-
-            novas_linhas = []
-
             processos = df["Processo"].unique()
+            novas_linhas = []
 
             for proc in processos:
                 novas_linhas.append({
@@ -73,35 +67,25 @@ with col1:
                     "Duração (h)": float(qtd)
                 })
 
-            # 🔥 SOMA NA CARGA EXISTENTE
-            st.session_state["df_simulado"] = pd.concat(
-                [df, pd.DataFrame(novas_linhas)],
-                ignore_index=True
-            )
-
+            st.session_state["df_simulado"] = pd.concat([df, pd.DataFrame(novas_linhas)], ignore_index=True)
             st.success("PV adicionada e somada à carga atual")
 
-# ➖ REMOVER PV
 with col2:
     st.markdown("### ➖ Remover PV")
 
     lista_pv = df["PV"].dropna().unique()
-
     pv_remove = st.selectbox("Selecione a PV", lista_pv)
 
     if st.button("Remover PV"):
         st.session_state["df_simulado"] = df[df["PV"] != pv_remove]
         st.success("PV removida")
 
-# Atualiza df
 df = st.session_state["df_simulado"]
 
 # ===============================
-# DATAS (CORREÇÃO DEFINITIVA)
+# DATAS
 # ===============================
-df["Semana"] = df["Data"].dt.isocalendar().week
-df["Semana"] = pd.to_numeric(df["Semana"], errors="coerce")
-
+df["Semana"] = pd.to_numeric(df["Data"].dt.isocalendar().week, errors="coerce")
 df["Ano"] = pd.to_numeric(df["Data"].dt.year, errors="coerce")
 df["Mes"] = pd.to_numeric(df["Data"].dt.month, errors="coerce")
 
@@ -127,11 +111,7 @@ def horas_dia(d):
 # ===============================
 # SELETOR
 # ===============================
-tipo_visao = st.radio(
-    "Visualização do Gráfico Principal",
-    ["Semanal", "Mensal"],
-    horizontal=True
-)
+tipo_visao = st.radio("Visualização do Gráfico Principal", ["Semanal","Mensal"], horizontal=True)
 
 # ===============================
 # PERIODO
@@ -146,28 +126,36 @@ else:
 # ===============================
 # DEMANDA
 # ===============================
-dem = df.groupby(
-    ["Periodo","Periodo_ord","Processo"],
-    as_index=False
-)["Duração (h)"].sum()
+dem = df.groupby(["Periodo","Periodo_ord","Processo"], as_index=False)["Duração (h)"].sum()
 
 # ===============================
-# CAPACIDADE
+# CAPACIDADE (CORRETA)
 # ===============================
 cap = []
 
 for (periodo, proc), g in df.groupby(["Periodo","Processo"]):
-    dias = g["Data"].dt.date.unique()
-    horas = sum(horas_dia(pd.Timestamp(d)) for d in dias)
-    qtd = MAQUINAS_QTD.get(proc,1)
 
-    capacidade = horas * qtd
+    if tipo_visao == "Semanal":
+        semana = int(g["Semana"].iloc[0])
+        ano = int(g["Ano"].iloc[0])
+        inicio = pd.to_datetime(f"{ano}-W{semana}-1", format="%G-W%V-%u")
+        dias = [inicio + pd.Timedelta(days=i) for i in range(5)]
+
+    else:
+        mes = int(g["Mes"].iloc[0])
+        ano = int(g["Ano"].iloc[0])
+        inicio = pd.Timestamp(year=ano, month=mes, day=1)
+        fim = inicio + pd.offsets.MonthEnd(0)
+        dias = pd.date_range(inicio, fim, freq="B")
+
+    horas = sum(horas_dia(d) for d in dias)
+    qtd = MAQUINAS_QTD.get(proc,1)
 
     cap.append({
         "Periodo": periodo,
         "Processo": proc,
-        "Capacidade (h)": capacidade,
-        "Horas Disponíveis": capacidade
+        "Capacidade (h)": horas * qtd,
+        "Horas Disponíveis": horas * qtd
     })
 
 cap_df = pd.DataFrame(cap)
@@ -175,45 +163,28 @@ cap_df = pd.DataFrame(cap)
 # ===============================
 # MERGE
 # ===============================
-df_final = pd.merge(
-    dem,
-    cap_df,
-    on=["Periodo","Processo"],
-    how="left"
-)
-
+df_final = pd.merge(dem, cap_df, on=["Periodo","Processo"], how="left")
 df_final = df_final.sort_values("Periodo_ord")
 
 # ===============================
 # OCUPAÇÃO
 # ===============================
-df_final["Ocupação (%)"] = (
-    df_final["Duração (h)"] / df_final["Capacidade (h)"]
-) * 100
+df_final["Ocupação (%)"] = (df_final["Duração (h)"] / df_final["Capacidade (h)"]) * 100
 
 def status(x):
-    if x > 100:
-        return "🔴"
-    elif x > 80:
-        return "🟡"
-    else:
-        return "🟢"
+    if x > 100: return "🔴"
+    elif x > 80: return "🟡"
+    else: return "🟢"
 
 df_final["Status"] = df_final["Ocupação (%)"].apply(status)
 
 # ===============================
-# GRÁFICO
+# GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("Ocupação por Processo")
 
-fig = px.bar(
-    df_final,
-    x="Periodo",
-    y="Ocupação (%)",
-    color="Processo",
-    barmode="group",
-    text=df_final["Duração (h)"].fillna(0).astype(int)
-)
+fig = px.bar(df_final, x="Periodo", y="Ocupação (%)", color="Processo", barmode="group",
+             text=df_final["Duração (h)"].fillna(0).astype(int))
 
 fig.add_hline(y=100, line_dash="dash")
 fig.update_traces(textposition="outside")
@@ -221,36 +192,61 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# RESTANTE INTACTO
+# PIZZAS
 # ===============================
 st.subheader("Distribuição de Carga por Processo (Geral)")
-pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
-st.plotly_chart(px.pie(pizza, names="Processo", values="Duração (h)"), use_container_width=True)
+st.plotly_chart(px.pie(df.groupby("Processo")["Duração (h)"].sum().reset_index(),
+                       names="Processo", values="Duração (h)"),
+                use_container_width=True)
 
-st.subheader("Distribuição por Processo - POR SEMANA")
-semana_sel = st.selectbox("Semana", sorted(df["Semana"].unique()))
-df_sem = df[df["Semana"] == semana_sel]
-pizza_sem = df_sem.groupby("Processo")["Duração (h)"].sum().reset_index()
-st.plotly_chart(px.pie(pizza_sem, names="Processo", values="Duração (h)"), use_container_width=True)
+# ===============================
+# AUDITORIA COMPLETA
+# ===============================
+st.subheader("Auditoria Completa de Capacidade")
 
-st.subheader("Distribuição por Processo - POR MÊS")
-mes_sel = st.selectbox("Mês", sorted(df["Mes"].unique()))
-df_mes = df[df["Mes"] == mes_sel]
-pizza_mes = df_mes.groupby("Processo")["Duração (h)"].sum().reset_index()
-st.plotly_chart(px.pie(pizza_mes, names="Processo", values="Duração (h)"), use_container_width=True)
+auditoria = df_final.copy()
+auditoria["Saldo (h)"] = auditoria["Capacidade (h)"] - auditoria["Duração (h)"]
 
-st.subheader("Número de PV por Cliente")
-pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
-st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
+def status_auditoria(row):
+    if row["Duração (h)"] > row["Capacidade (h)"]:
+        return "🔴 Sobrecarga"
+    elif row["Duração (h)"] > 0.8 * row["Capacidade (h)"]:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Normal"
 
-st.subheader("Carga Mensal")
-mensal = df.groupby("Mes")["Duração (h)"].sum().reset_index()
-st.plotly_chart(px.bar(mensal, x="Mes", y="Duração (h)"), use_container_width=True)
+auditoria["Status Auditoria"] = auditoria.apply(status_auditoria, axis=1)
 
+st.dataframe(auditoria)
+
+# ===============================
+# RESUMO
+# ===============================
+st.subheader("Resumo Executivo")
+
+resumo = auditoria.groupby("Periodo").agg({
+    "Duração (h)": "sum",
+    "Capacidade (h)": "sum",
+    "Saldo (h)": "sum"
+}).reset_index()
+
+st.dataframe(resumo)
+
+# ===============================
+# MAPA DE SEMANAS
+# ===============================
 st.subheader("Mapa de Semanas")
-semana_map = df.groupby("Semana")["Data"].agg(["min","max"]).reset_index()
-semana_map.rename(columns={"min":"Início","max":"Fim"}, inplace=True)
-st.dataframe(semana_map)
 
-st.subheader("Tabela de Capacidade")
-st.dataframe(df_final)
+semanas = df[["Ano","Semana"]].drop_duplicates().sort_values(["Ano","Semana"])
+
+mapa = []
+
+for _, row in semanas.iterrows():
+    ano = int(row["Ano"])
+    semana = int(row["Semana"])
+    inicio = pd.to_datetime(f"{ano}-W{semana}-1", format="%G-W%V-%u")
+    fim = inicio + pd.Timedelta(days=4)
+
+    mapa.append({"Semana": semana, "Início": inicio.date(), "Fim": fim.date()})
+
+st.dataframe(pd.DataFrame(mapa))
