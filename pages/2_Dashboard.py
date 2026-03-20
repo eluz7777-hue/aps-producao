@@ -29,7 +29,7 @@ df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 lista_codigos = sorted(df_base["CODIGO"].unique())
 
 # ===============================
-# SIMULAÇÃO (CORRIGIDA)
+# SIMULAÇÃO (COM ROTEIRO REAL)
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
@@ -64,7 +64,6 @@ with col1:
                     if col == "CODIGO":
                         continue
 
-                    # 🔥 CORREÇÃO DO ERRO
                     tempo_min = pd.to_numeric(produto.iloc[0][col], errors="coerce")
 
                     if pd.notna(tempo_min) and tempo_min > 0:
@@ -149,7 +148,7 @@ else:
 dem = df.groupby(["Periodo","Periodo_ord","Processo"], as_index=False)["Duração (h)"].sum()
 
 # ===============================
-# CAPACIDADE CORRETA
+# CAPACIDADE
 # ===============================
 cap = []
 
@@ -217,21 +216,32 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZAS
+# PIZZA GERAL
 # ===============================
 st.subheader("Distribuição de Carga por Processo (Geral)")
 pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
 st.plotly_chart(px.pie(pizza, names="Processo", values="Duração (h)"), use_container_width=True)
 
 # ===============================
-# PV CLIENTE
+# PV POR CLIENTE (RESTAURADO)
 # ===============================
 st.subheader("Número de PV por Cliente")
+
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
-st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
+
+fig_cliente = px.bar(
+    pv_cliente,
+    x="Cliente",
+    y="PV",
+    text="PV"
+)
+
+fig_cliente.update_traces(textposition="outside")
+
+st.plotly_chart(fig_cliente, use_container_width=True)
 
 # ===============================
-# MAPA DE SEMANAS CORRETO
+# MAPA DE SEMANAS
 # ===============================
 st.subheader("Mapa de Semanas")
 
