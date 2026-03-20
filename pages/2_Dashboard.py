@@ -16,7 +16,7 @@ df = st.session_state["dados_dashboard"].copy()
 df["Data"] = pd.to_datetime(df["Início"])
 
 # ===============================
-# 🔥 SIMULAÇÃO DE PV (NOVO)
+# 🔥 SIMULAÇÃO DE PV (NOVO MODELO CORRETO)
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
@@ -27,45 +27,59 @@ df = st.session_state["df_simulado"]
 
 col1, col2 = st.columns(2)
 
-# ➕ INSERIR PV
+# ===============================
+# ➕ INSERIR PV (SIMPLIFICADO)
+# ===============================
 with col1:
     st.markdown("### ➕ Inserir PV")
 
     with st.form("form_pv"):
         pv = st.text_input("PV")
-        cliente = st.text_input("Cliente")
-        processo = st.selectbox("Processo", sorted(df["Maquina"].str.split("_").str[0].unique()))
-        maquina = st.text_input("Máquina (ex: FRESA_1)")
-        horas = st.number_input("Duração (h)", min_value=0.1, step=0.1)
-        data = st.date_input("Data")
+        codigo = st.text_input("Código da Peça")
+        qtd = st.number_input("Quantidade", min_value=1, step=1)
+        entrega = st.date_input("Data de Entrega")
 
-        submitted = st.form_submit_button("Adicionar PV")
+        submitted = st.form_submit_button("Simular PV")
 
         if submitted:
-            novo = pd.DataFrame([{
-                "PV": pv,
-                "Cliente": cliente,
-                "Processo": processo,
-                "Maquina": maquina,
-                "Início": pd.to_datetime(data),
-                "Fim": pd.to_datetime(data),
-                "Duração (h)": horas
-            }])
 
-            st.session_state["df_simulado"] = pd.concat([df, novo], ignore_index=True)
-            st.success("PV adicionada para simulação")
+            # 🔥 GERA CARGA SIMPLES (DISTRIBUIÇÃO POR PROCESSO)
+            # Aqui usamos distribuição genérica por processo para impacto
+            processos = df["Processo"].unique()
 
+            novas_linhas = []
+
+            for proc in processos:
+                novas_linhas.append({
+                    "PV": pv,
+                    "Cliente": "SIMULADO",
+                    "Processo": proc,
+                    "Maquina": proc + "_SIM",
+                    "Início": pd.to_datetime(entrega),
+                    "Fim": pd.to_datetime(entrega),
+                    "Duração (h)": qtd * 1  # carga estimada simples
+                })
+
+            st.session_state["df_simulado"] = pd.concat(
+                [df, pd.DataFrame(novas_linhas)],
+                ignore_index=True
+            )
+
+            st.success("PV simulada adicionada")
+
+# ===============================
 # ➖ REMOVER PV
+# ===============================
 with col2:
     st.markdown("### ➖ Remover PV")
 
     lista_pv = df["PV"].dropna().unique()
 
-    pv_remove = st.selectbox("Selecione a PV para remover", lista_pv)
+    pv_remove = st.selectbox("Selecione a PV", lista_pv)
 
     if st.button("Remover PV"):
         st.session_state["df_simulado"] = df[df["PV"] != pv_remove]
-        st.success("PV removida da simulação")
+        st.success("PV removida")
 
 # Atualiza df
 df = st.session_state["df_simulado"]
@@ -191,54 +205,36 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZA GERAL
+# RESTANTE (INALTERADO)
 # ===============================
 st.subheader("Distribuição de Carga por Processo (Geral)")
 pizza = df.groupby("Processo")["Duração (h)"].sum().reset_index()
 st.plotly_chart(px.pie(pizza, names="Processo", values="Duração (h)"), use_container_width=True)
 
-# ===============================
-# PIZZA SEMANA
-# ===============================
 st.subheader("Distribuição por Processo - POR SEMANA")
 semana_sel = st.selectbox("Semana", sorted(df["Semana"].unique()))
 df_sem = df[df["Semana"] == semana_sel]
 pizza_sem = df_sem.groupby("Processo")["Duração (h)"].sum().reset_index()
 st.plotly_chart(px.pie(pizza_sem, names="Processo", values="Duração (h)"), use_container_width=True)
 
-# ===============================
-# PIZZA MÊS
-# ===============================
 st.subheader("Distribuição por Processo - POR MÊS")
 mes_sel = st.selectbox("Mês", sorted(df["Mes"].unique()))
 df_mes = df[df["Mes"] == mes_sel]
 pizza_mes = df_mes.groupby("Processo")["Duração (h)"].sum().reset_index()
 st.plotly_chart(px.pie(pizza_mes, names="Processo", values="Duração (h)"), use_container_width=True)
 
-# ===============================
-# PV CLIENTE
-# ===============================
 st.subheader("Número de PV por Cliente")
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV", text="PV"), use_container_width=True)
 
-# ===============================
-# CARGA MENSAL
-# ===============================
 st.subheader("Carga Mensal")
 mensal = df.groupby("Mes")["Duração (h)"].sum().reset_index()
 st.plotly_chart(px.bar(mensal, x="Mes", y="Duração (h)"), use_container_width=True)
 
-# ===============================
-# MAPA DE SEMANAS
-# ===============================
 st.subheader("Mapa de Semanas")
 semana_map = df.groupby("Semana")["Data"].agg(["min","max"]).reset_index()
 semana_map.rename(columns={"min":"Início","max":"Fim"}, inplace=True)
 st.dataframe(semana_map)
 
-# ===============================
-# TABELA FINAL
-# ===============================
 st.subheader("Tabela de Capacidade")
 st.dataframe(df_final)
