@@ -13,10 +13,23 @@ if "dados_dashboard" not in st.session_state:
     st.stop()
 
 df = st.session_state["dados_dashboard"].copy()
-df["Data"] = pd.to_datetime(df["Início"])
+
+# 🔥 CORREÇÃO DE DATA (ERRO NA)
+df["Data"] = pd.to_datetime(df["Início"], errors="coerce")
+df = df.dropna(subset=["Data"])
 
 # ===============================
-# 🔥 SIMULAÇÃO DE PV (NOVO MODELO CORRETO)
+# 🔥 CARREGA CÓDIGOS DO ROTEIRO
+# ===============================
+try:
+    df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+    df_base["CODIGO"] = df_base["CODIGO"].astype(str)
+    lista_codigos = sorted(df_base["CODIGO"].unique())
+except:
+    lista_codigos = []
+
+# ===============================
+# 🔥 SIMULAÇÃO DE PV (CORRIGIDA)
 # ===============================
 st.subheader("Simulação de PV (Entrada / Exclusão)")
 
@@ -27,27 +40,30 @@ df = st.session_state["df_simulado"]
 
 col1, col2 = st.columns(2)
 
-# ===============================
-# ➕ INSERIR PV (SIMPLIFICADO)
-# ===============================
+# ➕ INSERIR PV
 with col1:
     st.markdown("### ➕ Inserir PV")
 
     with st.form("form_pv"):
+
         pv = st.text_input("PV")
-        codigo = st.text_input("Código da Peça")
+
+        codigo = st.selectbox(
+            "Código da Peça",
+            lista_codigos
+        )
+
         qtd = st.number_input("Quantidade", min_value=1, step=1)
+
         entrega = st.date_input("Data de Entrega")
 
         submitted = st.form_submit_button("Simular PV")
 
         if submitted:
 
-            # 🔥 GERA CARGA SIMPLES (DISTRIBUIÇÃO POR PROCESSO)
-            # Aqui usamos distribuição genérica por processo para impacto
-            processos = df["Processo"].unique()
-
             novas_linhas = []
+
+            processos = df["Processo"].unique()
 
             for proc in processos:
                 novas_linhas.append({
@@ -57,7 +73,7 @@ with col1:
                     "Maquina": proc + "_SIM",
                     "Início": pd.to_datetime(entrega),
                     "Fim": pd.to_datetime(entrega),
-                    "Duração (h)": qtd * 1  # carga estimada simples
+                    "Duração (h)": float(qtd)
                 })
 
             st.session_state["df_simulado"] = pd.concat(
@@ -67,9 +83,7 @@ with col1:
 
             st.success("PV simulada adicionada")
 
-# ===============================
 # ➖ REMOVER PV
-# ===============================
 with col2:
     st.markdown("### ➖ Remover PV")
 
@@ -100,11 +114,11 @@ def horas_dia(d):
     return HORAS_DIA.get(d.weekday(),0) * EFICIENCIA
 
 # ===============================
-# DATAS
+# DATAS (CORRIGIDO)
 # ===============================
-df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
+df["Semana"] = df["Data"].dt.isocalendar().week.astype("int64")
 df["Ano"] = df["Data"].dt.year
-df["Mes"] = df["Data"].dt.month.astype(int)
+df["Mes"] = df["Data"].dt.month
 
 df["Processo"] = df["Maquina"].str.split("_").str[0]
 
