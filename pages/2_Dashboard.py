@@ -23,11 +23,10 @@ df_pv = df_pv.rename(columns={
 df_pv["CODIGO"] = df_pv["CODIGO"].astype(str)
 df_pv["PV"] = df_pv["PV"].astype(str)
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
-
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 
 # ===============================
-# PROCESSOS VÁLIDOS (FIXO)
+# PROCESSOS VÁLIDOS
 # ===============================
 PROCESSOS_VALIDOS = [
     "FRESADORAS","SOLDAGEM","TORNO","CORTE-PLASMA","CORTE-LASER",
@@ -56,14 +55,14 @@ for _, row in df_pv.iterrows():
 
         if pd.notna(tempo) and tempo > 0:
 
-            horas = int((tempo * row["QTD"]) / 60)  # 🔥 SEM DECIMAL
+            horas = (tempo * row["QTD"]) / 60
 
             linhas.append({
                 "PV": row["PV"],
                 "Cliente": row.get("CLIENTE","SEM CLIENTE"),
                 "Processo": proc,
                 "Data": row["ENTREGA"],
-                "Horas": horas
+                "Horas": round(horas, 2)
             })
 
 df = pd.DataFrame(linhas)
@@ -106,11 +105,11 @@ def capacidade(proc):
     return int(HORAS_SEMANA * MAQUINAS.get(proc,1) * EFICIENCIA)
 
 dem["Capacidade"] = dem["Processo"].apply(capacidade)
-dem["Ocupação (%)"] = (dem["Horas"]/dem["Capacidade"])*100
 
-# ===============================
-# STATUS (BOLINHAS)
-# ===============================
+# 🔥 OCUPAÇÃO INTEIRA
+dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
+
+# 🔥 STATUS
 def status(x):
     if x > 100: return "🔴"
     elif x > 80: return "🟡"
@@ -118,12 +117,15 @@ def status(x):
 
 dem["Status"] = dem["Ocupação (%)"].apply(status)
 
-dem["Saldo (h)"] = dem["Capacidade"] - dem["Horas"]
+# 🔥 SALDO
+dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(2)
 
 # ===============================
 # GRÁFICO PRINCIPAL
 # ===============================
-st.subheader("Ocupação por Processo (%)")
+st.subheader("📌 Ocupação por Processo (%)")
+
+dem["Label"] = dem["Horas"].map(lambda x: f"{x:.2f}h")
 
 fig = px.bar(
     dem,
@@ -131,10 +133,18 @@ fig = px.bar(
     y="Ocupação (%)",
     color="Processo",
     barmode="group",
-    text=dem["Horas"]
+    text="Label",
+    title="Carga vs Capacidade por Processo"
 )
 
 fig.add_hline(y=100, line_dash="dash")
+
+fig.update_layout(
+    xaxis_title="Período",
+    yaxis_title="Ocupação (%)",
+    title_x=0.5
+)
+
 fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
@@ -142,27 +152,53 @@ st.plotly_chart(fig, use_container_width=True)
 # ===============================
 # PIZZA GERAL
 # ===============================
-st.subheader("Distribuição de Carga por Processo (Horas)")
-st.plotly_chart(px.pie(df, names="Processo", values="Horas"))
+st.subheader("📌 Distribuição de Carga por Processo (Horas)")
+
+fig_pizza = px.pie(
+    df,
+    names="Processo",
+    values="Horas",
+    title="Participação de Cada Processo na Carga Total"
+)
+
+st.plotly_chart(fig_pizza)
 
 # ===============================
 # PIZZA SEMANA
 # ===============================
-st.subheader("Distribuição por Processo - Semana")
+st.subheader("📌 Distribuição por Processo - Semana")
+
 sem = st.selectbox("Semana", sorted(df["Semana"].unique()))
-st.plotly_chart(px.pie(df[df["Semana"]==sem], names="Processo", values="Horas"))
+
+fig_sem = px.pie(
+    df[df["Semana"]==sem],
+    names="Processo",
+    values="Horas",
+    title=f"Carga por Processo - Semana {sem}"
+)
+
+st.plotly_chart(fig_sem)
 
 # ===============================
 # PIZZA MÊS
 # ===============================
-st.subheader("Distribuição por Processo - Mês")
+st.subheader("📌 Distribuição por Processo - Mês")
+
 mes = st.selectbox("Mês", sorted(df["Mes"].unique()))
-st.plotly_chart(px.pie(df[df["Mes"]==mes], names="Processo", values="Horas"))
+
+fig_mes = px.pie(
+    df[df["Mes"]==mes],
+    names="Processo",
+    values="Horas",
+    title=f"Carga por Processo - Mês {mes}"
+)
+
+st.plotly_chart(fig_mes)
 
 # ===============================
 # PV POR CLIENTE
 # ===============================
-st.subheader("Quantidade de PV por Cliente")
+st.subheader("📌 Quantidade de PV por Cliente")
 
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 
@@ -170,7 +206,8 @@ fig_cliente = px.bar(
     pv_cliente,
     x="Cliente",
     y="PV",
-    text="PV"
+    text="PV",
+    title="Volume de Ordens por Cliente"
 )
 
 fig_cliente.update_traces(textposition="outside")
@@ -180,7 +217,7 @@ st.plotly_chart(fig_cliente, use_container_width=True)
 # ===============================
 # CARGA MENSAL
 # ===============================
-st.subheader("Carga Mensal (Horas)")
+st.subheader("📌 Carga Mensal (Horas)")
 
 mensal = df.groupby("Mes")["Horas"].sum().reset_index()
 
@@ -188,7 +225,8 @@ fig_mensal = px.bar(
     mensal,
     x="Mes",
     y="Horas",
-    text="Horas"
+    text=mensal["Horas"].map(lambda x: f"{x:.2f}"),
+    title="Carga Total por Mês"
 )
 
 fig_mensal.update_traces(textposition="outside")
@@ -198,6 +236,6 @@ st.plotly_chart(fig_mensal, use_container_width=True)
 # ===============================
 # TABELA FINAL
 # ===============================
-st.subheader("Auditoria de Capacidade (Gargalos)")
+st.subheader("📌 Auditoria de Capacidade (Gargalos)")
 
 st.dataframe(dem)
