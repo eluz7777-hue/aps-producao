@@ -35,7 +35,7 @@ df_pv = df_pv.rename(columns={
     "QUANTIDADE": "QTD"
 })
 
-# GARANTIA DE COLUNAS
+# validação
 for col in ["PV","CODIGO","QTD","ENTREGA"]:
     if col not in df_pv.columns:
         st.error(f"Coluna obrigatória ausente: {col}")
@@ -60,20 +60,25 @@ PROCESSOS_VALIDOS = [
 processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 
 # ===============================
-# 🔥 LÓGICA CORRETA (BASE PV)
+# 🔥 CORREÇÃO DO ROTEIRO (SEM ERRO)
+# ===============================
+# pega apenas 1 linha por código (primeira ocorrência)
+df_base_unico = df_base.drop_duplicates(subset=["CODIGO"])
+
+# ===============================
+# EXPANSÃO (BASE PV)
 # ===============================
 linhas = []
 
-roteiro_dict = df_base.set_index("CODIGO").to_dict(orient="index")
-
 for _, row in df_pv.iterrows():
 
-    codigo = row["CODIGO"]
-    roteiro = roteiro_dict.get(codigo)
+    roteiro = df_base_unico[df_base_unico["CODIGO"] == row["CODIGO"]]
 
-    # 👉 SE NÃO TEM ROTEIRO → IGNORA (CORRETO)
-    if not roteiro:
+    # se não tem roteiro → ignora (correto)
+    if roteiro.empty:
         continue
+
+    roteiro = roteiro.iloc[0]
 
     for proc in processos:
 
@@ -94,7 +99,7 @@ for _, row in df_pv.iterrows():
 df = pd.DataFrame(linhas)
 
 if df.empty:
-    st.error("Nenhuma carga gerada. Verifique PV e roteiros.")
+    st.error("Nenhuma carga gerada.")
     st.stop()
 
 # ===============================
@@ -139,7 +144,7 @@ dem["Status"] = dem["Ocupação (%)"].apply(
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# GRÁFICOS (TODOS MANTIDOS)
+# GRÁFICOS (TODOS PRESERVADOS)
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
