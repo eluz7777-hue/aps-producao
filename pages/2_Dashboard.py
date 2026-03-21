@@ -26,17 +26,24 @@ df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 
-processos = [c for c in df_base.columns if c != "CODIGO"]
+# ===============================
+# PROCESSOS VÁLIDOS
+# ===============================
+PROCESSOS_VALIDOS = [
+    "FRESADORAS","SOLDAGEM","TORNO","CORTE-PLASMA","CORTE-LASER",
+    "SERRA FITA","SERRA CIRCULAR","CENTRO USINAGEM","DOBRADEIRA",
+    "PRENSA (AMASSAMENTO)","ROSQUEADEIRA","ACABAMENTO",
+    "CALANDRA","PINTURA","METALEIRA"
+]
 
-# ===============================
-# ESTADO
-# ===============================
-if "pv_simulada" not in st.session_state:
-    st.session_state["pv_simulada"] = []
+processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 
 # ===============================
 # SIMULAÇÃO
 # ===============================
+if "pv_simulada" not in st.session_state:
+    st.session_state["pv_simulada"] = []
+
 st.subheader("Simulação de PV")
 
 col1, col2 = st.columns(2)
@@ -56,7 +63,6 @@ with col1:
                 "QTD": qtd,
                 "ENTREGA": entrega
             })
-            st.success("PV simulada adicionada")
             st.rerun()
 
 # ➖ REMOVER
@@ -68,11 +74,10 @@ with col2:
             x for x in st.session_state["pv_simulada"]
             if x["PV"] != pv_remove
         ]
-        st.success("PV removida")
         st.rerun()
 
 # ===============================
-# BASE TOTAL
+# BASE FINAL
 # ===============================
 df_sim = pd.DataFrame(st.session_state["pv_simulada"])
 
@@ -83,23 +88,20 @@ else:
     df_total = df_pv.copy()
 
 # ===============================
-# EXPANSÃO PROCESSOS
+# EXPANSÃO
 # ===============================
 linhas = []
 
 for _, row in df_total.iterrows():
-
     roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
 
     if roteiro.empty:
         continue
 
     for proc in processos:
-
         tempo = pd.to_numeric(roteiro.iloc[0][proc], errors="coerce")
 
         if pd.notna(tempo) and tempo > 0:
-
             horas = (tempo * row["QTD"]) / 60
 
             linhas.append({
@@ -117,24 +119,24 @@ df = pd.DataFrame(linhas)
 # ===============================
 df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
 df["Mes"] = df["Data"].dt.month
-df["Ano"] = df["Data"].dt.year
 
 # ===============================
-# PARÂMETROS
+# CAPACIDADE
 # ===============================
 EFICIENCIA = 0.8
 HORAS_SEMANA = 44
 
 MAQUINAS = {
-    "FRESADORAS":2,"SOLDAGEM":4,"TORNO":3,"PLASMA":1,"LASER":1,
-    "SERRA":2,"CNC":1,"DOBRA":2,"PRENSA":1,"ROSQ":1,
-    "ACABAMENTO":3,"CALANDRA":2,"PINTURA":1,"METALEIRA":1
+    "FRESADORAS":2,"SOLDAGEM":4,"TORNO":3,"CORTE-PLASMA":1,"CORTE-LASER":1,
+    "SERRA FITA":1,"SERRA CIRCULAR":1,"CENTRO USINAGEM":1,"DOBRADEIRA":2,
+    "PRENSA (AMASSAMENTO)":1,"ROSQUEADEIRA":1,"ACABAMENTO":3,
+    "CALANDRA":2,"PINTURA":1,"METALEIRA":1
 }
 
 # ===============================
 # VISÃO
 # ===============================
-tipo = st.radio("Visualização", ["Semanal","Mensal"])
+tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
 
 if tipo == "Semanal":
     df["Periodo"] = "Sem " + df["Semana"].astype(str)
@@ -150,11 +152,10 @@ def capacidade(proc):
     return HORAS_SEMANA * MAQUINAS.get(proc,1) * EFICIENCIA
 
 dem["Capacidade"] = dem["Processo"].apply(capacidade)
-
 dem["Ocupação (%)"] = (dem["Horas"]/dem["Capacidade"])*100
 
 # ===============================
-# STATUS (🔴🟡🟢 RESTAURADO)
+# STATUS
 # ===============================
 def status(x):
     if x > 100: return "🔴"
@@ -163,12 +164,10 @@ def status(x):
 
 dem["Status"] = dem["Ocupação (%)"].apply(status)
 
-dem["Saldo (h)"] = dem["Capacidade"] - dem["Horas"]
-
 # ===============================
 # GRÁFICO PRINCIPAL
 # ===============================
-st.subheader("Ocupação por Processo")
+st.subheader("Ocupação por Processo (%)")
 
 fig = px.bar(
     dem,
@@ -176,7 +175,7 @@ fig = px.bar(
     y="Ocupação (%)",
     color="Processo",
     barmode="group",
-    text=dem["Horas"].astype(int)
+    text=dem["Horas"].round(0)
 )
 
 fig.add_hline(y=100, line_dash="dash")
@@ -185,36 +184,54 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZAS (TODAS)
+# PIZZA GERAL
 # ===============================
-st.subheader("Carga por Processo")
-st.plotly_chart(px.pie(df, names="Processo", values="Horas"), use_container_width=True)
+st.subheader("Distribuição de Carga por Processo (h)")
+st.plotly_chart(px.pie(df, names="Processo", values="Horas"))
 
-st.subheader("Carga por Semana")
+# ===============================
+# PIZZA SEMANA
+# ===============================
 sem = st.selectbox("Semana", sorted(df["Semana"].unique()))
 st.plotly_chart(px.pie(df[df["Semana"]==sem], names="Processo", values="Horas"))
 
-st.subheader("Carga por Mês")
+# ===============================
+# PIZZA MÊS
+# ===============================
 mes = st.selectbox("Mês", sorted(df["Mes"].unique()))
 st.plotly_chart(px.pie(df[df["Mes"]==mes], names="Processo", values="Horas"))
 
 # ===============================
 # PV CLIENTE
 # ===============================
-st.subheader("PV por Cliente")
+st.subheader("Quantidade de PV por Cliente")
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
-st.plotly_chart(px.bar(pv_cliente, x="Cliente", y="PV"), use_container_width=True)
+
+st.plotly_chart(px.bar(
+    pv_cliente,
+    x="Cliente",
+    y="PV",
+    text="PV"
+))
 
 # ===============================
 # CARGA MENSAL
 # ===============================
-st.subheader("Carga Mensal")
+st.subheader("Carga Mensal (h)")
 mensal = df.groupby("Mes")["Horas"].sum().reset_index()
-st.plotly_chart(px.bar(mensal, x="Mes", y="Horas"), use_container_width=True)
+
+st.plotly_chart(px.bar(
+    mensal,
+    x="Mes",
+    y="Horas",
+    text="Horas"
+))
 
 # ===============================
-# TABELA FINAL (COM BOLINHAS)
+# TABELA FINAL
 # ===============================
 st.subheader("Auditoria de Capacidade")
+
+dem["Saldo (h)"] = dem["Capacidade"] - dem["Horas"]
 
 st.dataframe(dem)
