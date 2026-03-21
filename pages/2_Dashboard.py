@@ -5,12 +5,23 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 st.title("📊 APS ELOHIM - DASHBOARD INDUSTRIAL")
 
-# ===============================
-# BASES (SEM SIMULAÇÃO)
-# ===============================
-df_pv = pd.read_excel("Relacao_Pv.xlsx")
-df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+# 🔄 BOTÃO DE ATUALIZAÇÃO
+if st.button("🔄 Atualizar Dados"):
+    st.cache_data.clear()
 
+# ===============================
+# LEITURA SEM CACHE PROBLEMÁTICO
+# ===============================
+def carregar_dados():
+    df_pv = pd.read_excel("Relacao_Pv.xlsx")
+    df_base = pd.read_excel("Processos_de_Fabricacao.xlsx")
+    return df_pv, df_base
+
+df_pv, df_base = carregar_dados()
+
+# ===============================
+# TRATAMENTO
+# ===============================
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 df_base.columns = [c.strip().upper() for c in df_base.columns]
 
@@ -26,7 +37,7 @@ df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
 df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 
 # ===============================
-# PROCESSOS VÁLIDOS
+# PROCESSOS
 # ===============================
 PROCESSOS_VALIDOS = [
     "FRESADORAS","SOLDAGEM","TORNO","CORTE-PLASMA","CORTE-LASER",
@@ -38,23 +49,19 @@ PROCESSOS_VALIDOS = [
 processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 
 # ===============================
-# EXPANSÃO PROCESSOS
+# EXPANSÃO
 # ===============================
 linhas = []
 
 for _, row in df_pv.iterrows():
-
     roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
-
     if roteiro.empty:
         continue
 
     for proc in processos:
-
         tempo = pd.to_numeric(roteiro.iloc[0][proc], errors="coerce")
 
         if pd.notna(tempo) and tempo > 0:
-
             horas = (tempo * row["QTD"]) / 60
 
             linhas.append({
@@ -86,15 +93,13 @@ MAQUINAS = {
     "CALANDRA":2,"PINTURA":1,"METALEIRA":1
 }
 
-# ===============================
-# VISÃO
-# ===============================
 tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
 
-if tipo == "Semanal":
-    df["Periodo"] = "Sem " + df["Semana"].astype(str)
-else:
-    df["Periodo"] = "Mês " + df["Mes"].astype(str)
+df["Periodo"] = (
+    "Sem " + df["Semana"].astype(str)
+    if tipo == "Semanal"
+    else "Mês " + df["Mes"].astype(str)
+)
 
 # ===============================
 # DEMANDA
@@ -106,18 +111,14 @@ def capacidade(proc):
 
 dem["Capacidade"] = dem["Processo"].apply(capacidade)
 
-# 🔥 OCUPAÇÃO INTEIRA
+# 🔥 % INTEIRO
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
 
 # 🔥 STATUS
-def status(x):
-    if x > 100: return "🔴"
-    elif x > 80: return "🟡"
-    else: return "🟢"
+dem["Status"] = dem["Ocupação (%)"].apply(
+    lambda x: "🔴" if x > 100 else ("🟡" if x > 80 else "🟢")
+)
 
-dem["Status"] = dem["Ocupação (%)"].apply(status)
-
-# 🔥 SALDO
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(2)
 
 # ===============================
@@ -138,78 +139,32 @@ fig = px.bar(
 )
 
 fig.add_hline(y=100, line_dash="dash")
-
-fig.update_layout(
-    xaxis_title="Período",
-    yaxis_title="Ocupação (%)",
-    title_x=0.5
-)
-
 fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# PIZZA GERAL
+# PIZZAS
 # ===============================
 st.subheader("📌 Distribuição de Carga por Processo (Horas)")
+st.plotly_chart(px.pie(df, names="Processo", values="Horas"))
 
-fig_pizza = px.pie(
-    df,
-    names="Processo",
-    values="Horas",
-    title="Participação de Cada Processo na Carga Total"
-)
-
-st.plotly_chart(fig_pizza)
-
-# ===============================
-# PIZZA SEMANA
-# ===============================
 st.subheader("📌 Distribuição por Processo - Semana")
-
 sem = st.selectbox("Semana", sorted(df["Semana"].unique()))
+st.plotly_chart(px.pie(df[df["Semana"]==sem], names="Processo", values="Horas"))
 
-fig_sem = px.pie(
-    df[df["Semana"]==sem],
-    names="Processo",
-    values="Horas",
-    title=f"Carga por Processo - Semana {sem}"
-)
-
-st.plotly_chart(fig_sem)
-
-# ===============================
-# PIZZA MÊS
-# ===============================
 st.subheader("📌 Distribuição por Processo - Mês")
-
 mes = st.selectbox("Mês", sorted(df["Mes"].unique()))
-
-fig_mes = px.pie(
-    df[df["Mes"]==mes],
-    names="Processo",
-    values="Horas",
-    title=f"Carga por Processo - Mês {mes}"
-)
-
-st.plotly_chart(fig_mes)
+st.plotly_chart(px.pie(df[df["Mes"]==mes], names="Processo", values="Horas"))
 
 # ===============================
-# PV POR CLIENTE
+# CLIENTES
 # ===============================
 st.subheader("📌 Quantidade de PV por Cliente")
 
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 
-fig_cliente = px.bar(
-    pv_cliente,
-    x="Cliente",
-    y="PV",
-    text="PV",
-    title="Volume de Ordens por Cliente"
-)
-
+fig_cliente = px.bar(pv_cliente, x="Cliente", y="PV", text="PV")
 fig_cliente.update_traces(textposition="outside")
 
 st.plotly_chart(fig_cliente, use_container_width=True)
@@ -225,8 +180,7 @@ fig_mensal = px.bar(
     mensal,
     x="Mes",
     y="Horas",
-    text=mensal["Horas"].map(lambda x: f"{x:.2f}"),
-    title="Carga Total por Mês"
+    text=mensal["Horas"].map(lambda x: f"{x:.2f}")
 )
 
 fig_mensal.update_traces(textposition="outside")
@@ -237,5 +191,4 @@ st.plotly_chart(fig_mensal, use_container_width=True)
 # TABELA FINAL
 # ===============================
 st.subheader("📌 Auditoria de Capacidade (Gargalos)")
-
 st.dataframe(dem)
