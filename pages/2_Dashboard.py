@@ -35,19 +35,20 @@ df_pv = df_pv.rename(columns={
     "QUANTIDADE": "QTD"
 })
 
+# 🔥 GARANTE COLUNAS OBRIGATÓRIAS
+for col in ["PV","CODIGO","QTD","ENTREGA"]:
+    if col not in df_pv.columns:
+        st.error(f"Coluna obrigatória ausente: {col}")
+        st.stop()
+
 df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.strip()
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip()
 
 df_pv["PV"] = df_pv["PV"].astype(str)
-df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
+df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
 
 # ===============================
-# 🔥 MERGE (CRUZAMENTO REAL)
-# ===============================
-df_merge = df_pv.merge(df_base, on="CODIGO", how="left")
-
-# ===============================
-# 🚨 DIAGNÓSTICO
+# PROCESSOS
 # ===============================
 PROCESSOS_VALIDOS = [
     "FRESADORAS","SOLDAGEM","TORNO","CORTE-PLASMA","CORTE-LASER",
@@ -56,14 +57,29 @@ PROCESSOS_VALIDOS = [
     "CALANDRA","PINTURA","METALEIRA"
 ]
 
+# ===============================
+# MERGE
+# ===============================
+df_merge = df_pv.merge(df_base, on="CODIGO", how="left")
+
 processos = [p for p in PROCESSOS_VALIDOS if p in df_merge.columns]
 
-sem_roteiro = df_merge[df_merge[processos].isna().all(axis=1)]
+# ===============================
+# PV SEM ROTEIRO (ROBUSTO)
+# ===============================
+if processos:
+    df_merge["TEM_ROTEIRO"] = df_merge[processos].notna().any(axis=1)
+else:
+    df_merge["TEM_ROTEIRO"] = False
+
+sem_roteiro = df_merge[df_merge["TEM_ROTEIRO"] == False]
 
 if not sem_roteiro.empty:
     st.warning(f"⚠️ {len(sem_roteiro)} PV sem roteiro")
+
     with st.expander("Ver PV sem roteiro"):
-        st.dataframe(sem_roteiro[["PV","CODIGO"]])
+        cols_exibir = [c for c in ["PV","CODIGO","CLIENTE"] if c in sem_roteiro.columns]
+        st.dataframe(sem_roteiro[cols_exibir])
 
 # ===============================
 # EXPANSÃO
@@ -87,6 +103,10 @@ for _, row in df_merge.iterrows():
             })
 
 df = pd.DataFrame(linhas)
+
+if df.empty:
+    st.error("Nenhum dado gerado. Verifique o roteiro ou PV.")
+    st.stop()
 
 # ===============================
 # DATAS
@@ -142,8 +162,7 @@ fig = px.bar(
     y="Ocupação (%)",
     color="Processo",
     barmode="group",
-    text="Label",
-    title="Carga vs Capacidade por Processo"
+    text="Label"
 )
 
 fig.add_hline(y=100, line_dash="dash")
