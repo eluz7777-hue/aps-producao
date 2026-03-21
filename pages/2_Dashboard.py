@@ -35,7 +35,6 @@ df_pv = df_pv.rename(columns={
     "QUANTIDADE": "QTD"
 })
 
-# validação
 for col in ["PV","CODIGO","QTD","ENTREGA"]:
     if col not in df_pv.columns:
         st.error(f"Coluna obrigatória ausente: {col}")
@@ -60,9 +59,8 @@ PROCESSOS_VALIDOS = [
 processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 
 # ===============================
-# 🔥 CORREÇÃO DO ROTEIRO (SEM ERRO)
+# ROTEIRO (SEM DUPLICIDADE)
 # ===============================
-# pega apenas 1 linha por código (primeira ocorrência)
 df_base_unico = df_base.drop_duplicates(subset=["CODIGO"])
 
 # ===============================
@@ -74,7 +72,6 @@ for _, row in df_pv.iterrows():
 
     roteiro = df_base_unico[df_base_unico["CODIGO"] == row["CODIGO"]]
 
-    # se não tem roteiro → ignora (correto)
     if roteiro.empty:
         continue
 
@@ -144,7 +141,7 @@ dem["Status"] = dem["Ocupação (%)"].apply(
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# GRÁFICOS (TODOS PRESERVADOS)
+# GRÁFICO PRINCIPAL
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
@@ -170,7 +167,8 @@ st.plotly_chart(fig, use_container_width=True)
 st.subheader("📌 Distribuição de Carga por Processo")
 
 df_total = df.groupby("Processo")["Horas"].sum().reset_index()
-st.plotly_chart(px.pie(df_total, names="Processo", values="Horas"))
+fig_pizza = px.pie(df_total, names="Processo", values="Horas")
+st.plotly_chart(fig_pizza)
 
 # ===============================
 # SEMANA
@@ -211,13 +209,33 @@ fig_mes.update_traces(textposition="outside")
 st.plotly_chart(fig_mes, use_container_width=True)
 
 # ===============================
-# CLIENTE
+# CLIENTE (COM TOTAL)
 # ===============================
 st.subheader("📌 PV por Cliente")
 
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 
-fig_cliente = px.bar(pv_cliente, x="Cliente", y="PV", text="PV")
+total_pv = pv_cliente["PV"].sum()
+
+linha_total = pd.DataFrame([{
+    "Cliente": "TOTAL",
+    "PV": total_pv
+}])
+
+pv_cliente = pd.concat([pv_cliente, linha_total], ignore_index=True)
+
+pv_cliente = pd.concat([
+    pv_cliente[pv_cliente["Cliente"] != "TOTAL"],
+    pv_cliente[pv_cliente["Cliente"] == "TOTAL"]
+])
+
+fig_cliente = px.bar(
+    pv_cliente,
+    x="Cliente",
+    y="PV",
+    text="PV"
+)
+
 fig_cliente.update_traces(textposition="outside")
 
 st.plotly_chart(fig_cliente, use_container_width=True)
@@ -237,6 +255,7 @@ fig_mensal = px.bar(
 )
 
 fig_mensal.update_traces(textposition="outside")
+
 st.plotly_chart(fig_mensal, use_container_width=True)
 
 # ===============================
