@@ -35,7 +35,7 @@ df_pv = df_pv.rename(columns={
     "QUANTIDADE": "QTD"
 })
 
-# 🔥 GARANTE COLUNAS OBRIGATÓRIAS
+# GARANTIA DE COLUNAS
 for col in ["PV","CODIGO","QTD","ENTREGA"]:
     if col not in df_pv.columns:
         st.error(f"Coluna obrigatória ausente: {col}")
@@ -57,41 +57,30 @@ PROCESSOS_VALIDOS = [
     "CALANDRA","PINTURA","METALEIRA"
 ]
 
-# ===============================
-# MERGE
-# ===============================
-df_merge = df_pv.merge(df_base, on="CODIGO", how="left")
-
-processos = [p for p in PROCESSOS_VALIDOS if p in df_merge.columns]
+processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 
 # ===============================
-# PV SEM ROTEIRO (ROBUSTO)
-# ===============================
-if processos:
-    df_merge["TEM_ROTEIRO"] = df_merge[processos].notna().any(axis=1)
-else:
-    df_merge["TEM_ROTEIRO"] = False
-
-sem_roteiro = df_merge[df_merge["TEM_ROTEIRO"] == False]
-
-if not sem_roteiro.empty:
-    st.warning(f"⚠️ {len(sem_roteiro)} PV sem roteiro")
-
-    with st.expander("Ver PV sem roteiro"):
-        cols_exibir = [c for c in ["PV","CODIGO","CLIENTE"] if c in sem_roteiro.columns]
-        st.dataframe(sem_roteiro[cols_exibir])
-
-# ===============================
-# EXPANSÃO
+# 🔥 LÓGICA CORRETA (BASE PV)
 # ===============================
 linhas = []
 
-for _, row in df_merge.iterrows():
+roteiro_dict = df_base.set_index("CODIGO").to_dict(orient="index")
+
+for _, row in df_pv.iterrows():
+
+    codigo = row["CODIGO"]
+    roteiro = roteiro_dict.get(codigo)
+
+    # 👉 SE NÃO TEM ROTEIRO → IGNORA (CORRETO)
+    if not roteiro:
+        continue
+
     for proc in processos:
 
-        tempo = pd.to_numeric(row.get(proc), errors="coerce")
+        tempo = pd.to_numeric(roteiro.get(proc), errors="coerce")
 
         if pd.notna(tempo) and tempo > 0:
+
             horas = (tempo * row["QTD"]) / 60
 
             linhas.append({
@@ -105,7 +94,7 @@ for _, row in df_merge.iterrows():
 df = pd.DataFrame(linhas)
 
 if df.empty:
-    st.error("Nenhum dado gerado. Verifique o roteiro ou PV.")
+    st.error("Nenhuma carga gerada. Verifique PV e roteiros.")
     st.stop()
 
 # ===============================
@@ -150,7 +139,7 @@ dem["Status"] = dem["Ocupação (%)"].apply(
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# GRÁFICO PRINCIPAL
+# GRÁFICOS (TODOS MANTIDOS)
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
