@@ -5,10 +5,10 @@ import os
 import time
 
 st.set_page_config(layout="wide")
-st.title("📊 APS ELOHIM - DASHBOARD INDUSTRIAL")
+st.title("📊 Dashboard de Capacidade")
 
 # ===============================
-# 🔄 ATUALIZAÇÃO FORÇADA
+# ATUALIZAÇÃO
 # ===============================
 if st.button("🔄 Atualizar Dados"):
     st.rerun()
@@ -16,7 +16,7 @@ if st.button("🔄 Atualizar Dados"):
 st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 
 # ===============================
-# 📂 CAMINHO
+# LEITURA
 # ===============================
 BASE_PATH = os.getcwd()
 
@@ -24,7 +24,7 @@ df_pv = pd.read_excel(os.path.join(BASE_PATH, "Relacao_Pv.xlsx"))
 df_base = pd.read_excel(os.path.join(BASE_PATH, "Processos_de_Fabricacao.xlsx"))
 
 # ===============================
-# TRATAMENTO
+# PADRONIZAÇÃO
 # ===============================
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 df_base.columns = [c.strip().upper() for c in df_base.columns]
@@ -35,13 +35,29 @@ df_pv = df_pv.rename(columns={
     "QUANTIDADE": "QTD"
 })
 
-df_pv["CODIGO"] = df_pv["CODIGO"].astype(str)
+df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.strip()
+df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip()
+
 df_pv["PV"] = df_pv["PV"].astype(str)
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"])
-df_base["CODIGO"] = df_base["CODIGO"].astype(str)
 
 # ===============================
-# 🔥 PROCESSOS VÁLIDOS (IGNORA LIXO)
+# 🔥 MERGE CORRETO (CRUZAMENTO)
+# ===============================
+df_merge = df_pv.merge(df_base, on="CODIGO", how="left")
+
+# ===============================
+# 🚨 DIAGNÓSTICO (PV SEM ROTEIRO)
+# ===============================
+sem_roteiro = df_merge[df_merge.isna().any(axis=1)]
+
+if not sem_roteiro.empty:
+    st.warning(f"⚠️ {len(sem_roteiro)} PV sem roteiro encontrado(s)")
+    with st.expander("Ver PV sem roteiro"):
+        st.dataframe(sem_roteiro[["PV", "CODIGO"]])
+
+# ===============================
+# PROCESSOS VÁLIDOS
 # ===============================
 PROCESSOS_VALIDOS = [
     "FRESADORAS","SOLDAGEM","TORNO","CORTE-PLASMA","CORTE-LASER",
@@ -50,23 +66,18 @@ PROCESSOS_VALIDOS = [
     "CALANDRA","PINTURA","METALEIRA"
 ]
 
-processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
+processos = [p for p in PROCESSOS_VALIDOS if p in df_merge.columns]
 
 # ===============================
-# EXPANSÃO
+# EXPANSÃO COM BASE NO MERGE
 # ===============================
 linhas = []
 
-for _, row in df_pv.iterrows():
-
-    roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
-
-    if roteiro.empty:
-        continue
+for _, row in df_merge.iterrows():
 
     for proc in processos:
 
-        tempo = pd.to_numeric(roteiro.iloc[0][proc], errors="coerce")
+        tempo = pd.to_numeric(row.get(proc), errors="coerce")
 
         if pd.notna(tempo) and tempo > 0:
 
@@ -77,7 +88,7 @@ for _, row in df_pv.iterrows():
                 "Cliente": row.get("CLIENTE","SEM CLIENTE"),
                 "Processo": proc,
                 "Data": row["ENTREGA"],
-                "Horas": round(horas, 1)  # 🔥 1 CASA DECIMAL
+                "Horas": round(horas, 1)
             })
 
 df = pd.DataFrame(linhas)
@@ -90,10 +101,11 @@ df["Mes"] = df["Data"].dt.month
 
 tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
 
-if tipo == "Semanal":
-    df["Periodo"] = "Sem " + df["Semana"].astype(str)
-else:
-    df["Periodo"] = "Mês " + df["Mes"].astype(str)
+df["Periodo"] = (
+    "Sem " + df["Semana"].astype(str)
+    if tipo == "Semanal"
+    else "Mês " + df["Mes"].astype(str)
+)
 
 # ===============================
 # CAPACIDADE
@@ -114,20 +126,13 @@ def capacidade(proc):
 dem = df.groupby(["Periodo","Processo"])["Horas"].sum().reset_index()
 dem["Capacidade"] = dem["Processo"].apply(capacidade)
 
-# 🔥 % INTEIRO
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
 
-# STATUS
 dem["Status"] = dem["Ocupação (%)"].apply(
     lambda x: "🔴" if x > 100 else ("🟡" if x > 80 else "🟢")
 )
 
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
-
-# ===============================
-# 🔥 ORDENAÇÃO DO EIXO X
-# ===============================
-dem = dem.sort_values(by="Periodo")
 
 # ===============================
 # GRÁFICO PRINCIPAL
@@ -147,12 +152,6 @@ fig = px.bar(
 )
 
 fig.add_hline(y=100, line_dash="dash")
-
-fig.update_layout(
-    xaxis_title="Período",
-    yaxis_title="Ocupação (%)"
-)
-
 fig.update_traces(textposition="outside")
 
 st.plotly_chart(fig, use_container_width=True)
@@ -162,14 +161,9 @@ st.plotly_chart(fig, use_container_width=True)
 # ===============================
 st.subheader("📌 Distribuição de Carga por Processo")
 
-fig_pizza = px.pie(
-    df,
-    names="Processo",
-    values="Horas",
-    title="Carga Total por Processo"
-)
+df_total = df.groupby("Processo")["Horas"].sum().reset_index()
 
-st.plotly_chart(fig_pizza)
+st.plotly_chart(px.pie(df_total, names="Processo", values="Horas"))
 
 # ===============================
 # SEMANA
@@ -178,11 +172,14 @@ st.subheader("📌 Distribuição por Semana")
 
 sem = st.selectbox("Semana", sorted(df["Semana"].unique()))
 
+df_sem = df[df["Semana"] == sem].groupby("Processo")["Horas"].sum().reset_index()
+df_sem = df_sem.sort_values(by="Horas", ascending=False)
+
 fig_sem = px.bar(
-    df[df["Semana"]==sem],
+    df_sem,
     x="Processo",
     y="Horas",
-    text="Horas",
+    text=df_sem["Horas"].map(lambda x: f"{x:.1f}"),
     title=f"Carga por Processo - Semana {sem}"
 )
 
@@ -197,11 +194,14 @@ st.subheader("📌 Distribuição por Mês")
 
 mes = st.selectbox("Mês", sorted(df["Mes"].unique()))
 
+df_mes = df[df["Mes"] == mes].groupby("Processo")["Horas"].sum().reset_index()
+df_mes = df_mes.sort_values(by="Horas", ascending=False)
+
 fig_mes = px.bar(
-    df[df["Mes"]==mes],
+    df_mes,
     x="Processo",
     y="Horas",
-    text="Horas",
+    text=df_mes["Horas"].map(lambda x: f"{x:.1f}"),
     title=f"Carga por Processo - Mês {mes}"
 )
 
@@ -216,14 +216,7 @@ st.subheader("📌 PV por Cliente")
 
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 
-fig_cliente = px.bar(
-    pv_cliente,
-    x="Cliente",
-    y="PV",
-    text="PV",
-    title="Quantidade de Ordens por Cliente"
-)
-
+fig_cliente = px.bar(pv_cliente, x="Cliente", y="PV", text="PV")
 fig_cliente.update_traces(textposition="outside")
 
 st.plotly_chart(fig_cliente, use_container_width=True)
@@ -239,8 +232,7 @@ fig_mensal = px.bar(
     mensal,
     x="Mes",
     y="Horas",
-    text=mensal["Horas"].map(lambda x: f"{x:.1f}"),
-    title="Carga Total por Mês"
+    text=mensal["Horas"].map(lambda x: f"{x:.1f}")
 )
 
 fig_mensal.update_traces(textposition="outside")
@@ -248,7 +240,7 @@ fig_mensal.update_traces(textposition="outside")
 st.plotly_chart(fig_mensal, use_container_width=True)
 
 # ===============================
-# TABELA
+# TABELA FINAL
 # ===============================
 st.subheader("📌 Auditoria de Capacidade")
 
