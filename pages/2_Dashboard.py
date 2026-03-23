@@ -103,8 +103,8 @@ df = pd.DataFrame(linhas)
 # DATAS
 # ===============================
 df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
-df["Mes"] = df["Data"].dt.month
 df["Ano"] = df["Data"].dt.year
+df["Mes"] = df["Data"].dt.month
 
 tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
 
@@ -118,7 +118,7 @@ df["Periodo"] = (
 # CAPACIDADE REAL
 # ===============================
 EFICIENCIA = 0.8
-HORAS_DIA = 8  # 🔥 ajuste aqui se necessário
+HORAS_DIA = 8
 
 MAQUINAS = {
     "FRESADORAS":2,"SOLDAGEM":4,"TORNO":3,"CORTE-PLASMA":1,"CORTE-LASER":1,
@@ -127,16 +127,12 @@ MAQUINAS = {
     "CALANDRA":2,"PINTURA":1,"METALEIRA":1
 }
 
-# ===============================
-# AGRUPAMENTO
-# ===============================
-dem = df.groupby(["Periodo","Processo","Mes","Ano"])["Horas"].sum().reset_index()
-
 def capacidade(row):
     dias = dias_uteis_no_mes(row["Ano"], row["Mes"])
     maquinas = MAQUINAS.get(row["Processo"],1)
     return int(dias * HORAS_DIA * maquinas * EFICIENCIA)
 
+dem = df.groupby(["Periodo","Processo","Mes","Ano"])["Horas"].sum().reset_index()
 dem["Capacidade"] = dem.apply(capacidade, axis=1)
 
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
@@ -148,7 +144,7 @@ dem["Status"] = dem["Ocupação (%)"].apply(
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# GRÁFICOS (INALTERADOS)
+# GRÁFICOS
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
@@ -192,8 +188,26 @@ fig_cliente.update_traces(textposition="outside")
 st.plotly_chart(fig_cliente, use_container_width=True)
 
 # ===============================
-# TABELA FINAL
+# AUDITORIA
 # ===============================
 st.subheader("📌 Auditoria de Capacidade")
-
 st.dataframe(dem)
+
+# ===============================
+# 🔥 TABELA DE SEMANAS (NOVA)
+# ===============================
+st.subheader("📅 Calendário Semanal")
+
+df_semanas = df[["Data","Semana","Ano"]].drop_duplicates()
+
+df_semanas["Inicio Semana"] = df_semanas["Data"] - pd.to_timedelta(df_semanas["Data"].dt.weekday, unit="d")
+df_semanas["Fim Semana"] = df_semanas["Inicio Semana"] + pd.Timedelta(days=6)
+
+df_semanas = df_semanas.groupby(["Semana","Ano"]).agg({
+    "Inicio Semana":"min",
+    "Fim Semana":"max"
+}).reset_index()
+
+df_semanas = df_semanas.sort_values(["Ano","Semana"])
+
+st.dataframe(df_semanas)
