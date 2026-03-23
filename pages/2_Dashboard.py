@@ -5,12 +5,43 @@ import os
 import time
 import holidays
 
-st.set_page_config(layout="wide")
-st.title("📊 Dashboard de Capacidade - APS Nível 3")
+# ===============================
+# 🔐 LOGIN
+# ===============================
+def login():
+
+    usuarios = {
+        "admin": "1234",
+        "eduardo": "aps2026"
+    }
+
+    if "logado" not in st.session_state:
+        st.session_state.logado = False
+
+    if not st.session_state.logado:
+
+        st.title("🔐 Acesso Restrito")
+
+        user = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+
+        if st.button("Entrar"):
+            if user in usuarios and usuarios[user] == senha:
+                st.session_state.logado = True
+                st.rerun()
+            else:
+                st.error("Usuário ou senha inválidos")
+
+        st.stop()
+
+login()
 
 # ===============================
 # CONFIG
 # ===============================
+st.set_page_config(layout="wide")
+st.title("📊 Dashboard de Capacidade - APS Nível 3")
+
 EFICIENCIA = 0.8
 HORAS_DIA = 8
 
@@ -159,7 +190,7 @@ else:
 dem["Capacidade"] = dem.apply(capacidade, axis=1)
 
 # ===============================
-# STATUS (🔴🟡🟢 RESTAURADO)
+# STATUS
 # ===============================
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
 
@@ -172,7 +203,6 @@ def status(x):
         return "🟢"
 
 dem["Status"] = dem["Ocupação (%)"].apply(status)
-
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
