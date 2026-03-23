@@ -1,6 +1,9 @@
 import streamlit as st
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="ELOHIM APS",
+    layout="wide"
+)
 
 # ===============================
 # 🔐 USUÁRIOS
@@ -25,7 +28,7 @@ if "usuario" not in st.session_state:
 # ===============================
 def tela_login():
 
-    st.title("🔐 Acesso Restrito")
+    st.title("🔐 ELOHIM APS – Acesso Restrito")
 
     user = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
@@ -40,7 +43,7 @@ def tela_login():
             st.error("Usuário ou senha inválidos")
 
 # ===============================
-# BLOQUEIO GLOBAL
+# BLOQUEIO
 # ===============================
 if not st.session_state.logado:
     tela_login()
@@ -49,9 +52,9 @@ if not st.session_state.logado:
 # ===============================
 # APP LIBERADO
 # ===============================
-st.title("📊 APS Produção")
+st.title("🚀 ELOHIM APS – Advanced Planning System")
 
-st.success(f"Bem-vindo, {st.session_state.usuario}!")
+st.success(f"Bem-vindo, {st.session_state.usuario}")
 
 if st.button("Sair"):
     st.session_state.logado = False

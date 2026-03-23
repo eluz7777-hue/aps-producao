@@ -7,7 +7,7 @@ import holidays
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Dashboard de Capacidade - APS Nível 4")
+st.title("📊 Dashboard de Capacidade - APS Nível 4")st.title("📊 ELOHIM APS – Advanced Planning System")
 
 # ===============================
 # CONFIG
