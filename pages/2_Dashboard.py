@@ -6,17 +6,24 @@ import time
 import holidays
 
 # ===============================
-# 🔐 LOGIN
+# 🔐 USUÁRIOS (EDITAR AQUI)
+# ===============================
+USUARIOS = {
+    "admin": "1234",
+    "eduardo": "aps2026",
+    "gerente": "producao"
+}
+
+# ===============================
+# LOGIN
 # ===============================
 def login():
 
-    usuarios = {
-        "admin": "1234",
-        "eduardo": "aps2026"
-    }
-
     if "logado" not in st.session_state:
         st.session_state.logado = False
+
+    if "usuario" not in st.session_state:
+        st.session_state.usuario = ""
 
     if not st.session_state.logado:
 
@@ -26,8 +33,10 @@ def login():
         senha = st.text_input("Senha", type="password")
 
         if st.button("Entrar"):
-            if user in usuarios and usuarios[user] == senha:
+
+            if user in USUARIOS and USUARIOS[user] == senha:
                 st.session_state.logado = True
+                st.session_state.usuario = user
                 st.rerun()
             else:
                 st.error("Usuário ou senha inválidos")
@@ -37,10 +46,24 @@ def login():
 login()
 
 # ===============================
+# HEADER COM LOGOUT
+# ===============================
+col1, col2 = st.columns([8,1])
+
+with col1:
+    st.title("📊 Dashboard de Capacidade - APS Nível 3")
+
+with col2:
+    if st.button("Sair"):
+        st.session_state.logado = False
+        st.rerun()
+
+st.caption(f"Usuário logado: {st.session_state.usuario}")
+
+# ===============================
 # CONFIG
 # ===============================
 st.set_page_config(layout="wide")
-st.title("📊 Dashboard de Capacidade - APS Nível 3")
 
 EFICIENCIA = 0.8
 HORAS_DIA = 8
@@ -169,9 +192,7 @@ MAQUINAS = {
 }
 
 if tipo == "Semanal":
-
     df["Periodo"] = "Sem " + df["Semana"].astype(str)
-
     dem = df.groupby(["Periodo","Processo","Semana","Ano"])["Horas"].sum().reset_index()
     dem = dem.merge(calendario, on=["Semana","Ano"], how="left")
 
@@ -179,9 +200,7 @@ if tipo == "Semanal":
         return int(row["Dias Úteis"] * HORAS_DIA * MAQUINAS.get(row["Processo"],1) * EFICIENCIA)
 
 else:
-
     df["Periodo"] = "Mês " + df["Mes"].astype(str)
-
     dem = df.groupby(["Periodo","Processo","Mes","Ano"])["Horas"].sum().reset_index()
 
     def capacidade(row):
@@ -190,7 +209,7 @@ else:
 dem["Capacidade"] = dem.apply(capacidade, axis=1)
 
 # ===============================
-# STATUS
+# STATUS (🔴🟡🟢)
 # ===============================
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
 
@@ -214,12 +233,7 @@ gargalo = dem.sort_values("Ocupação (%)", ascending=False).iloc[0]
 st.error(f"GARGALO: {gargalo['Processo']} ({gargalo['Ocupação (%)']}%)")
 
 st.subheader("📊 Ranking de Criticidade")
-ranking = dem.sort_values("Ocupação (%)", ascending=False)
-st.dataframe(ranking)
-
-criticos = dem[dem["Ocupação (%)"] > 100]
-if not criticos.empty:
-    st.warning(f"⚠️ {len(criticos)} processos acima da capacidade")
+st.dataframe(dem.sort_values("Ocupação (%)", ascending=False))
 
 # ===============================
 # GRÁFICO
