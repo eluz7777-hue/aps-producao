@@ -4,10 +4,11 @@ import plotly.express as px
 import os
 import time
 import holidays
+import math
 
 st.set_page_config(layout="wide")
 
-st.title("📊 Dashboard de Capacidade - APS Nível 4")st.title("📊 ELOHIM APS – Advanced Planning System")
+st.title("📊 ELOHIM APS – Advanced Planning System")
 
 # ===============================
 # CONFIG
@@ -161,12 +162,9 @@ dem["Capacidade"] = dem.apply(capacidade, axis=1)
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
 
 def status(x):
-    if x > 100:
-        return "🔴"
-    elif x > 80:
-        return "🟡"
-    else:
-        return "🟢"
+    if x > 100: return "🔴"
+    elif x > 80: return "🟡"
+    else: return "🟢"
 
 dem["Status"] = dem["Ocupação (%)"].apply(status)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
@@ -175,7 +173,6 @@ dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 # APS NÍVEL 3
 # ===============================
 st.subheader("🚨 Análise de Gargalos")
-
 gargalo = dem.sort_values("Ocupação (%)", ascending=False).iloc[0]
 st.error(f"GARGALO: {gargalo['Processo']} ({gargalo['Ocupação (%)']}%)")
 
@@ -183,7 +180,7 @@ st.subheader("📊 Ranking de Criticidade")
 st.dataframe(dem.sort_values("Ocupação (%)", ascending=False))
 
 # ===============================
-# GRÁFICO
+# GRÁFICO OCUPAÇÃO
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
@@ -200,22 +197,19 @@ fig = px.bar(
 
 fig.add_hline(y=100, line_dash="dash")
 fig.update_traces(textposition="outside")
-
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# CLIENTE
+# PV CLIENTE
 # ===============================
 st.subheader("📌 PV por Cliente")
 
 pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
 total = pv_cliente["PV"].sum()
-
 pv_cliente = pd.concat([pv_cliente, pd.DataFrame([{"Cliente":"TOTAL","PV":total}])])
 
 fig_cliente = px.bar(pv_cliente, x="Cliente", y="PV", text="PV")
 fig_cliente.update_traces(textposition="outside")
-
 st.plotly_chart(fig_cliente, use_container_width=True)
 
 # ===============================
@@ -231,51 +225,77 @@ st.subheader("📅 Calendário Industrial")
 st.dataframe(calendario)
 
 # ===============================
-# 🔥 PREVISÃO DE ATRASO POR PV
+# 🔥 PREVISÃO ATRASO PV
 # ===============================
 st.subheader("⏱️ Previsão de Atraso por PV")
 
 pv_carga = df.groupby(["PV","Cliente","Data"])["Horas"].sum().reset_index()
 
-pv_carga["Dias Necessários"] = (pv_carga["Horas"] / HORAS_DIA).round(1)
+pv_carga["Dias Necessários"] = (pv_carga["Horas"] / HORAS_DIA)
 
 hoje = pd.Timestamp.today().normalize()
 
-def dias_ate_entrega(data):
-    if pd.isna(data):
-        return 0
-    return dias_uteis_periodo(hoje, data)
-
-pv_carga["Dias Disponíveis"] = pv_carga["Data"].apply(dias_ate_entrega)
-
-def status_pv(row):
-    if row["Dias Necessários"] > row["Dias Disponíveis"]:
-        return "🔴 ATRASO"
-    elif row["Dias Necessários"] > row["Dias Disponíveis"] * 0.8:
-        return "🟡 RISCO"
-    else:
-        return "🟢 OK"
-
-pv_carga["Status"] = pv_carga.apply(status_pv, axis=1)
+pv_carga["Dias Disponíveis"] = pv_carga["Data"].apply(
+    lambda x: dias_uteis_periodo(hoje, x)
+)
 
 pv_carga["Atraso (dias)"] = (
     pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
-).apply(lambda x: round(x,1) if x > 0 else 0)
+)
+
+pv_carga["Atraso (dias)"] = pv_carga["Atraso (dias)"].apply(
+    lambda x: max(0, math.ceil(x))
+)
 
 pv_carga = pv_carga.sort_values(by="Atraso (dias)", ascending=False)
 
 st.dataframe(pv_carga)
 
-st.subheader("🚨 PVs com Maior Risco de Atraso")
+# ===============================
+# 🥧 PIZZA ATRASO (NOVO)
+# ===============================
+st.subheader("🥧 Distribuição de Atraso por Dias")
 
-fig_atraso = px.bar(
-    pv_carga.head(10),
-    x="PV",
-    y="Atraso (dias)",
-    color="Status",
-    text="Atraso (dias)"
-)
+atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0]
 
-fig_atraso.update_traces(textposition="outside")
+if not atrasos.empty:
+    dist = atrasos.groupby("Atraso (dias)")["PV"].count().reset_index()
+    dist["Label"] = dist["Atraso (dias)"].astype(str) + " dia(s)"
 
-st.plotly_chart(fig_atraso, use_container_width=True)
+    fig_pizza = px.pie(
+        dist,
+        names="Label",
+        values="PV"
+    )
+
+    st.plotly_chart(fig_pizza, use_container_width=True)
+else:
+    st.success("Nenhum PV em atraso 🎉")
+
+# ===============================
+# 🟡 RISCO
+# ===============================
+st.subheader("⚠️ PVs em Risco")
+
+risco = pv_carga[
+    (pv_carga["Atraso (dias)"] == 0) &
+    (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
+]
+
+if not risco.empty:
+    fig_risco = px.bar(risco, x="PV", y="Dias Necessários", text="Dias Necessários")
+    fig_risco.update_traces(textposition="outside")
+    st.plotly_chart(fig_risco, use_container_width=True)
+else:
+    st.info("Nenhum PV em risco")
+
+# ===============================
+# 📊 RESUMO
+# ===============================
+st.subheader("📊 Resumo Geral")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("🔴 Atraso", len(atrasos))
+col2.metric("🟡 Risco", len(risco))
+col3.metric("🟢 OK", len(pv_carga) - len(atrasos) - len(risco))
