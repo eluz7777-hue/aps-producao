@@ -5,66 +5,13 @@ import os
 import time
 import holidays
 
-# ===============================
-# 🔐 USUÁRIOS (EDITAR AQUI)
-# ===============================
-USUARIOS = {
-    "admin": "1234",
-    "eduardo": "aps2026",
-    "gerente": "producao"
-}
+st.set_page_config(layout="wide")
 
-# ===============================
-# LOGIN
-# ===============================
-def login():
-
-    if "logado" not in st.session_state:
-        st.session_state.logado = False
-
-    if "usuario" not in st.session_state:
-        st.session_state.usuario = ""
-
-    if not st.session_state.logado:
-
-        st.title("🔐 Acesso Restrito")
-
-        user = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
-
-        if st.button("Entrar"):
-
-            if user in USUARIOS and USUARIOS[user] == senha:
-                st.session_state.logado = True
-                st.session_state.usuario = user
-                st.rerun()
-            else:
-                st.error("Usuário ou senha inválidos")
-
-        st.stop()
-
-login()
-
-# ===============================
-# HEADER COM LOGOUT
-# ===============================
-col1, col2 = st.columns([8,1])
-
-with col1:
-    st.title("📊 Dashboard de Capacidade - APS Nível 3")
-
-with col2:
-    if st.button("Sair"):
-        st.session_state.logado = False
-        st.rerun()
-
-st.caption(f"Usuário logado: {st.session_state.usuario}")
+st.title("📊 Dashboard de Capacidade - APS Nível 4")
 
 # ===============================
 # CONFIG
 # ===============================
-st.set_page_config(layout="wide")
-
 EFICIENCIA = 0.8
 HORAS_DIA = 8
 
@@ -209,7 +156,7 @@ else:
 dem["Capacidade"] = dem.apply(capacidade, axis=1)
 
 # ===============================
-# STATUS (🔴🟡🟢)
+# STATUS
 # ===============================
 dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
 
@@ -282,3 +229,53 @@ st.dataframe(dem)
 # ===============================
 st.subheader("📅 Calendário Industrial")
 st.dataframe(calendario)
+
+# ===============================
+# 🔥 PREVISÃO DE ATRASO POR PV
+# ===============================
+st.subheader("⏱️ Previsão de Atraso por PV")
+
+pv_carga = df.groupby(["PV","Cliente","Data"])["Horas"].sum().reset_index()
+
+pv_carga["Dias Necessários"] = (pv_carga["Horas"] / HORAS_DIA).round(1)
+
+hoje = pd.Timestamp.today().normalize()
+
+def dias_ate_entrega(data):
+    if pd.isna(data):
+        return 0
+    return dias_uteis_periodo(hoje, data)
+
+pv_carga["Dias Disponíveis"] = pv_carga["Data"].apply(dias_ate_entrega)
+
+def status_pv(row):
+    if row["Dias Necessários"] > row["Dias Disponíveis"]:
+        return "🔴 ATRASO"
+    elif row["Dias Necessários"] > row["Dias Disponíveis"] * 0.8:
+        return "🟡 RISCO"
+    else:
+        return "🟢 OK"
+
+pv_carga["Status"] = pv_carga.apply(status_pv, axis=1)
+
+pv_carga["Atraso (dias)"] = (
+    pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
+).apply(lambda x: round(x,1) if x > 0 else 0)
+
+pv_carga = pv_carga.sort_values(by="Atraso (dias)", ascending=False)
+
+st.dataframe(pv_carga)
+
+st.subheader("🚨 PVs com Maior Risco de Atraso")
+
+fig_atraso = px.bar(
+    pv_carga.head(10),
+    x="PV",
+    y="Atraso (dias)",
+    color="Status",
+    text="Atraso (dias)"
+)
+
+fig_atraso.update_traces(textposition="outside")
+
+st.plotly_chart(fig_atraso, use_container_width=True)
