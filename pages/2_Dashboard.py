@@ -16,17 +16,18 @@ EFICIENCIA = 0.8
 HORAS_DIA = 8
 
 # ===============================
-# FERIADOS BRASIL
+# FERIADOS
 # ===============================
 br_holidays = holidays.Brazil()
 
 def dias_uteis_periodo(inicio, fim):
     dias = pd.date_range(inicio, fim, freq='D')
-    dias_uteis = [
-        d for d in dias
-        if d.weekday() < 5 and d.date() not in br_holidays
-    ]
-    return len(dias_uteis)
+    return sum(1 for d in dias if d.weekday() < 5 and d.date() not in br_holidays)
+
+def dias_uteis_mes(ano, mes):
+    inicio = pd.Timestamp(year=ano, month=mes, day=1)
+    fim = inicio + pd.offsets.MonthEnd(1)
+    return dias_uteis_periodo(inicio, fim)
 
 # ===============================
 # ATUALIZAÇÃO
@@ -92,7 +93,6 @@ for _, row in df_pv.iterrows():
         tempo = pd.to_numeric(roteiro.get(proc), errors="coerce")
 
         if pd.notna(tempo) and tempo > 0:
-
             horas = (tempo * row["QTD"]) / 60
 
             linhas.append({
@@ -113,7 +113,7 @@ df["Ano"] = df["Data"].dt.year
 df["Mes"] = df["Data"].dt.month
 
 # ===============================
-# CALENDÁRIO SEMANAL REAL
+# CALENDÁRIO SEMANAL
 # ===============================
 calendario = df[["Data","Semana","Ano"]].drop_duplicates()
 
@@ -125,13 +125,17 @@ calendario = calendario.groupby(["Semana","Ano"]).agg({
     "Fim Semana":"max"
 }).reset_index()
 
-# dias úteis reais por semana
 calendario["Dias Úteis"] = calendario.apply(
     lambda x: dias_uteis_periodo(x["Inicio Semana"], x["Fim Semana"]), axis=1
 )
 
 # ===============================
-# CAPACIDADE REAL POR SEMANA
+# SELETOR
+# ===============================
+tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
+
+# ===============================
+# CAPACIDADE
 # ===============================
 MAQUINAS = {
     "FRESADORAS":2,"SOLDAGEM":4,"TORNO":3,"CORTE-PLASMA":1,"CORTE-LASER":1,
@@ -140,16 +144,28 @@ MAQUINAS = {
     "CALANDRA":2,"PINTURA":1,"METALEIRA":1
 }
 
-df["Periodo"] = "Sem " + df["Semana"].astype(str)
+if tipo == "Semanal":
 
-dem = df.groupby(["Periodo","Processo","Semana","Ano"])["Horas"].sum().reset_index()
+    df["Periodo"] = "Sem " + df["Semana"].astype(str)
 
-# junta calendário
-dem = dem.merge(calendario, on=["Semana","Ano"], how="left")
+    dem = df.groupby(["Periodo","Processo","Semana","Ano"])["Horas"].sum().reset_index()
 
-def capacidade(row):
-    maquinas = MAQUINAS.get(row["Processo"],1)
-    return int(row["Dias Úteis"] * HORAS_DIA * maquinas * EFICIENCIA)
+    dem = dem.merge(calendario, on=["Semana","Ano"], how="left")
+
+    def capacidade(row):
+        maquinas = MAQUINAS.get(row["Processo"],1)
+        return int(row["Dias Úteis"] * HORAS_DIA * maquinas * EFICIENCIA)
+
+else:
+
+    df["Periodo"] = "Mês " + df["Mes"].astype(str)
+
+    dem = df.groupby(["Periodo","Processo","Mes","Ano"])["Horas"].sum().reset_index()
+
+    def capacidade(row):
+        dias = dias_uteis_mes(row["Ano"], row["Mes"])
+        maquinas = MAQUINAS.get(row["Processo"],1)
+        return int(dias * HORAS_DIA * maquinas * EFICIENCIA)
 
 dem["Capacidade"] = dem.apply(capacidade, axis=1)
 
@@ -162,7 +178,7 @@ dem["Status"] = dem["Ocupação (%)"].apply(
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# GRÁFICO PRINCIPAL
+# GRÁFICOS
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
@@ -191,7 +207,7 @@ df_total = df.groupby("Processo")["Horas"].sum().reset_index()
 st.plotly_chart(px.pie(df_total, names="Processo", values="Horas"))
 
 # ===============================
-# CLIENTE COM TOTAL
+# CLIENTE
 # ===============================
 st.subheader("📌 PV por Cliente")
 
@@ -212,8 +228,8 @@ st.subheader("📌 Auditoria de Capacidade")
 st.dataframe(dem)
 
 # ===============================
-# CALENDÁRIO INDUSTRIAL
+# CALENDÁRIO
 # ===============================
-st.subheader("📅 Calendário Industrial Completo")
+st.subheader("📅 Calendário Industrial")
 
 st.dataframe(calendario)
