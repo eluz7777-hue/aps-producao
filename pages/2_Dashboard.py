@@ -194,6 +194,12 @@ if df.empty:
 df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
 df["Ano"] = df["Data"].dt.year
 df["Mes"] = df["Data"].dt.month
+mes_ref = int(df["Mes"].mode()[0])
+ano_ref = int(df["Ano"].mode()[0])
+
+horas_mes = horas_uteis_mes(ano_ref, mes_ref)
+total_recursos = sum(MAQUINAS.values())
+
 
 # ===============================
 # FILA REAL POR PROCESSO
@@ -483,11 +489,6 @@ st.dataframe(risco_exibicao)
 # ===============================
 # CAPACIDADE MENSAL FIXA (NOVO)
 # ===============================
-mes_ref = int(df["Mes"].mode()[0])
-ano_ref = int(df["Ano"].mode()[0])
-
-horas_mes = horas_uteis_mes(ano_ref, mes_ref)
-total_recursos = sum(MAQUINAS.values())
 
 capacidade_mensal_total = int(
     horas_mes * total_recursos * EFICIENCIA
