@@ -33,8 +33,7 @@ with col2:
 # CONFIG
 # ===============================
 EFICIENCIA = 0.8
-HORAS_DIA = 8
-
+HORAS_DIA = 44 / 5  # 8.8 horas por dia útil
 MAQUINAS = {
     "FRESADORAS": 2,
     "SOLDAGEM": 4,
