@@ -261,6 +261,11 @@ else:
     )
 
 # ===============================
+# AGRUPAMENTO POR PROCESSO
+# ===============================
+dem = df.groupby(["Processo"])["Horas"].sum().reset_index()
+
+# ===============================
 # MÉTRICAS
 # ===============================
 dem["Ocupação (%)"] = ((dem["Horas"] / dem["Capacidade"]) * 100).replace([float("inf")], 0).fillna(0)
@@ -276,6 +281,20 @@ def status(x):
 
 dem["Status"] = dem["Ocupação (%)"].apply(status)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
+
+# ===============================
+# CAPACIDADE POR PROCESSO
+# ===============================
+capacidade_proc = {
+    proc: horas_mes * MAQUINAS.get(proc, 0) * EFICIENCIA
+    for proc in processos
+}
+
+dem["Capacidade Processo"] = dem["Processo"].map(capacidade_proc)
+
+dem["Utilização (%)"] = (
+    dem["Horas"] / dem["Capacidade Processo"] * 100
+).round(0)
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -487,6 +506,13 @@ c1, c2, c3 = st.columns(3)
 c1.metric("Carga Total (h)", int(carga_total))
 c2.metric("Capacidade Mensal (h)", capacidade_mensal_total)
 c3.metric("Utilização (%)", utilizacao_global)
+
+# ===============================
+# VISÃO CAPACIDADE POR PROCESSO
+# ===============================
+st.subheader("🏭 Capacidade x Carga por Processo")
+
+st.dataframe(dem)
 
 # ===============================
 # RESUMO
