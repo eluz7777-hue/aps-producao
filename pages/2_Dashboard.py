@@ -464,6 +464,33 @@ if not risco_exibicao.empty:
 st.dataframe(risco_exibicao)
 
 # ===============================
+# CAPACIDADE MENSAL FIXA (NOVO)
+# ===============================
+mes_ref = int(df["Mes"].mode()[0])
+ano_ref = int(df["Ano"].mode()[0])
+
+dias_mes = dias_uteis_mes(ano_ref, mes_ref)
+total_recursos = sum(MAQUINAS.values())
+
+capacidade_mensal_total = int(
+    dias_mes * HORAS_DIA * total_recursos * EFICIENCIA
+)
+
+carga_total = df["Horas"].sum()
+
+utilizacao_global = 0
+if capacidade_mensal_total > 0:
+    utilizacao_global = int((carga_total / capacidade_mensal_total) * 100)
+
+st.subheader("📊 Indicadores Gerais")
+
+c1, c2, c3 = st.columns(3)
+
+c1.metric("Carga Total (h)", int(carga_total))
+c2.metric("Capacidade Mensal (h)", capacidade_mensal_total)
+c3.metric("Utilização (%)", utilizacao_global)
+
+# ===============================
 # RESUMO
 # ===============================
 st.subheader("📊 Resumo Geral")
