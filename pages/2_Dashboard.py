@@ -1,4 +1,13 @@
 import streamlit as st
+
+# ===============================
+# 🔐 BLOQUEIO DE ACESSO GLOBAL
+# ===============================
+if "logado" not in st.session_state or not st.session_state.logado:
+    st.warning("🔒 Acesso não autorizado. Redirecionando para login...")
+    st.switch_page("app.py")
+
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
