@@ -68,6 +68,23 @@ def dias_uteis_mes(ano, mes):
     fim = inicio + pd.offsets.MonthEnd(1)
     return dias_uteis_periodo(inicio, fim)
 
+def horas_uteis_mes(ano, mes):
+    inicio = pd.Timestamp(year=int(ano), month=int(mes), day=1)
+    fim = inicio + pd.offsets.MonthEnd(1)
+
+    dias = pd.date_range(inicio, fim, freq="D")
+
+    total_horas = 0
+
+    for d in dias:
+        if d.weekday() < 5 and d.date() not in br_holidays:
+            if d.weekday() == 4:  # sexta
+                total_horas += 8
+            else:  # segunda a quinta
+                total_horas += 9
+
+    return total_horas
+
 # ===============================
 # CACHE DE LEITURA
 # ===============================
@@ -450,11 +467,11 @@ st.dataframe(risco_exibicao)
 mes_ref = int(df["Mes"].mode()[0])
 ano_ref = int(df["Ano"].mode()[0])
 
-dias_mes = dias_uteis_mes(ano_ref, mes_ref)
+horas_mes = horas_uteis_mes(ano_ref, mes_ref)
 total_recursos = sum(MAQUINAS.values())
 
 capacidade_mensal_total = int(
-    dias_mes * HORAS_DIA * total_recursos * EFICIENCIA
+    horas_mes * total_recursos * EFICIENCIA
 )
 
 carga_total = df["Horas"].sum()
