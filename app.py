@@ -27,14 +27,12 @@ if "usuario" not in st.session_state:
 # LOGIN
 # ===============================
 def tela_login():
-
     st.title("🔐 ELOHIM APS – Acesso Restrito")
 
     user = st.text_input("Usuário")
     senha = st.text_input("Senha", type="password")
 
     if st.button("Entrar"):
-
         if user in USUARIOS and USUARIOS[user] == senha:
             st.session_state.logado = True
             st.session_state.usuario = user
@@ -56,6 +54,10 @@ st.title("🚀 ELOHIM APS – Advanced Planning System")
 
 st.success(f"Bem-vindo, {st.session_state.usuario}")
 
+st.sidebar.markdown("## 👤 Sessão")
+st.sidebar.write(f"Usuário: **{st.session_state.usuario}**")
+
 if st.button("Sair"):
     st.session_state.logado = False
+    st.session_state.usuario = ""
     st.rerun()

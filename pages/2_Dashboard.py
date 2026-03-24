@@ -8,7 +8,17 @@ import math
 
 st.set_page_config(layout="wide")
 
-st.title("📊 ELOHIM APS – Advanced Planning System")
+# ===============================
+# LOGO + TÍTULO
+# ===============================
+col1, col2 = st.columns([1, 6])
+
+with col1:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=80)
+
+with col2:
+    st.title("📊 ELOHIM APS – Advanced Planning System")
 
 # ===============================
 # CONFIG
@@ -16,24 +26,54 @@ st.title("📊 ELOHIM APS – Advanced Planning System")
 EFICIENCIA = 0.8
 HORAS_DIA = 8
 
+MAQUINAS = {
+    "FRESADORAS": 2,
+    "SOLDAGEM": 4,
+    "TORNO": 3,
+    "CORTE-PLASMA": 1,
+    "CORTE-LASER": 1,
+    "SERRA FITA": 1,
+    "SERRA CIRCULAR": 1,
+    "CENTRO USINAGEM": 1,
+    "DOBRADEIRA": 2,
+    "PRENSA (AMASSAMENTO)": 1,
+    "ROSQUEADEIRA": 1,
+    "ACABAMENTO": 3,
+    "CALANDRA": 2,
+    "PINTURA": 1,
+    "METALEIRA": 1
+}
+
 # ===============================
 # FERIADOS
 # ===============================
 br_holidays = holidays.Brazil()
 
 def dias_uteis_periodo(inicio, fim):
-    dias = pd.date_range(inicio, fim, freq='D')
+    if pd.isna(inicio) or pd.isna(fim):
+        return 0
+    dias = pd.date_range(inicio, fim, freq="D")
     return sum(1 for d in dias if d.weekday() < 5 and d.date() not in br_holidays)
 
 def dias_uteis_mes(ano, mes):
-    inicio = pd.Timestamp(year=ano, month=mes, day=1)
+    inicio = pd.Timestamp(year=int(ano), month=int(mes), day=1)
     fim = inicio + pd.offsets.MonthEnd(1)
     return dias_uteis_periodo(inicio, fim)
+
+# ===============================
+# CACHE DE LEITURA
+# ===============================
+@st.cache_data
+def carregar_dados(base_path):
+    df_pv = pd.read_excel(os.path.join(base_path, "Relacao_Pv.xlsx"))
+    df_base = pd.read_excel(os.path.join(base_path, "Processos_de_Fabricacao.xlsx"))
+    return df_pv, df_base
 
 # ===============================
 # ATUALIZAÇÃO
 # ===============================
 if st.button("🔄 Atualizar Dados"):
+    st.cache_data.clear()
     st.rerun()
 
 st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
@@ -43,8 +83,7 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 # ===============================
 BASE_PATH = os.getcwd()
 
-df_pv = pd.read_excel(os.path.join(BASE_PATH, "Relacao_Pv.xlsx"))
-df_base = pd.read_excel(os.path.join(BASE_PATH, "Processos_de_Fabricacao.xlsx"))
+df_pv, df_base = carregar_dados(BASE_PATH)
 
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 df_base.columns = [c.strip().upper() for c in df_base.columns]
@@ -58,29 +97,30 @@ df_pv = df_pv.rename(columns={
 df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.strip()
 df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip()
 
-df_pv["PV"] = df_pv["PV"].astype(str)
+df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
+df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
+df_base = df_base.drop_duplicates(subset=["CODIGO"])
 
 # ===============================
 # PROCESSOS
 # ===============================
 PROCESSOS_VALIDOS = [
-    "FRESADORAS","SOLDAGEM","TORNO","CORTE-PLASMA","CORTE-LASER",
-    "SERRA FITA","SERRA CIRCULAR","CENTRO USINAGEM","DOBRADEIRA",
-    "PRENSA (AMASSAMENTO)","ROSQUEADEIRA","ACABAMENTO",
-    "CALANDRA","PINTURA","METALEIRA"
+    "FRESADORAS", "SOLDAGEM", "TORNO", "CORTE-PLASMA", "CORTE-LASER",
+    "SERRA FITA", "SERRA CIRCULAR", "CENTRO USINAGEM", "DOBRADEIRA",
+    "PRENSA (AMASSAMENTO)", "ROSQUEADEIRA", "ACABAMENTO",
+    "CALANDRA", "PINTURA", "METALEIRA"
 ]
 
 processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
-df_base_unico = df_base.drop_duplicates(subset=["CODIGO"])
 
 # ===============================
-# EXPANSÃO
+# EXPANSÃO CORRIGIDA (SEM ERRO)
 # ===============================
 linhas = []
 
 for _, row in df_pv.iterrows():
-    roteiro = df_base_unico[df_base_unico["CODIGO"] == row["CODIGO"]]
+    roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
 
     if roteiro.empty:
         continue
@@ -90,18 +130,38 @@ for _, row in df_pv.iterrows():
     for proc in processos:
         tempo = pd.to_numeric(roteiro.get(proc), errors="coerce")
 
-        if pd.notna(tempo) and tempo > 0:
-            horas = (tempo * row["QTD"]) / 60
+        # Mantida a proteção já existente
+        if pd.notna(tempo) and tempo > 0 and tempo < 1000:
+            horas = (tempo * float(row["QTD"])) / 60
 
             linhas.append({
                 "PV": row["PV"],
-                "Cliente": row.get("CLIENTE","SEM CLIENTE"),
+                "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
                 "Processo": proc,
                 "Data": row["ENTREGA"],
-                "Horas": round(horas, 1)
+                "Horas": horas  # sem arredondar na base
             })
 
 df = pd.DataFrame(linhas)
+
+if df.empty:
+    st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
+    st.stop()
+
+# ===============================
+# FILTRO POR CLIENTE
+# ===============================
+df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
+
+clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
+cliente_sel = st.selectbox("Filtrar Cliente", ["Todos"] + clientes_disponiveis)
+
+if cliente_sel != "Todos":
+    df = df[df["Cliente"] == cliente_sel].copy()
+
+if df.empty:
+    st.warning("Nenhum dado encontrado para o filtro selecionado.")
+    st.stop()
 
 # ===============================
 # DATAS
@@ -111,73 +171,119 @@ df["Ano"] = df["Data"].dt.year
 df["Mes"] = df["Data"].dt.month
 
 # ===============================
+# FILA REAL POR PROCESSO
+# ===============================
+df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
+df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
+df["Fila (dias)"] = df["Fila Acumulada (h)"] / HORAS_DIA
+
+# ===============================
 # CALENDÁRIO
 # ===============================
-calendario = df[["Data","Semana","Ano"]].drop_duplicates()
+cal = df[["Data", "Semana", "Ano"]].drop_duplicates().copy()
 
-calendario["Inicio Semana"] = calendario["Data"] - pd.to_timedelta(calendario["Data"].dt.weekday, unit="d")
-calendario["Fim Semana"] = calendario["Inicio Semana"] + pd.Timedelta(days=6)
+cal["Inicio"] = cal["Data"] - pd.to_timedelta(cal["Data"].dt.weekday, unit="d")
+cal["Fim"] = cal["Inicio"] + pd.Timedelta(days=6)
 
-calendario = calendario.groupby(["Semana","Ano"]).agg({
-    "Inicio Semana":"min",
-    "Fim Semana":"max"
+cal = cal.groupby(["Semana", "Ano"]).agg({
+    "Inicio": "min",
+    "Fim": "max"
 }).reset_index()
 
-calendario["Dias Úteis"] = calendario.apply(
-    lambda x: dias_uteis_periodo(x["Inicio Semana"], x["Fim Semana"]), axis=1
+cal["Dias Úteis"] = cal.apply(
+    lambda x: dias_uteis_periodo(x["Inicio"], x["Fim"]), axis=1
 )
 
 # ===============================
-# SELETOR
+# VISÃO
 # ===============================
-tipo = st.radio("Visualização", ["Semanal","Mensal"], horizontal=True)
-
-MAQUINAS = {
-    "FRESADORAS":2,"SOLDAGEM":4,"TORNO":3,"CORTE-PLASMA":1,"CORTE-LASER":1,
-    "SERRA FITA":1,"SERRA CIRCULAR":1,"CENTRO USINAGEM":1,"DOBRADEIRA":2,
-    "PRENSA (AMASSAMENTO)":1,"ROSQUEADEIRA":1,"ACABAMENTO":3,
-    "CALANDRA":2,"PINTURA":1,"METALEIRA":1
-}
+tipo = st.radio("Visualização", ["Semanal", "Mensal"], horizontal=True)
 
 if tipo == "Semanal":
     df["Periodo"] = "Sem " + df["Semana"].astype(str)
-    dem = df.groupby(["Periodo","Processo","Semana","Ano"])["Horas"].sum().reset_index()
-    dem = dem.merge(calendario, on=["Semana","Ano"], how="left")
 
-    def capacidade(row):
-        return int(row["Dias Úteis"] * HORAS_DIA * MAQUINAS.get(row["Processo"],1) * EFICIENCIA)
+    dem = df.groupby(["Periodo", "Processo", "Semana", "Ano"], as_index=False)["Horas"].sum()
+    dem = dem.merge(cal, on=["Semana", "Ano"], how="left")
+
+    dem["Capacidade"] = dem.apply(
+        lambda r: int(
+            r["Dias Úteis"] *
+            HORAS_DIA *
+            MAQUINAS.get(r["Processo"], 1) *
+            EFICIENCIA
+        ),
+        axis=1
+    )
 
 else:
     df["Periodo"] = "Mês " + df["Mes"].astype(str)
-    dem = df.groupby(["Periodo","Processo","Mes","Ano"])["Horas"].sum().reset_index()
 
-    def capacidade(row):
-        return int(dias_uteis_mes(row["Ano"], row["Mes"]) * HORAS_DIA * MAQUINAS.get(row["Processo"],1) * EFICIENCIA)
+    dem = df.groupby(["Periodo", "Processo", "Mes", "Ano"], as_index=False)["Horas"].sum()
 
-dem["Capacidade"] = dem.apply(capacidade, axis=1)
+    dem["Dias Úteis"] = dem.apply(
+        lambda r: dias_uteis_mes(r["Ano"], r["Mes"]),
+        axis=1
+    )
+
+    dem["Capacidade"] = dem.apply(
+        lambda r: int(
+            r["Dias Úteis"] *
+            HORAS_DIA *
+            MAQUINAS.get(r["Processo"], 1) *
+            EFICIENCIA
+        ),
+        axis=1
+    )
 
 # ===============================
-# STATUS
+# MÉTRICAS
 # ===============================
-dem["Ocupação (%)"] = ((dem["Horas"]/dem["Capacidade"])*100).round(0).astype(int)
+dem["Ocupação (%)"] = ((dem["Horas"] / dem["Capacidade"]) * 100).replace([float("inf")], 0).fillna(0)
+dem["Ocupação (%)"] = dem["Ocupação (%)"].round(0).astype(int)
 
 def status(x):
-    if x > 100: return "🔴"
-    elif x > 80: return "🟡"
-    else: return "🟢"
+    if x > 100:
+        return "🔴"
+    elif x > 80:
+        return "🟡"
+    else:
+        return "🟢"
 
 dem["Status"] = dem["Ocupação (%)"].apply(status)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# APS NÍVEL 3
+# INDICADORES EXECUTIVOS
 # ===============================
-st.subheader("🚨 Análise de Gargalos")
-gargalo = dem.sort_values("Ocupação (%)", ascending=False).iloc[0]
-st.error(f"GARGALO: {gargalo['Processo']} ({gargalo['Ocupação (%)']}%)")
+st.subheader("📊 Indicadores Gerais")
 
-st.subheader("📊 Ranking de Criticidade")
-st.dataframe(dem.sort_values("Ocupação (%)", ascending=False))
+col_a, col_b, col_c = st.columns(3)
+
+total_horas = df["Horas"].sum()
+total_capacidade = dem["Capacidade"].sum()
+utilizacao_global = 0
+
+if total_capacidade > 0:
+    utilizacao_global = int(round((total_horas / total_capacidade) * 100, 0))
+
+col_a.metric("Carga Total (h)", int(round(total_horas, 0)))
+col_b.metric("Capacidade Total (h)", int(round(total_capacidade, 0)))
+col_c.metric("Utilização Global (%)", utilizacao_global)
+
+# ===============================
+# ALERTA DE CAPACIDADE CRÍTICA
+# ===============================
+st.subheader("⚠️ Capacidade Crítica")
+
+critico = dem[dem["Ocupação (%)"] > 95].copy()
+
+if not critico.empty:
+    st.error("Capacidade próxima ou acima do limite detectada.")
+    st.dataframe(
+        critico.sort_values(["Ocupação (%)", "Horas"], ascending=[False, False]).reset_index(drop=True)
+    )
+else:
+    st.success("Capacidade sob controle.")
 
 # ===============================
 # GRÁFICO OCUPAÇÃO
@@ -191,47 +297,101 @@ fig = px.bar(
     x="Periodo",
     y="Ocupação (%)",
     color="Processo",
-    text="Label",
-    barmode="group"
+    barmode="group",
+    text="Label"
 )
 
 fig.add_hline(y=100, line_dash="dash")
 fig.update_traces(textposition="outside")
+
 st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# GARGALO AUTOMÁTICO
+# ===============================
+st.subheader("🔥 Gargalos do Período")
+
+gargalos = dem.sort_values(
+    by=["Periodo", "Ocupação (%)", "Horas"],
+    ascending=[True, False, False]
+).copy()
+
+top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
+
+st.dataframe(top_gargalos)
+
+# ===============================
+# CURVA DE CARGA
+# ===============================
+st.subheader("📈 Evolução da Carga")
+
+carga = df.groupby("Data", as_index=False)["Horas"].sum().sort_values("Data")
+carga["Carga Acumulada (h)"] = carga["Horas"].cumsum()
+
+fig_carga = px.line(
+    carga,
+    x="Data",
+    y="Carga Acumulada (h)",
+    title="Carga Acumulada no Tempo",
+    markers=True
+)
+
+st.plotly_chart(fig_carga, use_container_width=True)
 
 # ===============================
 # PV CLIENTE
 # ===============================
 st.subheader("📌 PV por Cliente")
 
-pv_cliente = df.groupby("Cliente")["PV"].nunique().reset_index()
+pv_cliente = df.groupby("Cliente", as_index=False)["PV"].nunique()
 total = pv_cliente["PV"].sum()
-pv_cliente = pd.concat([pv_cliente, pd.DataFrame([{"Cliente":"TOTAL","PV":total}])])
+
+pv_cliente = pd.concat(
+    [pv_cliente, pd.DataFrame([{"Cliente": "TOTAL", "PV": total}])],
+    ignore_index=True
+)
 
 fig_cliente = px.bar(pv_cliente, x="Cliente", y="PV", text="PV")
 fig_cliente.update_traces(textposition="outside")
+
 st.plotly_chart(fig_cliente, use_container_width=True)
+
+# ===============================
+# FILA POR PROCESSO
+# ===============================
+st.subheader("📦 Fila por Processo")
+
+fila_exibicao = df[["PV", "Cliente", "Processo", "Data", "Horas", "Fila Acumulada (h)", "Fila (dias)"]].copy()
+fila_exibicao["Horas"] = fila_exibicao["Horas"].round(1)
+fila_exibicao["Fila Acumulada (h)"] = fila_exibicao["Fila Acumulada (h)"].round(1)
+fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
+
+st.dataframe(fila_exibicao)
 
 # ===============================
 # AUDITORIA
 # ===============================
 st.subheader("📌 Auditoria de Capacidade")
-st.dataframe(dem)
+
+auditoria = dem.copy()
+auditoria["Horas"] = auditoria["Horas"].round(1)
+
+st.dataframe(auditoria)
 
 # ===============================
 # CALENDÁRIO
 # ===============================
 st.subheader("📅 Calendário Industrial")
-st.dataframe(calendario)
+st.dataframe(cal)
 
 # ===============================
-# 🔥 PREVISÃO ATRASO PV
+# ATRASO
 # ===============================
 st.subheader("⏱️ Previsão de Atraso por PV")
 
-pv_carga = df.groupby(["PV","Cliente","Data"])["Horas"].sum().reset_index()
+pv_carga = df.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"].sum()
 
-pv_carga["Dias Necessários"] = (pv_carga["Horas"] / HORAS_DIA)
+pv_carga["Dias Necessários"] = pv_carga["Horas"] / HORAS_DIA
 
 hoje = pd.Timestamp.today().normalize()
 
@@ -241,56 +401,61 @@ pv_carga["Dias Disponíveis"] = pv_carga["Data"].apply(
 
 pv_carga["Atraso (dias)"] = (
     pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
-)
+).apply(lambda x: max(0, math.ceil(x)))
 
-pv_carga["Atraso (dias)"] = pv_carga["Atraso (dias)"].apply(
-    lambda x: max(0, math.ceil(x))
-)
+pv_carga_exibicao = pv_carga.copy()
+pv_carga_exibicao["Horas"] = pv_carga_exibicao["Horas"].round(1)
+pv_carga_exibicao["Dias Necessários"] = pv_carga_exibicao["Dias Necessários"].round(1)
 
-pv_carga = pv_carga.sort_values(by="Atraso (dias)", ascending=False)
-
-st.dataframe(pv_carga)
+st.dataframe(pv_carga_exibicao)
 
 # ===============================
-# 🥧 PIZZA ATRASO (NOVO)
+# PIZZA
 # ===============================
-st.subheader("🥧 Distribuição de Atraso por Dias")
+st.subheader("🥧 Distribuição de Atraso")
 
-atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0]
+atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
 if not atrasos.empty:
-    dist = atrasos.groupby("Atraso (dias)")["PV"].count().reset_index()
-    dist["Label"] = dist["Atraso (dias)"].astype(str) + " dia(s)"
+    dist = atrasos.groupby("Atraso (dias)", as_index=False)["PV"].count()
 
-    fig_pizza = px.pie(
-        dist,
-        names="Label",
-        values="PV"
+    fig_pizza = px.pie(dist, names="Atraso (dias)", values="PV")
+    st.plotly_chart(fig_pizza, use_container_width=True)
+
+    atraso_select = st.selectbox(
+        "Selecionar atraso",
+        sorted(atrasos["Atraso (dias)"].unique())
     )
 
-    st.plotly_chart(fig_pizza, use_container_width=True)
+    detalhe = atrasos[atrasos["Atraso (dias)"] == atraso_select].copy()
+    detalhe["Horas"] = detalhe["Horas"].round(1)
+    detalhe["Dias Necessários"] = detalhe["Dias Necessários"].round(1)
+
+    st.subheader("📋 Detalhamento")
+    st.dataframe(detalhe)
+
 else:
-    st.success("Nenhum PV em atraso 🎉")
+    st.success("Nenhum atraso 🎉")
 
 # ===============================
-# 🟡 RISCO
+# RISCO
 # ===============================
 st.subheader("⚠️ PVs em Risco")
 
 risco = pv_carga[
     (pv_carga["Atraso (dias)"] == 0) &
     (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
-]
+].copy()
 
-if not risco.empty:
-    fig_risco = px.bar(risco, x="PV", y="Dias Necessários", text="Dias Necessários")
-    fig_risco.update_traces(textposition="outside")
-    st.plotly_chart(fig_risco, use_container_width=True)
-else:
-    st.info("Nenhum PV em risco")
+risco_exibicao = risco.copy()
+if not risco_exibicao.empty:
+    risco_exibicao["Horas"] = risco_exibicao["Horas"].round(1)
+    risco_exibicao["Dias Necessários"] = risco_exibicao["Dias Necessários"].round(1)
+
+st.dataframe(risco_exibicao)
 
 # ===============================
-# 📊 RESUMO
+# RESUMO
 # ===============================
 st.subheader("📊 Resumo Geral")
 
