@@ -263,7 +263,7 @@ else:
 # ===============================
 # AGRUPAMENTO POR PROCESSO
 # ===============================
-dem = df.groupby(["Processo"])["Horas"].sum().reset_index()
+dem_proc = df.groupby(["Processo"])["Horas"].sum().reset_index()
 
 # ===============================
 # MÉTRICAS
@@ -290,10 +290,10 @@ capacidade_proc = {
     for proc in processos
 }
 
-dem["Capacidade Processo"] = dem["Processo"].map(capacidade_proc)
+dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 
-dem["Utilização (%)"] = (
-    dem["Horas"] / dem["Capacidade Processo"] * 100
+dem_proc["Utilização (%)"] = (
+    dem_proc["Horas"] / dem_proc["Capacidade Processo"] * 100
 ).round(0)
 
 # ===============================
@@ -512,7 +512,19 @@ c3.metric("Utilização (%)", utilizacao_global)
 # ===============================
 st.subheader("🏭 Capacidade x Carga por Processo")
 
-st.dataframe(dem)
+st.dataframe(dem_proc)
+st.subheader("📊 Utilização por Processo (%)")
+
+fig_proc = px.bar(
+    dem_proc.sort_values("Utilização (%)", ascending=False),
+    x="Processo",
+    y="Utilização (%)",
+    text="Horas"
+)
+
+fig_proc.add_hline(y=100, line_dash="dash")
+
+st.plotly_chart(fig_proc, use_container_width=True)
 
 # ===============================
 # RESUMO
