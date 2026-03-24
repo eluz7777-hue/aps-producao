@@ -262,24 +262,6 @@ dem["Status"] = dem["Ocupação (%)"].apply(status)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # ===============================
-# INDICADORES EXECUTIVOS
-# ===============================
-st.subheader("📊 Indicadores Gerais")
-
-col_a, col_b, col_c = st.columns(3)
-
-total_horas = df["Horas"].sum()
-total_capacidade = dem["Capacidade"].sum()
-utilizacao_global = 0
-
-if total_capacidade > 0:
-    utilizacao_global = int(round((total_horas / total_capacidade) * 100, 0))
-
-col_a.metric("Carga Total (h)", int(round(total_horas, 0)))
-col_b.metric("Capacidade Total (h)", int(round(total_capacidade, 0)))
-col_c.metric("Utilização Global (%)", utilizacao_global)
-
-# ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
 # ===============================
 st.subheader("⚠️ Capacidade Crítica")
