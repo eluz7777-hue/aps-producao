@@ -218,23 +218,21 @@ for _, row in df_pv.iterrows():
     for proc in processos:
         valor_tempo = roteiro.get(proc)
 
-        if pd.notna(valor_tempo):
-            valor_tempo = str(valor_tempo).strip().replace(",", ".")
+        if pd.notna(tempo) and tempo > 0:
+    if tempo > 2500:
+        pass  # aceita, mas pode ser auditado depois
 
-        tempo = pd.to_numeric(valor_tempo, errors="coerce")
+    teve_processo_valido = True
 
-        if pd.notna(tempo) and tempo > 0 and tempo < 1000:
-            teve_processo_valido = True
+    horas = (tempo * float(row["QTD"])) / 60
 
-            horas = (tempo * float(row["QTD"])) / 60
-
-            linhas.append({
-                "PV": row["PV"],
-                "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-                "Processo": proc,
-                "Data": row["ENTREGA"],
-                "Horas": horas
-            })
+    linhas.append({
+        "PV": row["PV"],
+        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+        "Processo": proc,
+        "Data": row["ENTREGA"],
+        "Horas": horas
+    })
 
     if not teve_processo_valido:
         registro = {
