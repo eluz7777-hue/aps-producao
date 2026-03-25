@@ -35,23 +35,27 @@ with col2:
 EFICIENCIA = 0.8
 HORAS_DIA = 44 / 5  # 8.8 horas por dia útil
 MAQUINAS = {
-    "FRESADORAS": 2,
-    "SOLDAGEM": 4,
-    "TORNO": 3,
+    "CORTE - SERRA": 2,          # Serra Fita + Serra Circular
     "CORTE-PLASMA": 1,
     "CORTE-LASER": 1,
-    "SERRA FITA": 1,
-    "SERRA CIRCULAR": 1,
-    "CENTRO USINAGEM": 1,
-    "DOBRADEIRA": 2,
+    "CORTE-GUILHOTINA": 0,
+    "TORNO CONVENCIONAL": 2,
+    "TORNO CNC": 0,
+    "CENTRO DE USINAGEM": 1,
+    "FRESADORAS": 2,
     "PRENSA (AMASSAMENTO)": 1,
+    "CALANDRA": 1,
+    "DOBRADEIRA": 2,
     "ROSQUEADEIRA": 1,
-    "ACABAMENTO": 3,
-    "CALANDRA": 2,
+    "METALEIRA": 1,
+    "FURADEIRA DE BANCADA": 1,
+    "SOLDAGEM": 4,
+    "ACABAMENTO": 4,
+    "JATEAMENTO": 1,
     "PINTURA": 1,
-    "METALEIRA": 1
+    "MONTAGEM": 1,
+    "DIVERSOS": 1
 }
-
 # ===============================
 # FERIADOS
 # ===============================
@@ -110,11 +114,13 @@ BASE_PATH = os.getcwd()
 
 df_pv, df_base = carregar_dados(BASE_PATH)
 
+# Normaliza cabeçalhos
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 df_base.columns = [c.strip().upper() for c in df_base.columns]
 
+# Padroniza nomes da planilha PV
 df_pv = df_pv.rename(columns={
-    "CÓDIGO": "CODIGO",
+    "CÓDIGO": "CODIGO_PV",
     "DATA DE ENTREGA": "ENTREGA",
     "QUANTIDADE": "QTD"
 })
@@ -123,42 +129,58 @@ def normalizar_codigo(x):
     if pd.isna(x):
         return ""
     x = str(x)
-    x = x.replace("\xa0", "")   # remove espaço invisível do Excel
+    x = x.replace("\xa0", "")   # espaço invisível do Excel
     x = x.replace(" ", "")
     x = x.replace(".0", "")
     x = x.strip()
     return x
 
-df_pv["CODIGO"] = df_pv["CODIGO"].apply(normalizar_codigo)
+# Normalização segura sem colunas duplicadas
+df_pv["CODIGO_PV"] = df_pv["CODIGO_PV"].apply(normalizar_codigo)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
-# chave limpa para cruzamento seguro
-df_pv["CODIGO_KEY"] = df_pv["CODIGO"].astype(str).str.strip()
+# Chaves de cruzamento
+df_pv["CODIGO_KEY"] = df_pv["CODIGO_PV"].astype(str).str.strip()
 df_base["CODIGO_KEY"] = df_base["CODIGO"].astype(str).str.strip()
 
-# campos principais
+# Campos principais
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
 
-# remove apenas linhas realmente sem código
+# Remove apenas linhas sem código
 df_pv = df_pv[df_pv["CODIGO_KEY"] != ""].copy()
 df_base = df_base[df_base["CODIGO_KEY"] != ""].copy()
 
-# auditoria de cruzamento
+# Auditoria de cruzamento
 codigos_pv = set(df_pv["CODIGO_KEY"].unique())
 codigos_base = set(df_base["CODIGO_KEY"].unique())
-
 codigos_sem_cruzamento = codigos_pv - codigos_base
 
 # ===============================
 # PROCESSOS
 # ===============================
 PROCESSOS_VALIDOS = [
-    "FRESADORAS", "SOLDAGEM", "TORNO", "CORTE-PLASMA", "CORTE-LASER",
-    "SERRA FITA", "SERRA CIRCULAR", "CENTRO USINAGEM", "DOBRADEIRA",
-    "PRENSA (AMASSAMENTO)", "ROSQUEADEIRA", "ACABAMENTO",
-    "CALANDRA", "PINTURA", "METALEIRA"
+    "CORTE - SERRA",
+    "CORTE-PLASMA",
+    "CORTE-LASER",
+    "CORTE-GUILHOTINA",
+    "TORNO CONVENCIONAL",
+    "TORNO CNC",
+    "CENTRO DE USINAGEM",
+    "FRESADORAS",
+    "PRENSA (AMASSAMENTO)",
+    "CALANDRA",
+    "DOBRADEIRA",
+    "ROSQUEADEIRA",
+    "METALEIRA",
+    "FURADEIRA DE BANCADA",
+    "SOLDAGEM",
+    "ACABAMENTO",
+    "JATEAMENTO",
+    "PINTURA",
+    "MONTAGEM",
+    "DIVERSOS"
 ]
 
 # Considera somente processos que realmente existem na planilha
@@ -185,7 +207,7 @@ for _, row in df_pv.iterrows():
         pvs_sem_carga.append({
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO"],
+            "CODIGO": row["CODIGO_PV"],
             "Motivo": "Data de entrega inválida"
         })
         continue
@@ -194,7 +216,7 @@ for _, row in df_pv.iterrows():
         pvs_sem_carga.append({
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO"],
+            "CODIGO": row["CODIGO_PV"],
             "Motivo": "Quantidade zero ou inválida"
         })
         continue
@@ -205,7 +227,7 @@ for _, row in df_pv.iterrows():
         registro = {
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO"],
+            "CODIGO": row["CODIGO_PV"],
             "Motivo": "Código sem roteiro no Processo de Fabricação"
         }
         pvs_excluidas.append(registro)
@@ -240,7 +262,7 @@ for _, row in df_pv.iterrows():
         registro = {
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO"],
+            "CODIGO": row["CODIGO_PV"],
             "Motivo": "Sem processo válido com tempo > 0"
         }
 
@@ -262,7 +284,7 @@ for pv_faltante in pvs_faltantes_silenciosas:
         pvs_excluidas.append({
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO"],
+            "CODIGO": row["CODIGO_PV"],
             "Motivo": "PV não carregada no APS por inconsistência de cruzamento"
         })
 
