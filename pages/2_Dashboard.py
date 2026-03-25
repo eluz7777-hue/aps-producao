@@ -127,17 +127,24 @@ def normalizar_codigo(x):
     x = x.replace(" ", "")
     return x
 
+# Normalização de códigos
 df_pv["CODIGO"] = df_pv["CODIGO"].apply(normalizar_codigo)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
-codigos_pv = set(df_pv["CODIGO"].dropna().astype(str).str.strip().unique())
-codigos_base = set(df_base["CODIGO"].dropna().astype(str).str.strip().unique())
 
-codigos_sem_cruzamento = codigos_pv - codigos_base
-
+# Normalização de campos principais
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
-df_base = df_base.drop_duplicates(subset=["CODIGO"])
+
+# Remover apenas linhas totalmente sem código
+df_pv = df_pv[df_pv["CODIGO"] != ""].copy()
+df_base = df_base[df_base["CODIGO"] != ""].copy()
+
+# Auditoria de cruzamento entre bancos
+codigos_pv = set(df_pv["CODIGO"].astype(str).str.strip().unique())
+codigos_base = set(df_base["CODIGO"].astype(str).str.strip().unique())
+
+codigos_sem_cruzamento = codigos_pv - codigos_base
 
 # ===============================
 # PROCESSOS
@@ -173,9 +180,10 @@ for _, row in df_pv.iterrows():
     for proc in processos:
         valor_tempo = roteiro.get(proc)
 
-if pd.notna(valor_tempo):
-    valor_tempo = str(valor_tempo).strip().replace(",", ".")
-tempo = pd.to_numeric(valor_tempo, errors="coerce")
+        if pd.notna(valor_tempo):
+            valor_tempo = str(valor_tempo).strip().replace(",", ".")
+
+        tempo = pd.to_numeric(valor_tempo, errors="coerce")
 
         # Mantida a proteção já existente
         if pd.notna(tempo) and tempo > 0 and tempo < 1000:
@@ -199,8 +207,8 @@ tempo = pd.to_numeric(valor_tempo, errors="coerce")
         })
 
 df = pd.DataFrame(linhas)
-pvs_aps_set = set(df["PV"].astype(str).str.strip().unique()) if not df.empty else set()
 
+pvs_aps_set = set(df["PV"].astype(str).str.strip().unique()) if not df.empty else set()
 pvs_excluidas_set = set([str(x["PV"]).strip() for x in pvs_excluidas])
 
 pvs_faltantes_silenciosas = pvs_excel_set - pvs_aps_set - pvs_excluidas_set
@@ -217,9 +225,12 @@ for pv_faltante in pvs_faltantes_silenciosas:
             "Motivo": "PV não carregada no APS por inconsistência de cruzamento"
         })
 
+df_excluidas = pd.DataFrame(pvs_excluidas)
+
 if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
     st.stop()
+
 # ===============================
 # FILTRO POR CLIENTE
 # ===============================
@@ -706,6 +717,20 @@ if not df_excluidas.empty:
     st.dataframe(df_excluidas)
 else:
     st.success("Nenhuma PV foi excluída do APS.")
+
+# ===============================
+# CÓDIGOS SEM CRUZAMENTO ENTRE BANCOS
+# ===============================
+st.subheader("🔎 Códigos sem Cruzamento entre Bancos")
+
+df_codigos_sem_cruzamento = pd.DataFrame(
+    {"CODIGO": sorted(list(codigos_sem_cruzamento))}
+)
+
+if not df_codigos_sem_cruzamento.empty:
+    st.dataframe(df_codigos_sem_cruzamento)
+else:
+    st.success("Todos os códigos da Relação PV cruzaram com o Processo de Fabricação.")
 
 # ===============================
 # CÓDIGOS SEM CRUZAMENTO ENTRE BANCOS
