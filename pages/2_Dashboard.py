@@ -122,27 +122,32 @@ df_pv = df_pv.rename(columns={
 def normalizar_codigo(x):
     if pd.isna(x):
         return ""
-    x = str(x).strip()
-    x = x.replace(".0", "")
+    x = str(x)
+    x = x.replace("\xa0", "")   # remove espaço invisível do Excel
     x = x.replace(" ", "")
+    x = x.replace(".0", "")
+    x = x.strip()
     return x
 
-# Normalização de códigos
 df_pv["CODIGO"] = df_pv["CODIGO"].apply(normalizar_codigo)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
-# Normalização de campos principais
+# chave limpa para cruzamento seguro
+df_pv["CODIGO_KEY"] = df_pv["CODIGO"].astype(str).str.strip()
+df_base["CODIGO_KEY"] = df_base["CODIGO"].astype(str).str.strip()
+
+# campos principais
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
 
-# Remover apenas linhas totalmente sem código
-df_pv = df_pv[df_pv["CODIGO"] != ""].copy()
-df_base = df_base[df_base["CODIGO"] != ""].copy()
+# remove apenas linhas realmente sem código
+df_pv = df_pv[df_pv["CODIGO_KEY"] != ""].copy()
+df_base = df_base[df_base["CODIGO_KEY"] != ""].copy()
 
-# Auditoria de cruzamento entre bancos
-codigos_pv = set(df_pv["CODIGO"].astype(str).str.strip().unique())
-codigos_base = set(df_base["CODIGO"].astype(str).str.strip().unique())
+# auditoria de cruzamento
+codigos_pv = set(df_pv["CODIGO_KEY"].unique())
+codigos_base = set(df_base["CODIGO_KEY"].unique())
 
 codigos_sem_cruzamento = codigos_pv - codigos_base
 
@@ -194,7 +199,7 @@ for _, row in df_pv.iterrows():
         })
         continue
 
-    roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
+    roteiro = df_base[df_base["CODIGO_KEY"] == row["CODIGO_KEY"]]
 
     if roteiro.empty:
         registro = {
