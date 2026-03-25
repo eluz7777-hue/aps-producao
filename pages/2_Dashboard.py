@@ -787,3 +787,33 @@ if not df_sem_carga.empty:
     st.dataframe(df_sem_carga.drop_duplicates())
 else:
     st.success("Todas as PVs válidas geraram carga.")
+
+# ===============================
+# DIAGNÓSTICO PV x ROTEIRO
+# ===============================
+st.subheader("🔎 Diagnóstico de Cruzamento PV x Roteiro")
+
+codigos_pv = set(df_pv["CODIGO_KEY"].dropna().astype(str).str.strip().unique())
+codigos_base = set(df_base["CODIGO_KEY"].dropna().astype(str).str.strip().unique())
+
+codigos_nao_encontrados = codigos_pv - codigos_base
+
+if codigos_nao_encontrados:
+    df_erro = df_pv[df_pv["CODIGO_KEY"].isin(codigos_nao_encontrados)].copy()
+
+    resumo_diagnostico = (
+        df_erro.groupby("CODIGO_KEY")
+        .agg(
+            Qtde_PVs=("PV", "nunique"),
+            Lista_PVs=("PV", lambda x: ", ".join(sorted(set(x.astype(str))))),
+            Cliente=("CLIENTE", "first")
+        )
+        .reset_index()
+        .rename(columns={"CODIGO_KEY": "CODIGO"})
+        .sort_values("Qtde_PVs", ascending=False)
+    )
+
+    st.error(f"{len(resumo_diagnostico)} código(s) da Relação PV não foram encontrados no roteiro de fabricação.")
+    st.dataframe(resumo_diagnostico)
+else:
+    st.success("Todos os códigos da Relação PV foram encontrados no roteiro de fabricação.")
