@@ -119,8 +119,16 @@ df_pv = df_pv.rename(columns={
     "QUANTIDADE": "QTD"
 })
 
-df_pv["CODIGO"] = df_pv["CODIGO"].astype(str).str.strip()
-df_base["CODIGO"] = df_base["CODIGO"].astype(str).str.strip()
+def normalizar_codigo(x):
+    if pd.isna(x):
+        return ""
+    x = str(x).strip()
+    x = x.replace(".0", "")
+    x = x.replace(" ", "")
+    return x
+
+df_pv["CODIGO"] = df_pv["CODIGO"].apply(normalizar_codigo)
+df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
@@ -143,6 +151,7 @@ processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 # EXPANSÃO CORRIGIDA (SEM ERRO)
 # ===============================
 pvs_totais_excel = df_pv["PV"].astype(str).str.strip().nunique()
+pvs_excel_set = set(df_pv["PV"].astype(str).str.strip().unique())
 
 linhas = []
 pvs_excluidas = []
@@ -187,6 +196,23 @@ for _, row in df_pv.iterrows():
         })
 
 df = pd.DataFrame(linhas)
+pvs_aps_set = set(df["PV"].astype(str).str.strip().unique()) if not df.empty else set()
+
+pvs_excluidas_set = set([str(x["PV"]).strip() for x in pvs_excluidas])
+
+pvs_faltantes_silenciosas = pvs_excel_set - pvs_aps_set - pvs_excluidas_set
+
+for pv_faltante in pvs_faltantes_silenciosas:
+    linha_pv = df_pv[df_pv["PV"].astype(str).str.strip() == pv_faltante]
+
+    if not linha_pv.empty:
+        row = linha_pv.iloc[0]
+        pvs_excluidas.append({
+            "PV": row["PV"],
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO"],
+            "Motivo": "PV não carregada no APS por inconsistência de cruzamento"
+        })
 
 if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
@@ -350,8 +376,9 @@ pv_carga["Atraso (dias)"] = (
 # ===============================
 # PIZZA / ATRASOS
 # ===============================
-pvs_no_aps = df["PV"].astype(str).str.strip().nunique()
-pvs_fora_aps = pvs_totais_excel - pvs_no_aps
+df_excluidas = pd.DataFrame(pvs_excluidas)
+pvs_no_aps = len(pvs_aps_set)
+pvs_fora_aps = df_excluidas["PV"].astype(str).str.strip().nunique() if not df_excluidas.empty else 0
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
 # ===============================
@@ -564,8 +591,10 @@ gargalos = dem.sort_values(
 ).copy()
 
 top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
-
-st.dataframe(top_gargalos)
+top_gargalos["Semáforo"] = top_gargalos["Ocupação (%)"].apply(status)
+st.dataframe(
+    top_gargalos[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]]
+)
 st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
 fig_cap_proc = px.bar(
@@ -629,8 +658,11 @@ st.subheader("📌 Auditoria de Capacidade")
 
 auditoria = dem.copy()
 auditoria["Horas"] = auditoria["Horas"].round(1)
+auditoria["Semáforo"] = auditoria["Ocupação (%)"].apply(status)
 
-st.dataframe(auditoria)
+st.dataframe(
+    auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]]
+)
 
 # ===============================
 # ATRASO
