@@ -142,21 +142,38 @@ processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 # ===============================
 # EXPANSÃO CORRIGIDA (SEM ERRO)
 # ===============================
+pvs_totais_excel = df_pv["PV"].astype(str).str.strip().nunique()
 linhas = []
-
+pvs_excluidas = []
 for _, row in df_pv.iterrows():
     roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
 
     if roteiro.empty:
-        continue
+    pvs_excluidas.append({
+        "PV": row["PV"],
+        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+        "CODIGO": row["CODIGO"],
+        "Motivo": "Código sem roteiro no Processo de Fabricação"
+    })
+    continue
 
     roteiro = roteiro.iloc[0]
 
+    teve_processo_valido = False
     for proc in processos:
         tempo = pd.to_numeric(roteiro.get(proc), errors="coerce")
 
+if not teve_processo_valido:
+    pvs_excluidas.append({
+        "PV": row["PV"],
+        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+        "CODIGO": row["CODIGO"],
+        "Motivo": "Sem processo válido com tempo > 0"
+    })
+
         # Mantida a proteção já existente
         if pd.notna(tempo) and tempo > 0 and tempo < 1000:
+    teve_processo_valido = True
             horas = (tempo * float(row["QTD"])) / 60
 
             linhas.append({
@@ -173,9 +190,11 @@ if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
     st.stop()
 
+
 # ===============================
 # FILTRO POR CLIENTE
 # ===============================
+df_excluidas = pd.DataFrame(pvs_excluidas)
 df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
 
 clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
@@ -331,6 +350,8 @@ pv_carga["Atraso (dias)"] = (
 # ===============================
 # PIZZA / ATRASOS
 # ===============================
+pvs_no_aps = df["PV"].astype(str).str.strip().nunique()
+pvs_fora_aps = pvs_totais_excel - pvs_no_aps
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
 # ===============================
@@ -380,6 +401,11 @@ col1, col2, col3 = st.columns(3)
 col1.metric("🔴 Atraso", len(atrasos))
 col2.metric("🟡 Risco", len(risco))
 col3.metric("🟢 OK", len(pv_carga) - len(atrasos) - len(risco))
+
+c4, c5 = st.columns(2)
+
+c4.metric("PVs no Excel", pvs_totais_excel)
+c5.metric("PVs no APS", pvs_no_aps)
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -556,7 +582,7 @@ fig_cap_proc.update_layout(
     xaxis_title="Processo"
 )
 
-st.plotly_chart(fig_cap_proc, use_container_width=True)
+st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
 
 # ===============================
 # CAPACIDADE X CARGA POR PROCESSO
@@ -634,3 +660,13 @@ st.dataframe(risco_exibicao)
 # ===============================
 st.subheader("📅 Calendário Industrial")
 st.dataframe(cal)
+
+# ===============================
+# PVs EXCLUÍDAS DO APS
+# ===============================
+st.subheader("🚫 PVs Excluídas do APS")
+
+if not df_excluidas.empty:
+    st.dataframe(df_excluidas)
+else:
+    st.success("Nenhuma PV foi excluída do APS.")
