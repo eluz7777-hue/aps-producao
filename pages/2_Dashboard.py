@@ -440,6 +440,25 @@ fig_proc.update_traces(texttemplate="%{text}")
 fig_proc.update_yaxes(title="Utilização (%)")
 
 st.plotly_chart(fig_proc, use_container_width=True)
+st.subheader("🥧 Distribuição de Status dos Processos")
+
+status_proc = dem_proc.groupby("Faixa", as_index=False)["Processo"].count()
+status_proc = status_proc.rename(columns={"Processo": "Quantidade"})
+
+fig_status = px.pie(
+    status_proc,
+    names="Faixa",
+    values="Quantidade",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    },
+    title="Status dos Processos"
+)
+
+st.plotly_chart(fig_status, use_container_width=True)
 
 # ===============================
 # CURVA DE CARGA
@@ -521,6 +540,23 @@ gargalos = dem.sort_values(
 top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
 
 st.dataframe(top_gargalos)
+st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
+
+fig_cap_proc = px.bar(
+    dem_proc.sort_values("Capacidade Processo", ascending=False),
+    x="Processo",
+    y=["Horas", "Capacidade Processo"],
+    barmode="group",
+    text_auto=".0f",
+    title="Carga Real x Capacidade por Processo (h)"
+)
+
+fig_cap_proc.update_layout(
+    yaxis_title="Horas",
+    xaxis_title="Processo"
+)
+
+st.plotly_chart(fig_cap_proc, use_container_width=True)
 
 # ===============================
 # CAPACIDADE X CARGA POR PROCESSO
