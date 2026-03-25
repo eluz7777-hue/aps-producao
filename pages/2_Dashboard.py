@@ -817,3 +817,35 @@ if codigos_nao_encontrados:
     st.dataframe(resumo_diagnostico)
 else:
     st.success("Todos os códigos da Relação PV foram encontrados no roteiro de fabricação.")
+
+# ===============================
+# INSPEÇÃO DOS CÓDIGOS NÃO ENCONTRADOS
+# ===============================
+st.subheader("🧪 Inspeção dos Códigos Não Encontrados no Roteiro")
+
+if codigos_nao_encontrados:
+    codigos_base_lista = sorted(df_base["CODIGO_KEY"].dropna().astype(str).unique())
+
+    inspecao = []
+
+    for cod_fora in sorted(codigos_nao_encontrados):
+        parecidos = [c for c in codigos_base_lista if cod_fora in c or c in cod_fora]
+
+        if parecidos:
+            for p in parecidos:
+                inspecao.append({
+                    "CODIGO_PROCURADO": cod_fora,
+                    "CODIGO_ENCONTRADO_NO_BASE": p,
+                    "STATUS": "Parecido encontrado"
+                })
+        else:
+            inspecao.append({
+                "CODIGO_PROCURADO": cod_fora,
+                "CODIGO_ENCONTRADO_NO_BASE": "NÃO ENCONTRADO",
+                "STATUS": "Sem correspondência"
+            })
+
+    df_inspecao = pd.DataFrame(inspecao)
+    st.dataframe(df_inspecao)
+else:
+    st.success("Nenhum código pendente para inspeção.")
