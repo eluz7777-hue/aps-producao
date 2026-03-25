@@ -300,7 +300,7 @@ dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 
 dem_proc["Utilização (%)"] = (
     dem_proc["Horas"] / dem_proc["Capacidade Processo"] * 100
-).round(0)
+).round(0).astype(int)
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -511,19 +511,19 @@ c3.metric("Utilização (%)", utilizacao_global)
 # ===============================
 # VISÃO CAPACIDADE POR PROCESSO
 # ===============================
-st.subheader("🏭 Capacidade x Carga por Processo")
-
-st.dataframe(dem_proc)
 st.subheader("📊 Utilização por Processo (%)")
 
 fig_proc = px.bar(
     dem_proc.sort_values("Utilização (%)", ascending=False),
     x="Processo",
     y="Utilização (%)",
-    text="Horas"
+    text="Utilização (%)"
 )
 
 fig_proc.add_hline(y=100, line_dash="dash")
+
+fig_proc.update_traces(texttemplate="%{text}")
+fig_proc.update_yaxes(title="Utilização (%)")
 
 st.plotly_chart(fig_proc, use_container_width=True)
 
