@@ -680,21 +680,6 @@ st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_
 # ===============================
 st.subheader("🏭 Capacidade x Carga por Processo")
 st.dataframe(dem_proc)
-fig_cap_proc = px.bar(
-    dem_proc.sort_values("Capacidade Processo", ascending=False),
-    x="Processo",
-    y=["Horas", "Capacidade Processo"],
-    barmode="group",
-    text_auto=".0f",
-    title="Carga Real x Capacidade por Processo (h)"
-)
-
-fig_cap_proc.update_layout(
-    yaxis_title="Horas",
-    xaxis_title="Processo"
-)
-
-st.plotly_chart(fig_cap_proc, use_container_width=True)
 
 # ============================================================
 # ==================== TABELAS E AUDITORIA ===================
