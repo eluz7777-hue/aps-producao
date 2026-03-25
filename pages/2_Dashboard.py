@@ -149,9 +149,15 @@ codigos_sem_cruzamento = codigos_pv - codigos_base
 # ===============================
 # PROCESSOS
 # ===============================
-COLUNAS_FIXAS = ["CODIGO"]
+PROCESSOS_VALIDOS = [
+    "FRESADORAS", "SOLDAGEM", "TORNO", "CORTE-PLASMA", "CORTE-LASER",
+    "SERRA FITA", "SERRA CIRCULAR", "CENTRO USINAGEM", "DOBRADEIRA",
+    "PRENSA (AMASSAMENTO)", "ROSQUEADEIRA", "ACABAMENTO",
+    "CALANDRA", "PINTURA", "METALEIRA"
+]
 
-processos = [c for c in df_base.columns if c not in COLUNAS_FIXAS]
+# Considera somente processos que realmente existem na planilha
+processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 
 # ===============================
 # EXPANSÃO CORRIGIDA (SEM ERRO)
