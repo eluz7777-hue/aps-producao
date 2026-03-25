@@ -301,6 +301,15 @@ dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 dem_proc["Utilização (%)"] = (
     dem_proc["Horas"] / dem_proc["Capacidade Processo"] * 100
 ).round(0).astype(int)
+def faixa_utilizacao(x):
+    if x > 100:
+        return "Crítico"
+    elif x > 80:
+        return "Atenção"
+    else:
+        return "OK"
+
+dem_proc["Faixa"] = dem_proc["Utilização (%)"].apply(faixa_utilizacao)
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -517,7 +526,13 @@ fig_proc = px.bar(
     dem_proc.sort_values("Utilização (%)", ascending=False),
     x="Processo",
     y="Utilização (%)",
-    text="Utilização (%)"
+    text="Utilização (%)",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    }
 )
 
 fig_proc.add_hline(y=100, line_dash="dash")
