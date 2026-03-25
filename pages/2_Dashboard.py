@@ -159,19 +159,46 @@ processos = [c for c in df_base.columns if c not in COLUNAS_FIXAS]
 pvs_totais_excel = df_pv["PV"].astype(str).str.strip().nunique()
 pvs_excel_set = set(df_pv["PV"].astype(str).str.strip().unique())
 
+pvs_processadas = set()
+
 linhas = []
 pvs_excluidas = []
+pvs_sem_carga = []
 
 for _, row in df_pv.iterrows():
+    pv_atual = str(row["PV"]).strip()
+    pvs_processadas.add(pv_atual)
+
+    # Validação de dados básicos
+    if pd.isna(row["ENTREGA"]):
+        pvs_sem_carga.append({
+            "PV": row["PV"],
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO"],
+            "Motivo": "Data de entrega inválida"
+        })
+        continue
+
+    if float(row["QTD"]) <= 0:
+        pvs_sem_carga.append({
+            "PV": row["PV"],
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO"],
+            "Motivo": "Quantidade zero ou inválida"
+        })
+        continue
+
     roteiro = df_base[df_base["CODIGO"] == row["CODIGO"]]
 
     if roteiro.empty:
-        pvs_excluidas.append({
+        registro = {
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
             "CODIGO": row["CODIGO"],
             "Motivo": "Código sem roteiro no Processo de Fabricação"
-        })
+        }
+        pvs_excluidas.append(registro)
+        pvs_sem_carga.append(registro)
         continue
 
     roteiro = roteiro.iloc[0]
@@ -185,9 +212,9 @@ for _, row in df_pv.iterrows():
 
         tempo = pd.to_numeric(valor_tempo, errors="coerce")
 
-        # Mantida a proteção já existente
         if pd.notna(tempo) and tempo > 0 and tempo < 1000:
             teve_processo_valido = True
+
             horas = (tempo * float(row["QTD"])) / 60
 
             linhas.append({
@@ -195,16 +222,19 @@ for _, row in df_pv.iterrows():
                 "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
                 "Processo": proc,
                 "Data": row["ENTREGA"],
-                "Horas": horas  # sem arredondar na base
+                "Horas": horas
             })
 
     if not teve_processo_valido:
-        pvs_excluidas.append({
+        registro = {
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
             "CODIGO": row["CODIGO"],
             "Motivo": "Sem processo válido com tempo > 0"
-        })
+        }
+
+        pvs_excluidas.append(registro)
+        pvs_sem_carga.append(registro)
 
 df = pd.DataFrame(linhas)
 
@@ -226,6 +256,7 @@ for pv_faltante in pvs_faltantes_silenciosas:
         })
 
 df_excluidas = pd.DataFrame(pvs_excluidas)
+df_sem_carga = pd.DataFrame(pvs_sem_carga)
 
 if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
@@ -332,7 +363,9 @@ dem_proc = df.groupby(["Processo"])["Horas"].sum().reset_index()
 # ===============================
 # MÉTRICAS
 # ===============================
-dem["Ocupação (%)"] = ((dem["Horas"] / dem["Capacidade"]) * 100).replace([float("inf")], 0).fillna(0)
+dem["Ocupação (%)"] = (dem["Horas"] / dem["Capacidade"]) * 100
+dem["Ocupação (%)"] = dem["Ocupação (%)"].replace([float("inf"), -float("inf")], 0)
+dem["Ocupação (%)"] = dem["Ocupação (%)"].fillna(0)
 dem["Ocupação (%)"] = dem["Ocupação (%)"].round(0).astype(int)
 
 def status(x):
@@ -358,7 +391,11 @@ dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 
 dem_proc["Utilização (%)"] = (
     dem_proc["Horas"] / dem_proc["Capacidade Processo"] * 100
-).round(0).astype(int)
+)
+
+dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].replace([float("inf"), -float("inf")], 0)
+dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].fillna(0)
+dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].round(0).astype(int)
 
 def faixa_utilizacao(x):
     if x > 100:
@@ -719,29 +756,11 @@ else:
     st.success("Nenhuma PV foi excluída do APS.")
 
 # ===============================
-# CÓDIGOS SEM CRUZAMENTO ENTRE BANCOS
+# PVs QUE NÃO GERARAM CARGA
 # ===============================
-st.subheader("🔎 Códigos sem Cruzamento entre Bancos")
+st.subheader("⚠️ PVs que Não Geraram Carga")
 
-df_codigos_sem_cruzamento = pd.DataFrame(
-    {"CODIGO": sorted(list(codigos_sem_cruzamento))}
-)
-
-if not df_codigos_sem_cruzamento.empty:
-    st.dataframe(df_codigos_sem_cruzamento)
+if not df_sem_carga.empty:
+    st.dataframe(df_sem_carga.drop_duplicates())
 else:
-    st.success("Todos os códigos da Relação PV cruzaram com o Processo de Fabricação.")
-
-# ===============================
-# CÓDIGOS SEM CRUZAMENTO ENTRE BANCOS
-# ===============================
-st.subheader("🔎 Códigos sem Cruzamento entre Bancos")
-
-df_codigos_sem_cruzamento = pd.DataFrame(
-    {"CODIGO": sorted(list(codigos_sem_cruzamento))}
-)
-
-if not df_codigos_sem_cruzamento.empty:
-    st.dataframe(df_codigos_sem_cruzamento)
-else:
-    st.success("Todos os códigos da Relação PV cruzaram com o Processo de Fabricação.")
+    st.success("Todas as PVs válidas geraram carga.")
