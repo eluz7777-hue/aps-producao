@@ -200,7 +200,6 @@ ano_ref = int(df["Ano"].mode()[0])
 horas_mes = horas_uteis_mes(ano_ref, mes_ref)
 total_recursos = sum(MAQUINAS.values())
 
-
 # ===============================
 # FILA REAL POR PROCESSO
 # ===============================
@@ -301,6 +300,7 @@ dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 dem_proc["Utilização (%)"] = (
     dem_proc["Horas"] / dem_proc["Capacidade Processo"] * 100
 ).round(0).astype(int)
+
 def faixa_utilizacao(x):
     if x > 100:
         return "Crítico"
@@ -310,6 +310,76 @@ def faixa_utilizacao(x):
         return "OK"
 
 dem_proc["Faixa"] = dem_proc["Utilização (%)"].apply(faixa_utilizacao)
+
+# ===============================
+# ATRASO
+# ===============================
+pv_carga = df.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"].sum()
+
+pv_carga["Dias Necessários"] = pv_carga["Horas"] / HORAS_DIA
+
+hoje = pd.Timestamp.today().normalize()
+
+pv_carga["Dias Disponíveis"] = pv_carga["Data"].apply(
+    lambda x: dias_uteis_periodo(hoje, x)
+)
+
+pv_carga["Atraso (dias)"] = (
+    pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
+).apply(lambda x: max(0, math.ceil(x)))
+
+# ===============================
+# PIZZA / ATRASOS
+# ===============================
+atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
+
+# ===============================
+# RISCO
+# ===============================
+risco = pv_carga[
+    (pv_carga["Atraso (dias)"] == 0) &
+    (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
+].copy()
+
+# ===============================
+# CAPACIDADE MENSAL FIXA (NOVO)
+# ===============================
+capacidade_mensal_total = int(
+    horas_mes * total_recursos * EFICIENCIA
+)
+
+carga_total = df["Horas"].sum()
+
+utilizacao_global = 0
+if capacidade_mensal_total > 0:
+    utilizacao_global = int((carga_total / capacidade_mensal_total) * 100)
+
+# ============================================================
+# ======================= VISÃO EXECUTIVA ====================
+# ============================================================
+st.markdown("## 📊 Visão Executiva")
+
+# ===============================
+# INDICADORES GERAIS
+# ===============================
+st.subheader("📊 Indicadores Gerais")
+
+c1, c2, c3 = st.columns(3)
+
+c1.metric("Carga Total (h)", int(carga_total))
+c2.metric("Capacidade Mensal (h)", capacidade_mensal_total)
+c3.metric("Utilização (%)", utilizacao_global)
+
+# ===============================
+# RESUMO
+# ===============================
+st.subheader("📊 Resumo Geral")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("🔴 Atraso", len(atrasos))
+col2.metric("🟡 Risco", len(risco))
+col3.metric("🟢 OK", len(pv_carga) - len(atrasos) - len(risco))
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -348,18 +418,28 @@ fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
-# GARGALO AUTOMÁTICO
+# VISÃO CAPACIDADE POR PROCESSO
 # ===============================
-st.subheader("🔥 Gargalos do Período")
+st.subheader("📊 Utilização por Processo (%)")
 
-gargalos = dem.sort_values(
-    by=["Periodo", "Ocupação (%)", "Horas"],
-    ascending=[True, False, False]
-).copy()
+fig_proc = px.bar(
+    dem_proc.sort_values("Utilização (%)", ascending=False),
+    x="Processo",
+    y="Utilização (%)",
+    text="Utilização (%)",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    }
+)
 
-top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
+fig_proc.add_hline(y=100, line_dash="dash")
+fig_proc.update_traces(texttemplate="%{text}")
+fig_proc.update_yaxes(title="Utilização (%)")
 
-st.dataframe(top_gargalos)
+st.plotly_chart(fig_proc, use_container_width=True)
 
 # ===============================
 # CURVA DE CARGA
@@ -398,64 +478,9 @@ fig_cliente.update_traces(textposition="outside")
 st.plotly_chart(fig_cliente, use_container_width=True)
 
 # ===============================
-# FILA POR PROCESSO
-# ===============================
-st.subheader("📦 Fila por Processo")
-
-fila_exibicao = df[["PV", "Cliente", "Processo", "Data", "Horas", "Fila Acumulada (h)", "Fila (dias)"]].copy()
-fila_exibicao["Horas"] = fila_exibicao["Horas"].round(1)
-fila_exibicao["Fila Acumulada (h)"] = fila_exibicao["Fila Acumulada (h)"].round(1)
-fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
-
-st.dataframe(fila_exibicao)
-
-# ===============================
-# AUDITORIA
-# ===============================
-st.subheader("📌 Auditoria de Capacidade")
-
-auditoria = dem.copy()
-auditoria["Horas"] = auditoria["Horas"].round(1)
-
-st.dataframe(auditoria)
-
-# ===============================
-# CALENDÁRIO
-# ===============================
-st.subheader("📅 Calendário Industrial")
-st.dataframe(cal)
-
-# ===============================
-# ATRASO
-# ===============================
-st.subheader("⏱️ Previsão de Atraso por PV")
-
-pv_carga = df.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"].sum()
-
-pv_carga["Dias Necessários"] = pv_carga["Horas"] / HORAS_DIA
-
-hoje = pd.Timestamp.today().normalize()
-
-pv_carga["Dias Disponíveis"] = pv_carga["Data"].apply(
-    lambda x: dias_uteis_periodo(hoje, x)
-)
-
-pv_carga["Atraso (dias)"] = (
-    pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
-).apply(lambda x: max(0, math.ceil(x)))
-
-pv_carga_exibicao = pv_carga.copy()
-pv_carga_exibicao["Horas"] = pv_carga_exibicao["Horas"].round(1)
-pv_carga_exibicao["Dias Necessários"] = pv_carga_exibicao["Dias Necessários"].round(1)
-
-st.dataframe(pv_carga_exibicao)
-
-# ===============================
 # PIZZA
 # ===============================
 st.subheader("🥧 Distribuição de Atraso")
-
-atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
 if not atrasos.empty:
     dist = atrasos.groupby("Atraso (dias)", as_index=False)["PV"].count()
@@ -478,15 +503,73 @@ if not atrasos.empty:
 else:
     st.success("Nenhum atraso 🎉")
 
+# ============================================================
+# ===================== ANÁLISE OPERACIONAL ==================
+# ============================================================
+st.markdown("## 🏭 Análise Operacional")
+
+# ===============================
+# GARGALO AUTOMÁTICO
+# ===============================
+st.subheader("🔥 Gargalos do Período")
+
+gargalos = dem.sort_values(
+    by=["Periodo", "Ocupação (%)", "Horas"],
+    ascending=[True, False, False]
+).copy()
+
+top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
+
+st.dataframe(top_gargalos)
+
+# ===============================
+# CAPACIDADE X CARGA POR PROCESSO
+# ===============================
+st.subheader("🏭 Capacidade x Carga por Processo")
+st.dataframe(dem_proc)
+
+# ============================================================
+# ==================== TABELAS E AUDITORIA ===================
+# ============================================================
+st.markdown("## 📋 Tabelas e Auditoria")
+
+# ===============================
+# FILA POR PROCESSO
+# ===============================
+st.subheader("📦 Fila por Processo")
+
+fila_exibicao = df[["PV", "Cliente", "Processo", "Data", "Horas", "Fila Acumulada (h)", "Fila (dias)"]].copy()
+fila_exibicao["Horas"] = fila_exibicao["Horas"].round(1)
+fila_exibicao["Fila Acumulada (h)"] = fila_exibicao["Fila Acumulada (h)"].round(1)
+fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
+
+st.dataframe(fila_exibicao)
+
+# ===============================
+# AUDITORIA
+# ===============================
+st.subheader("📌 Auditoria de Capacidade")
+
+auditoria = dem.copy()
+auditoria["Horas"] = auditoria["Horas"].round(1)
+
+st.dataframe(auditoria)
+
+# ===============================
+# ATRASO
+# ===============================
+st.subheader("⏱️ Previsão de Atraso por PV")
+
+pv_carga_exibicao = pv_carga.copy()
+pv_carga_exibicao["Horas"] = pv_carga_exibicao["Horas"].round(1)
+pv_carga_exibicao["Dias Necessários"] = pv_carga_exibicao["Dias Necessários"].round(1)
+
+st.dataframe(pv_carga_exibicao)
+
 # ===============================
 # RISCO
 # ===============================
 st.subheader("⚠️ PVs em Risco")
-
-risco = pv_carga[
-    (pv_carga["Atraso (dias)"] == 0) &
-    (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
-].copy()
 
 risco_exibicao = risco.copy()
 if not risco_exibicao.empty:
@@ -496,59 +579,7 @@ if not risco_exibicao.empty:
 st.dataframe(risco_exibicao)
 
 # ===============================
-# CAPACIDADE MENSAL FIXA (NOVO)
+# CALENDÁRIO
 # ===============================
-
-capacidade_mensal_total = int(
-    horas_mes * total_recursos * EFICIENCIA
-)
-
-carga_total = df["Horas"].sum()
-
-utilizacao_global = 0
-if capacidade_mensal_total > 0:
-    utilizacao_global = int((carga_total / capacidade_mensal_total) * 100)
-
-st.subheader("📊 Indicadores Gerais")
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Carga Total (h)", int(carga_total))
-c2.metric("Capacidade Mensal (h)", capacidade_mensal_total)
-c3.metric("Utilização (%)", utilizacao_global)
-
-# ===============================
-# VISÃO CAPACIDADE POR PROCESSO
-# ===============================
-st.subheader("📊 Utilização por Processo (%)")
-
-fig_proc = px.bar(
-    dem_proc.sort_values("Utilização (%)", ascending=False),
-    x="Processo",
-    y="Utilização (%)",
-    text="Utilização (%)",
-    color="Faixa",
-    color_discrete_map={
-        "OK": "green",
-        "Atenção": "gold",
-        "Crítico": "red"
-    }
-)
-
-fig_proc.add_hline(y=100, line_dash="dash")
-
-fig_proc.update_traces(texttemplate="%{text}")
-fig_proc.update_yaxes(title="Utilização (%)")
-
-st.plotly_chart(fig_proc, use_container_width=True)
-
-# ===============================
-# RESUMO
-# ===============================
-st.subheader("📊 Resumo Geral")
-
-col1, col2, col3 = st.columns(3)
-
-col1.metric("🔴 Atraso", len(atrasos))
-col2.metric("🟡 Risco", len(risco))
-col3.metric("🟢 OK", len(pv_carga) - len(atrasos) - len(risco))
+st.subheader("📅 Calendário Industrial")
+st.dataframe(cal)
