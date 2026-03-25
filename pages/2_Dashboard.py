@@ -129,6 +129,10 @@ def normalizar_codigo(x):
 
 df_pv["CODIGO"] = df_pv["CODIGO"].apply(normalizar_codigo)
 df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
+codigos_pv = set(df_pv["CODIGO"].dropna().astype(str).str.strip().unique())
+codigos_base = set(df_base["CODIGO"].dropna().astype(str).str.strip().unique())
+
+codigos_sem_cruzamento = codigos_pv - codigos_base
 
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
@@ -138,14 +142,9 @@ df_base = df_base.drop_duplicates(subset=["CODIGO"])
 # ===============================
 # PROCESSOS
 # ===============================
-PROCESSOS_VALIDOS = [
-    "FRESADORAS", "SOLDAGEM", "TORNO", "CORTE-PLASMA", "CORTE-LASER",
-    "SERRA FITA", "SERRA CIRCULAR", "CENTRO USINAGEM", "DOBRADEIRA",
-    "PRENSA (AMASSAMENTO)", "ROSQUEADEIRA", "ACABAMENTO",
-    "CALANDRA", "PINTURA", "METALEIRA"
-]
+COLUNAS_FIXAS = ["CODIGO"]
 
-processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
+processos = [c for c in df_base.columns if c not in COLUNAS_FIXAS]
 
 # ===============================
 # EXPANSÃO CORRIGIDA (SEM ERRO)
@@ -172,7 +171,11 @@ for _, row in df_pv.iterrows():
     teve_processo_valido = False
 
     for proc in processos:
-        tempo = pd.to_numeric(roteiro.get(proc), errors="coerce")
+        valor_tempo = roteiro.get(proc)
+
+if pd.notna(valor_tempo):
+    valor_tempo = str(valor_tempo).strip().replace(",", ".")
+tempo = pd.to_numeric(valor_tempo, errors="coerce")
 
         # Mantida a proteção já existente
         if pd.notna(tempo) and tempo > 0 and tempo < 1000:
@@ -697,8 +700,23 @@ st.dataframe(cal)
 # PVs EXCLUÍDAS DO APS
 # ===============================
 st.subheader("🚫 PVs Excluídas do APS")
+st.caption(f"PVs excluídas identificadas: {len(df_excluidas)}")
 
 if not df_excluidas.empty:
     st.dataframe(df_excluidas)
 else:
     st.success("Nenhuma PV foi excluída do APS.")
+
+# ===============================
+# CÓDIGOS SEM CRUZAMENTO ENTRE BANCOS
+# ===============================
+st.subheader("🔎 Códigos sem Cruzamento entre Bancos")
+
+df_codigos_sem_cruzamento = pd.DataFrame(
+    {"CODIGO": sorted(list(codigos_sem_cruzamento))}
+)
+
+if not df_codigos_sem_cruzamento.empty:
+    st.dataframe(df_codigos_sem_cruzamento)
+else:
+    st.success("Todos os códigos da Relação PV cruzaram com o Processo de Fabricação.")
