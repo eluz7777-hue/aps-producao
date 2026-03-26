@@ -118,10 +118,14 @@ df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 
 # Padroniza nomes da planilha única
 df_pv = df_pv.rename(columns={
+    df_pv = df_pv.rename(columns={
     "CÓDIGO": "CODIGO_PV",
     "CODIGO": "CODIGO_PV",
     "DATA DE ENTREGA": "ENTREGA",
-    "QUANTIDADE": "QTD"
+    "QUANTIDADE": "QTD",
+    "QTD": "QTD",
+    "QTDE": "QTD",
+    "QTD.": "QTD"
 })
 
 # ===============================
