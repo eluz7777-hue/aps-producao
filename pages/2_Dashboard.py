@@ -127,8 +127,6 @@ df_pv = df_pv.rename(columns={
     "QTD.": "QTD"
 })
 
-# DEBUG TEMPORÁRIO (pode remover depois)
-st.write("COLUNAS DA PLANILHA:", df_pv.columns.tolist())
 
 # ===============================
 # VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
@@ -256,15 +254,24 @@ for _, row in df_pv.iterrows():
             })
 
     if not teve_processo_valido:
-        registro = {
-            "PV": row["PV"],
-            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO_PV"],
-            "Motivo": "Sem processo válido com tempo > 0"
-        }
+    registro = {
+        "PV": row["PV"],
+        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+        "CODIGO": row["CODIGO_PV"],
+        "Motivo": "Sem processo válido com tempo > 0"
+    }
 
-        pvs_excluidas.append(registro)
-        pvs_sem_carga.append(registro)
+    pvs_excluidas.append(registro)
+    pvs_sem_carga.append(registro)
+
+    # Inclui a PV no APS com carga zero para não sumir do sistema
+    linhas.append({
+        "PV": row["PV"],
+        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+        "Processo": "SEM PROCESSO",
+        "Data": row["ENTREGA"],
+        "Horas": 0
+    })
 
 df = pd.DataFrame(linhas)
 
