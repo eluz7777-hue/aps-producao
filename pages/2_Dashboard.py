@@ -1126,7 +1126,7 @@ arquivo_excel = roteiro.copy()
 def converter_excel(df):
     from io import BytesIO
     buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Roteiro")
     return buffer.getvalue()
 
