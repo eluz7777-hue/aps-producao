@@ -669,8 +669,20 @@ pv_carga["Atraso (dias)"] = (
 # ===============================
 # PIZZA / ATRASOS
 # ===============================
-pvs_no_aps = len(pvs_aps_set)
+# PVs reais no APS (base expandida válida)
+pvs_no_aps = df["PV"].astype(str).str.strip().nunique()
+
+# PVs em atraso
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
+
+# Critério de risco: sem atraso, mas com pouca folga
+if "Dias Disponíveis" in pv_carga.columns:
+    risco = pv_carga[
+        (pv_carga["Atraso (dias)"] == 0) &
+        (pv_carga["Dias Disponíveis"] <= 3)
+    ].copy()
+else:
+    risco = pd.DataFrame(columns=pv_carga.columns)
 
 # ===============================
 # RISCO
@@ -718,7 +730,7 @@ col1, col2, col3 = st.columns(3)
 
 col1.metric("🔴 Atraso", len(atrasos))
 col2.metric("🟡 Risco", len(risco))
-col3.metric("🟢 OK", len(pv_carga) - len(atrasos) - len(risco))
+col3.metric("🟢 OK", max(0, pvs_no_aps - len(atrasos) - len(risco)))
 
 c4, c5 = st.columns(2)
 
