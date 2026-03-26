@@ -1197,3 +1197,109 @@ st.download_button(
     file_name="roteiro_fabricacao.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
+# ============================================================
+# ================= SIMULAÇÃO DE GARGALO =====================
+# ============================================================
+st.markdown("## 🚨 Simulação de Gargalo por Processo")
+
+st.subheader("🔎 Verificar quais PVs estouram a capacidade do processo")
+
+processo_gargalo_sel = st.selectbox(
+    "Selecione o processo gargalo",
+    sorted(df["Processo"].dropna().unique().tolist()),
+    key="gargalo_processo_select"
+)
+
+# Base do processo selecionado
+df_gargalo = df[df["Processo"] == processo_gargalo_sel].copy()
+
+if not df_gargalo.empty:
+    # Agrupa carga da PV apenas nesse processo
+    gargalo_pv = (
+        df_gargalo.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"]
+        .sum()
+        .sort_values(["Data", "PV"])
+        .reset_index(drop=True)
+    )
+
+    # Carga acumulada na sequência de entrega
+    gargalo_pv["Carga Acumulada (h)"] = gargalo_pv["Horas"].cumsum()
+
+    # Recursos do processo
+    recursos_gargalo = MAQUINAS.get(processo_gargalo_sel, 0)
+
+    # Capacidade média diária do processo
+    capacidade_dia_gargalo = capacidade_diaria_real(processo_gargalo_sel)
+
+    hoje = pd.Timestamp.today().normalize()
+
+    # Horas úteis disponíveis até a data da entrega (considerando o recurso escolhido)
+    gargalo_pv["Horas Disponíveis até Entrega"] = gargalo_pv["Data"].apply(
+        lambda x: horas_uteis_periodo(hoje, x) * recursos_gargalo * EFICIENCIA
+    )
+
+    # Saldo do gargalo
+    gargalo_pv["Saldo Gargalo (h)"] = (
+        gargalo_pv["Horas Disponíveis até Entrega"] - gargalo_pv["Carga Acumulada (h)"]
+    ).round(1)
+
+    # Estouro
+    gargalo_pv["Estoura Gargalo?"] = np.where(
+        gargalo_pv["Saldo Gargalo (h)"] < 0,
+        "SIM",
+        "NÃO"
+    )
+
+    # Dias estimados de estouro
+    gargalo_pv["Dias de Estouro"] = np.where(
+        capacidade_dia_gargalo > 0,
+        np.ceil(np.abs(np.minimum(gargalo_pv["Saldo Gargalo (h)"], 0)) / capacidade_dia_gargalo),
+        0
+    )
+
+    gargalo_pv["Dias de Estouro"] = gargalo_pv["Dias de Estouro"].astype(int)
+
+    # Semáforo
+    def semaforo_gargalo(x):
+        if x == "SIM":
+            return "🔴"
+        return "🟢"
+
+    gargalo_pv["Semáforo"] = gargalo_pv["Estoura Gargalo?"].apply(semaforo_gargalo)
+
+    st.subheader(f"📋 Sequência de PVs no processo: {processo_gargalo_sel}")
+
+    exib_gargalo = gargalo_pv.copy()
+    exib_gargalo["Horas"] = exib_gargalo["Horas"].round(1)
+    exib_gargalo["Carga Acumulada (h)"] = exib_gargalo["Carga Acumulada (h)"].round(1)
+    exib_gargalo["Horas Disponíveis até Entrega"] = exib_gargalo["Horas Disponíveis até Entrega"].round(1)
+
+    st.dataframe(
+        exib_gargalo[
+            [
+                "Semáforo",
+                "PV",
+                "Cliente",
+                "Data",
+                "Horas",
+                "Carga Acumulada (h)",
+                "Horas Disponíveis até Entrega",
+                "Saldo Gargalo (h)",
+                "Estoura Gargalo?",
+                "Dias de Estouro"
+            ]
+        ]
+    )
+
+    # Resumo executivo
+    total_estouro = (gargalo_pv["Estoura Gargalo?"] == "SIM").sum()
+    total_ok = (gargalo_pv["Estoura Gargalo?"] == "NÃO").sum()
+
+    g1, g2, g3 = st.columns(3)
+    g1.metric("🔴 PVs que Estouram", int(total_estouro))
+    g2.metric("🟢 PVs Viáveis", int(total_ok))
+    g3.metric("⚙️ Recursos do Processo", int(recursos_gargalo))
+
+else:
+    st.info("Não há carga para o processo selecionado.")
