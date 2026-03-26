@@ -1062,3 +1062,79 @@ if not df_auditoria_pv.empty:
     st.dataframe(df_auditoria_pv.sort_values(["Status", "PV"]))
 else:
     st.info("Nenhuma auditoria de PV disponível.")
+
+# ===============================
+# ROTEIRO POR CÓDIGO
+# ===============================
+st.markdown("## 🧩 Roteiro de Fabricação por Código")
+
+# Base original (não expandida)
+base_roteiro = df_pv.copy()
+
+# Mantém apenas códigos válidos
+base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
+
+# Agrupa por código (caso tenha repetição)
+roteiro = base_roteiro.groupby("CODIGO_KEY")[processos].max().reset_index()
+
+# Garante formato numérico
+for proc in processos:
+    roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
+
+# Remove processos zerados (opcional visual)
+# roteiro = roteiro.loc[:, (roteiro != 0).any(axis=0)]
+
+st.subheader("📋 Base de Roteiros")
+st.dataframe(roteiro)
+
+# ===============================
+# CONSULTA DE ROTEIRO
+# ===============================
+st.subheader("🔎 Consultar Roteiro por Código")
+
+codigos_disponiveis = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+
+codigo_sel = st.selectbox("Selecione o código", codigos_disponiveis)
+
+roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
+
+# Transforma em formato vertical (mais legível)
+roteiro_detalhado = roteiro_sel.melt(
+    id_vars=["CODIGO_KEY"],
+    value_vars=processos,
+    var_name="Processo",
+    value_name="Tempo (min)"
+)
+
+# Remove processos sem tempo
+roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0]
+
+# Ordena (opcional)
+roteiro_detalhado = roteiro_detalhado.sort_values("Processo")
+
+st.subheader(f"🛠️ Roteiro do Código: {codigo_sel}")
+st.dataframe(roteiro_detalhado.reset_index(drop=True))
+
+# ===============================
+# EXPORTAÇÃO
+# ===============================
+st.subheader("📥 Exportar Roteiro")
+
+arquivo_excel = roteiro.copy()
+
+@st.cache_data
+def converter_excel(df):
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Roteiro")
+    return buffer.getvalue()
+
+excel_bytes = converter_excel(arquivo_excel)
+
+st.download_button(
+    label="📥 Baixar Roteiros em Excel",
+    data=excel_bytes,
+    file_name="roteiro_fabricacao.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
