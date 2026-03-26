@@ -590,10 +590,10 @@ dem_proc = df.groupby(["Processo"])["Horas"].sum().reset_index()
 # ===============================
 # MÉTRICAS
 # ===============================
-dem["Ocupação (%)"] = (dem["Horas"] / dem["Capacidade"]) * 100
-dem["Ocupação (%)"] = dem["Ocupação (%)"].replace([float("inf"), -float("inf")], 0)
-dem["Ocupação (%)"] = dem["Ocupação (%)"].fillna(0)
-dem["Ocupação (%)"] = dem["Ocupação (%)"].round(0).astype(int)
+# Padronização técnica da ocupação
+dem["Ocupacao"] = dem["Ocupacao"].replace([float("inf"), -float("inf")], 0)
+dem["Ocupacao"] = dem["Ocupacao"].fillna(0)
+dem["Ocupacao"] = dem["Ocupacao"].round(1)
 
 def status(x):
     if x > 100:
@@ -603,8 +603,11 @@ def status(x):
     else:
         return "🟢"
 
-dem["Status"] = dem["Ocupação (%)"].apply(status)
+dem["Status"] = dem["Ocupacao"].apply(status)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
+
+# Coluna apenas para exibição visual
+dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
 
 # ===============================
 # CAPACIDADE POR PROCESSO
@@ -693,19 +696,6 @@ risco = pv_carga[
 ].copy()
 
 # ===============================
-# CAPACIDADE MENSAL FIXA (NOVO)
-# ===============================
-capacidade_mensal_total = int(
-    horas_mes * total_recursos * EFICIENCIA
-)
-
-carga_total = df["Horas"].sum()
-
-utilizacao_global = 0
-if capacidade_mensal_total > 0:
-    utilizacao_global = int((carga_total / capacidade_mensal_total) * 100)
-
-# ===============================
 # KPIs / VISÃO EXECUTIVA
 # ===============================
 st.subheader("📌 Indicadores Principais")
@@ -716,12 +706,23 @@ st.subheader("📌 Indicadores Principais")
 carga_total = round(df["Horas"].sum(), 1)
 
 # -------------------------------
-# CAPACIDADE TOTAL = soma da capacidade dos processos ativos
+# CAPACIDADE GLOBAL DA FÁBRICA
 # -------------------------------
-capacidade_total = round(dem["Capacidade"].sum(), 1)
+recursos_ativos = sum(v for v in MAQUINAS.values() if v > 0)
+
+# Usa o mês mais frequente da base como referência executiva
+mes_ref = int(df["Mes"].mode()[0])
+ano_ref = int(df["Ano"].mode()[0])
+
+horas_mes_ref = horas_uteis_mes(ano_ref, mes_ref)
+
+capacidade_total = round(
+    recursos_ativos * horas_mes_ref * EFICIENCIA,
+    1
+)
 
 # -------------------------------
-# UTILIZAÇÃO = carga / capacidade
+# UTILIZAÇÃO GLOBAL
 # -------------------------------
 utilizacao_total = round((carga_total / capacidade_total) * 100, 1) if capacidade_total > 0 else 0
 
@@ -735,42 +736,32 @@ k2.metric("Capacidade Mensal (h)", f"{capacidade_total:,.1f}")
 k3.metric("Utilização (%)", f"{utilizacao_total:.1f}%")
 
 # ===============================
-# INDICADORES GERAIS
-# ===============================
-st.subheader("📊 Indicadores Gerais")
-
-# -------------------------------
-# CÁLCULO CORRETO DOS INDICADORES
-# -------------------------------
-
-# Carga = demanda real
-carga_total = round(df["Horas"].sum(), 1)
-
-# Capacidade = soma da capacidade por processo (já calculada em "dem")
-capacidade_total = round(dem["Capacidade"].sum(), 1)
-
-# Utilização = carga / capacidade
-utilizacao_total = round((carga_total / capacidade_total) * 100, 1) if capacidade_total > 0 else 0
-
-# -------------------------------
-# EXIBIÇÃO
-# -------------------------------
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Carga Total (h)", f"{carga_total:,.1f}")
-c2.metric("Capacidade Mensal (h)", f"{capacidade_total:,.1f}")
-c3.metric("Utilização (%)", f"{utilizacao_total:.1f}%")
-
-# ===============================
 # RESUMO
 # ===============================
 st.subheader("📊 Resumo Geral")
+
+# Garantia de PVs no APS = universo auditado
+pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
+
+# Atrasos
+atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
+
+# Risco = sem atraso, mas com pouca folga
+if "Dias Disponíveis" in pv_carga.columns:
+    risco = pv_carga[
+        (pv_carga["Atraso (dias)"] == 0) &
+        (pv_carga["Dias Disponíveis"] <= 3)
+    ].copy()
+else:
+    risco = pd.DataFrame(columns=pv_carga.columns)
+
+ok = max(0, pvs_no_aps - len(atrasos) - len(risco))
 
 col1, col2, col3 = st.columns(3)
 
 col1.metric("🔴 Atraso", len(atrasos))
 col2.metric("🟡 Risco", len(risco))
-col3.metric("🟢 OK", max(0, pvs_no_aps - len(atrasos) - len(risco)))
+col3.metric("🟢 OK", ok)
 
 c4, c5 = st.columns(2)
 
@@ -782,12 +773,12 @@ c5.metric("PVs no APS", pvs_no_aps)
 # ===============================
 st.subheader("⚠️ Capacidade Crítica")
 
-critico = dem[dem["Ocupação (%)"] > 95].copy()
+critico = dem[dem["Ocupacao"] > 95].copy()
 
 if not critico.empty:
     st.error("Capacidade próxima ou acima do limite detectada.")
     st.dataframe(
-        critico.sort_values(["Ocupação (%)", "Horas"], ascending=[False, False]).reset_index(drop=True)
+        critico.sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True)
     )
 else:
     st.success("Capacidade sob controle.")
@@ -797,22 +788,27 @@ else:
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
-dem["Label"] = dem["Horas"].map(lambda x: f"{x:.1f}h")
+dem["Label"] = dem["Ocupacao"].map(lambda x: f"{x:.1f}%")
 
 fig = px.bar(
-    dem,
+    dem.sort_values(["Ordem_Periodo", "Processo"]),
     x="Periodo",
-    y="Ocupação (%)",
+    y="Ocupacao",
     color="Processo",
     barmode="group",
     text="Label"
 )
 
 fig.add_hline(y=100, line_dash="dash")
+
 fig.update_traces(textposition="outside")
 
-st.plotly_chart(fig, use_container_width=True)
+fig.update_layout(
+    yaxis_title="Ocupação (%)",
+    xaxis_title="Período"
+)
 
+st.plotly_chart(fig, use_container_width=True)
 # ===============================
 # VISÃO CAPACIDADE POR PROCESSO
 # ===============================
@@ -929,15 +925,18 @@ st.markdown("## 🏭 Análise Operacional")
 st.subheader("🔥 Gargalos do Período")
 
 gargalos = dem.sort_values(
-    by=["Periodo", "Ocupação (%)", "Horas"],
+    by=["Periodo", "Ocupacao", "Horas"],
     ascending=[True, False, False]
 ).copy()
 
 top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
-top_gargalos["Semáforo"] = top_gargalos["Ocupação (%)"].apply(status)
+top_gargalos["Semáforo"] = top_gargalos["Ocupacao"].apply(status)
+top_gargalos["Ocupação (%)"] = top_gargalos["Ocupacao"].round(1)
+
 st.dataframe(
     top_gargalos[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]]
 )
+
 st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
 fig_cap_proc = px.bar(
@@ -945,7 +944,7 @@ fig_cap_proc = px.bar(
     x="Processo",
     y=["Horas", "Capacidade Processo"],
     barmode="group",
-    text_auto=".0f",
+    text_auto=".1f",
     title="Carga Real x Capacidade por Processo (h)"
 )
 
@@ -986,7 +985,9 @@ st.subheader("📌 Auditoria de Capacidade")
 
 auditoria = dem.copy()
 auditoria["Horas"] = auditoria["Horas"].round(1)
-auditoria["Semáforo"] = auditoria["Ocupação (%)"].apply(status)
+auditoria["Capacidade"] = auditoria["Capacidade"].round(1)
+auditoria["Ocupação (%)"] = auditoria["Ocupacao"].round(1)
+auditoria["Semáforo"] = auditoria["Ocupacao"].apply(status)
 
 st.dataframe(
     auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]]
