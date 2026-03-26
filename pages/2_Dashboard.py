@@ -118,7 +118,6 @@ df_pv.columns = [c.strip().upper() for c in df_pv.columns]
 
 # Padroniza nomes da planilha única
 df_pv = df_pv.rename(columns={
-    df_pv = df_pv.rename(columns={
     "CÓDIGO": "CODIGO_PV",
     "CODIGO": "CODIGO_PV",
     "DATA DE ENTREGA": "ENTREGA",
@@ -127,6 +126,9 @@ df_pv = df_pv.rename(columns={
     "QTDE": "QTD",
     "QTD.": "QTD"
 })
+
+# DEBUG TEMPORÁRIO (pode remover depois)
+st.write("COLUNAS DA PLANILHA:", df_pv.columns.tolist())
 
 # ===============================
 # VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
@@ -157,6 +159,7 @@ df_pv["CODIGO_PV"] = df_pv["CODIGO_PV"].apply(normalizar_codigo)
 df_pv["CODIGO_KEY"] = df_pv["CODIGO_PV"].astype(str).str.strip()
 
 # Campos principais
+df_pv["CLIENTE"] = df_pv["CLIENTE"].fillna("SEM CLIENTE")
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
