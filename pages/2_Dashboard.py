@@ -1075,8 +1075,30 @@ base_roteiro = df_pv.copy()
 base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
 
 # Agrupa por código (caso tenha repetição)
-roteiro = base_roteiro.groupby("CODIGO_KEY")[processos].max().reset_index()
+processos_ordenados = [
+    "CORTE - SERRA",
+    "CORTE-PLASMA",
+    "CORTE-LASER",
+    "CORTE-GUILHOTINA",
+    "TORNO CONVENCIONAL",
+    "TORNO CNC",
+    "CENTRO DE USINAGEM",
+    "FRESADORAS",
+    "FURADEIRA DE BANCADA",
+    "PRENSA (AMASSAMENTO)",
+    "CALANDRA",
+    "DOBRADEIRA",
+    "ROSQUEADEIRA",
+    "METALEIRA",
+    "SOLDAGEM",
+    "ACABAMENTO",
+    "JATEAMENTO",
+    "PINTURA",
+    "MONTAGEM",
+    "DIVERSOS"
+]
 
+roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_ordenados].max().reset_index()
 # Garante formato numérico
 for proc in processos:
     roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
@@ -1109,11 +1131,48 @@ roteiro_detalhado = roteiro_sel.melt(
 # Remove processos sem tempo
 roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0]
 
-# Ordena (opcional)
-roteiro_detalhado = roteiro_detalhado.sort_values("Processo")
+# ===============================
+# ORDEM LÓGICA DO ROTEIRO (PADRÃO INDUSTRIAL)
+# ===============================
+ORDEM_PROCESSOS = {
+    "CORTE - SERRA": 10,
+    "CORTE-PLASMA": 20,
+    "CORTE-LASER": 30,
+    "CORTE-GUILHOTINA": 40,
+    "TORNO CONVENCIONAL": 50,
+    "TORNO CNC": 60,
+    "CENTRO DE USINAGEM": 70,
+    "FRESADORAS": 80,
+    "FURADEIRA DE BANCADA": 90,
+    "PRENSA (AMASSAMENTO)": 100,
+    "CALANDRA": 110,
+    "DOBRADEIRA": 120,
+    "ROSQUEADEIRA": 130,
+    "METALEIRA": 140,
+    "SOLDAGEM": 150,
+    "ACABAMENTO": 160,
+    "JATEAMENTO": 170,
+    "PINTURA": 180,
+    "MONTAGEM": 190,
+    "DIVERSOS": 200
+}
+
+roteiro_detalhado["Operação"] = roteiro_detalhado["Processo"].map(ORDEM_PROCESSOS).fillna(999)
+roteiro_detalhado = roteiro_detalhado.sort_values("Operação")
 
 st.subheader(f"🛠️ Roteiro do Código: {codigo_sel}")
-st.dataframe(roteiro_detalhado.reset_index(drop=True))
+
+roteiro_exibicao = roteiro_detalhado[["Operação", "Processo", "Tempo (min)"]].copy()
+roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
+roteiro_exibicao = roteiro_exibicao.reset_index(drop=True)
+
+st.dataframe(roteiro_exibicao)
+tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
+tempo_total_h = round(tempo_total_min / 60, 2)
+
+col_rt1, col_rt2 = st.columns(2)
+col_rt1.metric("⏱️ Tempo Total (min)", f"{tempo_total_min:,.0f}")
+col_rt2.metric("🕒 Tempo Total (h)", f"{tempo_total_h:,.2f}")
 
 # ===============================
 # EXPORTAÇÃO
