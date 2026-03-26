@@ -8,6 +8,7 @@ if "logado" not in st.session_state or not st.session_state.logado:
     st.switch_page("app.py")
 
 import streamlit as st
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import os
