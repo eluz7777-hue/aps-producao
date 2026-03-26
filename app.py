@@ -9,8 +9,8 @@ st.set_page_config(
 # 🔐 USUÁRIOS
 # ===============================
 USUARIOS = {
-    "admin": "1234",
-    "eduardo": "aps2026",
+    "admin": "1608",
+    "eduardo": "aps1608",
     "gerente": "producao"
 }
 
