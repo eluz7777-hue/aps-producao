@@ -44,7 +44,7 @@ MAQUINAS = {
     "CENTRO DE USINAGEM": 1,
     "FRESADORAS": 2,
     "PRENSA (AMASSAMENTO)": 1,
-    "CALANDRA": 1,
+    "CALANDRA": 2,
     "DOBRADEIRA": 2,
     "ROSQUEADEIRA": 1,
     "METALEIRA": 1,
@@ -54,7 +54,7 @@ MAQUINAS = {
     "JATEAMENTO": 1,
     "PINTURA": 1,
     "MONTAGEM": 1,
-    "DIVERSOS": 1
+    "DIVERSOS": 0
 }
 
 # ===============================
