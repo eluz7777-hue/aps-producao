@@ -228,7 +228,7 @@ for _, row in df_pv.iterrows():
         })
         continue
 
-    # Agora a própria linha da PV já contém os tempos do roteiro
+    # A própria linha contém os tempos
     roteiro = row
     teve_processo_valido = False
 
@@ -253,25 +253,26 @@ for _, row in df_pv.iterrows():
                 "Horas": horas
             })
 
+    # 🔥 CORREÇÃO PRINCIPAL — FORA DO LOOP DE PROCESSOS
     if not teve_processo_valido:
-    registro = {
-        "PV": row["PV"],
-        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-        "CODIGO": row["CODIGO_PV"],
-        "Motivo": "Sem processo válido com tempo > 0"
-    }
+        registro = {
+            "PV": row["PV"],
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO_PV"],
+            "Motivo": "Sem processo válido com tempo > 0"
+        }
 
-    pvs_excluidas.append(registro)
-    pvs_sem_carga.append(registro)
+        pvs_excluidas.append(registro)
+        pvs_sem_carga.append(registro)
 
-    # Inclui a PV no APS com carga zero para não sumir do sistema
-    linhas.append({
-        "PV": row["PV"],
-        "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-        "Processo": "SEM PROCESSO",
-        "Data": row["ENTREGA"],
-        "Horas": 0
-    })
+        # Mantém a PV no APS com carga zero
+        linhas.append({
+            "PV": row["PV"],
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "Processo": "SEM PROCESSO",
+            "Data": row["ENTREGA"],
+            "Horas": 0
+        })
 
 df = pd.DataFrame(linhas)
 
@@ -314,7 +315,6 @@ if cliente_sel != "Todos":
 if df.empty:
     st.warning("Nenhum dado encontrado para o filtro selecionado.")
     st.stop()
-
 # ===============================
 # DATAS
 # ===============================
