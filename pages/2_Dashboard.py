@@ -94,9 +94,8 @@ def horas_uteis_mes(ano, mes):
 # ===============================
 @st.cache_data
 def carregar_dados(base_path):
-    df_pv = pd.read_excel(os.path.join(base_path, "Relacao_Pv.xlsx"))
-    df_base = pd.read_excel(os.path.join(base_path, "Processos_de_Fabricacao.xlsx"))
-    return df_pv, df_base
+    df = pd.read_excel(os.path.join(base_path, "PV.xlsx"))
+    return df
 
 # ===============================
 # ATUALIZAÇÃO
@@ -112,50 +111,57 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 # ===============================
 BASE_PATH = os.getcwd()
 
-df_pv, df_base = carregar_dados(BASE_PATH)
+df_pv = carregar_dados(BASE_PATH)
 
 # Normaliza cabeçalhos
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
-df_base.columns = [c.strip().upper() for c in df_base.columns]
 
-# Padroniza nomes da planilha PV
+# Padroniza nomes da planilha única
 df_pv = df_pv.rename(columns={
     "CÓDIGO": "CODIGO_PV",
+    "CODIGO": "CODIGO_PV",
     "DATA DE ENTREGA": "ENTREGA",
     "QUANTIDADE": "QTD"
 })
+
+# ===============================
+# VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
+# ===============================
+colunas_obrigatorias = ["PV", "CLIENTE", "CODIGO_PV", "ENTREGA", "QTD"]
+faltantes = [c for c in colunas_obrigatorias if c not in df_pv.columns]
+
+if faltantes:
+    st.error(f"A planilha PV.xlsx está faltando as colunas obrigatórias: {', '.join(faltantes)}")
+    st.stop()
 
 def normalizar_codigo(x):
     if pd.isna(x):
         return ""
     x = str(x)
-    x = x.replace("\xa0", "")   # espaço invisível do Excel
+    x = x.replace("\xa0", "")
     x = x.replace(" ", "")
     x = x.replace(".0", "")
     x = x.strip()
     return x
 
-# Normalização segura sem colunas duplicadas
+# ===============================
+# NORMALIZAÇÃO SEGURA
+# ===============================
 df_pv["CODIGO_PV"] = df_pv["CODIGO_PV"].apply(normalizar_codigo)
-df_base["CODIGO"] = df_base["CODIGO"].apply(normalizar_codigo)
 
-# Chaves de cruzamento
+# Chave única
 df_pv["CODIGO_KEY"] = df_pv["CODIGO_PV"].astype(str).str.strip()
-df_base["CODIGO_KEY"] = df_base["CODIGO"].astype(str).str.strip()
 
 # Campos principais
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce")
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
 
+# Remove duplicidades exatas
+df_pv = df_pv.drop_duplicates().copy()
+
 # Remove apenas linhas sem código
 df_pv = df_pv[df_pv["CODIGO_KEY"] != ""].copy()
-df_base = df_base[df_base["CODIGO_KEY"] != ""].copy()
-
-# Auditoria de cruzamento
-codigos_pv = set(df_pv["CODIGO_KEY"].unique())
-codigos_base = set(df_base["CODIGO_KEY"].unique())
-codigos_sem_cruzamento = codigos_pv - codigos_base
 
 # ===============================
 # PROCESSOS
@@ -184,7 +190,7 @@ PROCESSOS_VALIDOS = [
 ]
 
 # Considera somente processos que realmente existem na planilha
-processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
+processos = [p for p in PROCESSOS_VALIDOS if p in df_pv.columns]
 
 # ===============================
 # EXPANSÃO CORRIGIDA (SEM ERRO)
@@ -192,15 +198,11 @@ processos = [p for p in PROCESSOS_VALIDOS if p in df_base.columns]
 pvs_totais_excel = df_pv["PV"].astype(str).str.strip().nunique()
 pvs_excel_set = set(df_pv["PV"].astype(str).str.strip().unique())
 
-pvs_processadas = set()
-
 linhas = []
 pvs_excluidas = []
 pvs_sem_carga = []
 
 for _, row in df_pv.iterrows():
-    pv_atual = str(row["PV"]).strip()
-    pvs_processadas.add(pv_atual)
 
     # Validação de dados básicos
     if pd.isna(row["ENTREGA"]):
@@ -221,20 +223,8 @@ for _, row in df_pv.iterrows():
         })
         continue
 
-    roteiro = df_base[df_base["CODIGO_KEY"] == row["CODIGO_KEY"]]
-
-    if roteiro.empty:
-        registro = {
-            "PV": row["PV"],
-            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO_PV"],
-            "Motivo": "Código sem roteiro no Processo de Fabricação"
-        }
-        pvs_excluidas.append(registro)
-        pvs_sem_carga.append(registro)
-        continue
-
-    roteiro = roteiro.iloc[0]
+    # Agora a própria linha da PV já contém os tempos do roteiro
+    roteiro = row
     teve_processo_valido = False
 
     for proc in processos:
@@ -285,7 +275,7 @@ for pv_faltante in pvs_faltantes_silenciosas:
             "PV": row["PV"],
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
             "CODIGO": row["CODIGO_PV"],
-            "Motivo": "PV não carregada no APS por inconsistência de cruzamento"
+            "Motivo": "PV não carregada no APS"
         })
 
 df_excluidas = pd.DataFrame(pvs_excluidas)
@@ -460,9 +450,7 @@ pv_carga["Atraso (dias)"] = (
 # ===============================
 # PIZZA / ATRASOS
 # ===============================
-df_excluidas = pd.DataFrame(pvs_excluidas)
 pvs_no_aps = len(pvs_aps_set)
-pvs_fora_aps = df_excluidas["PV"].astype(str).str.strip().nunique() if not df_excluidas.empty else 0
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
 # ===============================
@@ -789,85 +777,3 @@ if codigos_sem_cruzamento:
 else:
     st.success("Todos os códigos da Relação PV possuem roteiro de fabricação.")
 
-# ===============================
-# PVs EXCLUÍDAS DO APS
-# ===============================
-st.subheader("🚫 PVs Excluídas do APS")
-st.caption(f"PVs excluídas identificadas: {len(df_excluidas)}")
-
-if not df_excluidas.empty:
-    st.dataframe(df_excluidas)
-else:
-    st.success("Nenhuma PV foi excluída do APS.")
-
-# ===============================
-# PVs QUE NÃO GERARAM CARGA
-# ===============================
-st.subheader("⚠️ PVs que Não Geraram Carga")
-
-if not df_sem_carga.empty:
-    st.dataframe(df_sem_carga.drop_duplicates())
-else:
-    st.success("Todas as PVs válidas geraram carga.")
-
-# ===============================
-# DIAGNÓSTICO PV x ROTEIRO
-# ===============================
-st.subheader("🔎 Diagnóstico de Cruzamento PV x Roteiro")
-
-codigos_pv = set(df_pv["CODIGO_KEY"].dropna().astype(str).str.strip().unique())
-codigos_base = set(df_base["CODIGO_KEY"].dropna().astype(str).str.strip().unique())
-
-codigos_nao_encontrados = codigos_pv - codigos_base
-
-if codigos_nao_encontrados:
-    df_erro = df_pv[df_pv["CODIGO_KEY"].isin(codigos_nao_encontrados)].copy()
-
-    resumo_diagnostico = (
-        df_erro.groupby("CODIGO_KEY")
-        .agg(
-            Qtde_PVs=("PV", "nunique"),
-            Lista_PVs=("PV", lambda x: ", ".join(sorted(set(x.astype(str))))),
-            Cliente=("CLIENTE", "first")
-        )
-        .reset_index()
-        .rename(columns={"CODIGO_KEY": "CODIGO"})
-        .sort_values("Qtde_PVs", ascending=False)
-    )
-
-    st.error(f"{len(resumo_diagnostico)} código(s) da Relação PV não foram encontrados no roteiro de fabricação.")
-    st.dataframe(resumo_diagnostico)
-else:
-    st.success("Todos os códigos da Relação PV foram encontrados no roteiro de fabricação.")
-
-# ===============================
-# INSPEÇÃO DOS CÓDIGOS NÃO ENCONTRADOS
-# ===============================
-st.subheader("🧪 Inspeção dos Códigos Não Encontrados no Roteiro")
-
-if codigos_nao_encontrados:
-    codigos_base_lista = sorted(df_base["CODIGO_KEY"].dropna().astype(str).unique())
-
-    inspecao = []
-
-    for cod_fora in sorted(codigos_nao_encontrados):
-        parecidos = [c for c in codigos_base_lista if cod_fora in c or c in cod_fora]
-
-        if parecidos:
-            for p in parecidos:
-                inspecao.append({
-                    "CODIGO_PROCURADO": cod_fora,
-                    "CODIGO_ENCONTRADO_NO_BASE": p,
-                    "STATUS": "Parecido encontrado"
-                })
-        else:
-            inspecao.append({
-                "CODIGO_PROCURADO": cod_fora,
-                "CODIGO_ENCONTRADO_NO_BASE": "NÃO ENCONTRADO",
-                "STATUS": "Sem correspondência"
-            })
-
-    df_inspecao = pd.DataFrame(inspecao)
-    st.dataframe(df_inspecao)
-else:
-    st.success("Nenhum código pendente para inspeção.")
