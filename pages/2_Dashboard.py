@@ -669,8 +669,8 @@ pv_carga["Atraso (dias)"] = (
 # ===============================
 # PIZZA / ATRASOS
 # ===============================
-# PVs reais no APS (base expandida válida)
-pvs_no_aps = df["PV"].astype(str).str.strip().nunique()
+# PVs reais no APS = todas as PVs auditadas (não apenas as com carga expandida)
+pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
 
 # PVs em atraso
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
@@ -705,10 +705,21 @@ utilizacao_global = 0
 if capacidade_mensal_total > 0:
     utilizacao_global = int((carga_total / capacidade_mensal_total) * 100)
 
-# ============================================================
-# ======================= VISÃO EXECUTIVA ====================
-# ============================================================
-st.markdown("## 📊 Visão Executiva")
+# ===============================
+# KPIs / Visão Executiva
+# ===============================
+# Carga real demandada
+carga_total = round(df["Horas"].sum(), 1)
+
+# Capacidade real conforme visão selecionada
+capacidade_total = round(dem["Capacidade"].sum(), 1)
+
+# Utilização real
+utilizacao_total = round((carga_total / capacidade_total) * 100, 1) if capacidade_total > 0 else 0
+
+# PVs
+pvs_no_excel = df_pv["PV"].astype(str).str.strip().nunique()
+pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
 
 # ===============================
 # INDICADORES GERAIS
