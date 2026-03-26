@@ -756,31 +756,3 @@ st.dataframe(risco_exibicao)
 # ===============================
 st.subheader("📅 Calendário Industrial")
 st.dataframe(cal)
-
-# ===============================
-# CÓDIGOS DO PV SEM ROTEIRO
-# ===============================
-st.subheader("🔎 Códigos do PV sem Roteiro de Fabricação")
-
-if codigos_sem_cruzamento:
-    df_codigos_fora = df_pv[df_pv["CODIGO_KEY"].isin(codigos_sem_cruzamento)].copy()
-
-    resumo_codigos = (
-        df_codigos_fora
-        .groupby("CODIGO_KEY")
-        .agg(
-            Qtde_PVs=("PV", "nunique"),
-            Exemplo_PV=("PV", "first"),
-            Cliente=("CLIENTE", "first")
-        )
-        .reset_index()
-        .rename(columns={"CODIGO_KEY": "CODIGO"})
-        .sort_values("Qtde_PVs", ascending=False)
-    )
-
-    st.dataframe(resumo_codigos)
-
-    st.error(f"{len(resumo_codigos)} códigos da Relação PV não possuem roteiro.")
-else:
-    st.success("Todos os códigos da Relação PV possuem roteiro de fabricação.")
-
