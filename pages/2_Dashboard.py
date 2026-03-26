@@ -299,75 +299,56 @@ for _, row in df_pv.iterrows():
     cliente_atual = row.get("CLIENTE", "SEM CLIENTE")
     codigo_atual = row["CODIGO_PV"]
 
-    # Validação de dados básicos
-    if pd.isna(row["ENTREGA"]):
-        registro = {
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "CODIGO": codigo_atual,
-            "Motivo": "Data de entrega inválida"
-        }
-        pvs_sem_carga.append(registro)
-        pvs_excluidas.append(registro)
-
-        linhas.append({
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "Processo": "SEM DATA",
-            "Data": pd.NaT,
-            "Horas": 0
-        })
-
-        auditoria_pv.append({
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "CODIGO": codigo_atual,
-            "Status": "Sem data válida",
-            "Qtd": row["QTD"],
-            "Total Processos Válidos": 0,
-            "Horas Totais": 0
-        })
-        continue
-
-    if float(row["QTD"]) <= 0:
-        registro = {
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "CODIGO": codigo_atual,
-            "Motivo": "Quantidade zero ou inválida"
-        }
-        pvs_sem_carga.append(registro)
-        pvs_excluidas.append(registro)
-
-        linhas.append({
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "Processo": "SEM QTD",
-            "Data": row["ENTREGA"],
-            "Horas": 0
-        })
-
-        auditoria_pv.append({
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "CODIGO": codigo_atual,
-            "Status": "Quantidade inválida",
-            "Qtd": row["QTD"],
-            "Total Processos Válidos": 0,
-            "Horas Totais": 0
-        })
-        continue
-
-    roteiro = row
-    teve_processo_valido = False
+    status_pv = "OK"
     qtde_processos_validos = 0
     horas_totais_pv = 0
+    motivos_pv = []
 
+    # -------------------------------
+    # Validações básicas
+    # -------------------------------
+    data_valida = not pd.isna(row["ENTREGA"])
+    qtd_valida = pd.notna(row["QTD"]) and float(row["QTD"]) > 0
+
+    if not data_valida:
+        motivos_pv.append("Data de entrega inválida")
+
+    if not qtd_valida:
+        motivos_pv.append("Quantidade zero ou inválida")
+
+    # Se data ou quantidade estiverem inválidas, não tenta expandir processo
+    if not data_valida or not qtd_valida:
+        status_pv = "Inconsistente"
+
+        registro = {
+            "PV": pv_atual,
+            "Cliente": cliente_atual,
+            "CODIGO": codigo_atual,
+            "Motivo": " | ".join(motivos_pv)
+        }
+
+        pvs_excluidas.append(registro)
+        pvs_sem_carga.append(registro)
+
+        auditoria_pv.append({
+            "PV": pv_atual,
+            "Cliente": cliente_atual,
+            "CODIGO": codigo_atual,
+            "Status": status_pv,
+            "Qtd": row["QTD"],
+            "Total Processos Válidos": 0,
+            "Horas Totais": 0,
+            "Motivo": " | ".join(motivos_pv)
+        })
+        continue
+
+    # -------------------------------
+    # Expansão dos processos válidos
+    # -------------------------------
     for proc in processos:
-        tempo = pd.to_numeric(roteiro.get(proc), errors="coerce")
+        tempo = pd.to_numeric(row.get(proc), errors="coerce")
 
         if pd.notna(tempo) and tempo > 0 and tempo <= 2500:
-            teve_processo_valido = True
             qtde_processos_validos += 1
 
             horas = (tempo * float(row["QTD"])) / 60
@@ -381,82 +362,93 @@ for _, row in df_pv.iterrows():
                 "Horas": horas
             })
 
-    if not teve_processo_valido:
+    # -------------------------------
+    # Se não teve nenhum processo válido
+    # -------------------------------
+    if qtde_processos_validos == 0:
+        status_pv = "Sem processo válido"
+
         registro = {
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
-            "Motivo": "Sem processo válido com tempo > 0"
+            "Motivo": "Nenhum processo com tempo > 0 e <= 2500"
         }
 
         pvs_excluidas.append(registro)
         pvs_sem_carga.append(registro)
 
-        linhas.append({
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "Processo": "SEM PROCESSO",
-            "Data": row["ENTREGA"],
-            "Horas": 0
-        })
-
         auditoria_pv.append({
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
-            "Status": "Sem processo válido",
+            "Status": status_pv,
             "Qtd": row["QTD"],
             "Total Processos Válidos": 0,
-            "Horas Totais": 0
+            "Horas Totais": 0,
+            "Motivo": "Nenhum processo com tempo > 0 e <= 2500"
         })
     else:
         auditoria_pv.append({
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
-            "Status": "OK",
+            "Status": status_pv,
             "Qtd": row["QTD"],
             "Total Processos Válidos": qtde_processos_validos,
-            "Horas Totais": horas_totais_pv
+            "Horas Totais": horas_totais_pv,
+            "Motivo": ""
         })
 
+# Base principal de carga
 df = pd.DataFrame(linhas)
 
-# 🔥 GARANTE QUE NENHUMA PV SUMA
-pvs_aps_set = set(df["PV"].astype(str).str.strip().unique()) if not df.empty else set()
-pvs_excluidas_set = set([str(x["PV"]).strip() for x in pvs_excluidas])
+# DataFrames auxiliares
+df_excluidas = pd.DataFrame(pvs_excluidas)
+df_sem_carga = pd.DataFrame(pvs_sem_carga)
+df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
-pvs_faltantes_silenciosas = pvs_excel_set - pvs_aps_set
+# -------------------------------
+# Garantia de rastreabilidade
+# -------------------------------
+pvs_auditadas_set = set(df_auditoria_pv["PV"].astype(str).str.strip().unique()) if not df_auditoria_pv.empty else set()
+pvs_nao_auditadas = pvs_excel_set - pvs_auditadas_set
 
-for pv_faltante in pvs_faltantes_silenciosas:
+for pv_faltante in pvs_nao_auditadas:
     linha_pv = df_pv[df_pv["PV"].astype(str).str.strip() == pv_faltante]
 
     if not linha_pv.empty:
         row = linha_pv.iloc[0]
-        pvs_excluidas.append({
-            "PV": row["PV"],
-            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO_PV"],
-            "Motivo": "PV não carregada no APS"
-        })
 
-        linhas.append({
+        registro = {
             "PV": str(row["PV"]).strip(),
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "Processo": "PV NÃO CARREGADA",
-            "Data": row["ENTREGA"],
-            "Horas": 0
+            "CODIGO": row["CODIGO_PV"],
+            "Motivo": "PV não auditada por falha de processamento"
+        }
+
+        pvs_excluidas.append(registro)
+        pvs_sem_carga.append(registro)
+
+        auditoria_pv.append({
+            "PV": str(row["PV"]).strip(),
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO_PV"],
+            "Status": "Falha de processamento",
+            "Qtd": row["QTD"],
+            "Total Processos Válidos": 0,
+            "Horas Totais": 0,
+            "Motivo": "PV não auditada por falha de processamento"
         })
 
-df = pd.DataFrame(linhas)
+# Recria os dataframes finais após blindagem
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
 if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
-    st.stop()
-    
+    st.stop()    
 # ===============================
 # FILTRO POR CLIENTE
 # ===============================
@@ -570,8 +562,25 @@ dem["Ocupacao"] = np.where(
     0
 )
 
-# Limita para evitar distorção absurda visual
 dem["Ocupacao"] = dem["Ocupacao"].replace([np.inf, -np.inf], 0).fillna(0)
+
+# Remove processos sem capacidade produtiva da visão de ocupação
+dem = dem[dem["Capacidade"] > 0].copy()
+
+# Remove linhas zeradas para não poluir gráfico
+dem = dem[(dem["Horas"] > 0) | (dem["Ocupacao"] > 0)].copy()
+
+# Ordenação correta do eixo
+if tipo == "Mensal":
+    dem["Ordem_Periodo"] = dem["Mes"]
+else:
+    dem["Ordem_Periodo"] = dem["Semana"]
+
+dem = dem.sort_values(["Ordem_Periodo", "Processo"]).copy()
+
+# Rótulos com 1 casa decimal
+dem["Horas_Label"] = dem["Horas"].round(1).astype(str) + "h"
+dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
 
 # ===============================
 # AGRUPAMENTO POR PROCESSO
