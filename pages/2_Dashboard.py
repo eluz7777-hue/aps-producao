@@ -40,6 +40,7 @@ EFICIENCIA = 0.80
 # Jornada real da fábrica
 HORAS_SEG_A_QUI = 9  # 07h às 17h com 1h almoço
 HORAS_SEXTA = 8      # 07h às 16h com 1h almoço
+HORAS_DIA_UTIL_MEDIA = ((HORAS_SEG_A_QUI * 4) + HORAS_SEXTA) / 5
 
 # Calendário de feriados Brasil
 FERIADOS_BR = holidays.Brazil()
@@ -67,33 +68,6 @@ MAQUINAS = {
     "MONTAGEM": 1,
     "DIVERSOS": 0
 }
-
-def horas_uteis_mes(ano, mes):
-    """
-    Calcula horas úteis reais do mês considerando:
-    - Seg a Qui = 9h
-    - Sexta = 8h
-    - Sábado/Domingo fora
-    - Feriados Brasil fora
-    """
-    inicio = pd.Timestamp(year=ano, month=mes, day=1)
-    fim = inicio + pd.offsets.MonthEnd(1)
-
-    dias = pd.date_range(start=inicio, end=fim, freq="D")
-    horas = 0
-
-    for dia in dias:
-        if dia.weekday() >= 5:  # sábado/domingo
-            continue
-        if dia.date() in FERIADOS_BR:
-            continue
-
-        if dia.weekday() <= 3:  # segunda a quinta
-            horas += HORAS_SEG_A_QUI
-        elif dia.weekday() == 4:  # sexta
-            horas += HORAS_SEXTA
-
-    return horas
 
 def capacidade_mes_por_processo(ano, mes, processo):
     recursos = MAQUINAS.get(processo, 0)
@@ -160,6 +134,40 @@ def horas_uteis_mes(ano, mes):
     inicio = pd.Timestamp(year=int(ano), month=int(mes), day=1)
     fim = inicio + pd.offsets.MonthEnd(1)
     return horas_uteis_periodo(inicio, fim)
+
+def horas_uteis_semana(inicio, fim):
+    """
+    Calcula as horas úteis reais da semana/período considerando:
+    - Seg a Qui = 9h
+    - Sexta = 8h
+    - exclui sábados, domingos e feriados
+    """
+    if pd.isna(inicio) or pd.isna(fim):
+        return 0
+
+    inicio = pd.Timestamp(inicio).normalize()
+    fim = pd.Timestamp(fim).normalize()
+
+    if fim < inicio:
+        return 0
+
+    dias = pd.date_range(inicio, fim, freq="D")
+    total_horas = 0
+
+    for d in dias:
+        if d.weekday() < 5 and d.date() not in br_holidays:
+            if d.weekday() == 4:  # sexta
+                total_horas += HORAS_SEXTA
+            else:  # segunda a quinta
+                total_horas += HORAS_SEG_A_QUI
+
+    return total_horas
+
+def capacidade_semana_por_processo(inicio, fim, processo):
+    recursos = MAQUINAS.get(processo, 0)
+    if recursos <= 0:
+        return 0
+    return horas_uteis_semana(inicio, fim) * recursos * EFICIENCIA
 
 # ===============================
 # CACHE DE LEITURA
@@ -487,10 +495,14 @@ df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
 df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
 
 def capacidade_diaria_real(processo):
+    """
+    Capacidade média diária operacional por processo.
+    Usada para estimativa contínua de fila.
+    """
     recursos = MAQUINAS.get(processo, 0)
     if recursos <= 0:
         return 0
-    return (((HORAS_SEG_A_QUI * 4) + HORAS_SEXTA) / 5) * recursos * EFICIENCIA
+    return HORAS_DIA_UTIL_MEDIA * recursos * EFICIENCIA
 
 df["Capacidade Diária Real (h)"] = df["Processo"].apply(capacidade_diaria_real)
 
@@ -535,14 +547,9 @@ if tipo == "Semanal":
 
     # Capacidade semanal real = dias úteis da semana × jornada real × recursos × eficiência
     dem["Capacidade"] = dem.apply(
-        lambda r: (
-            r["Dias Úteis"] *
-            ((HORAS_SEG_A_QUI * 4 + HORAS_SEXTA) / 5) *
-            MAQUINAS.get(r["Processo"], 0) *
-            EFICIENCIA
-        ),
-        axis=1
-    )
+    lambda r: capacidade_semana_por_processo(r["Inicio"], r["Fim"], r["Processo"]),
+    axis=1
+)
 
 else:
     df["Periodo"] = "Mês " + df["Mes"].astype(str)
@@ -612,15 +619,27 @@ dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
 # ===============================
 # CAPACIDADE POR PROCESSO
 # ===============================
-capacidade_proc = {
-    proc: horas_mes * MAQUINAS.get(proc, 0) * EFICIENCIA
-    for proc in processos
-}
+if tipo == "Mensal":
+    capacidade_proc = {
+        proc: horas_uteis_mes(ano_ref, mes_ref) * MAQUINAS.get(proc, 0) * EFICIENCIA
+        for proc in processos
+    }
+    dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 
-dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
+else:
+    capacidade_proc = (
+        dem.groupby("Processo", as_index=False)["Capacidade"]
+        .sum()
+        .rename(columns={"Capacidade": "Capacidade Processo"})
+    )
+    dem_proc = dem_proc.merge(capacidade_proc, on="Processo", how="left")
 
-dem_proc["Utilização (%)"] = (
-    dem_proc["Horas"] / dem_proc["Capacidade Processo"] * 100
+dem_proc["Capacidade Processo"] = dem_proc["Capacidade Processo"].fillna(0)
+
+dem_proc["Utilização (%)"] = np.where(
+    dem_proc["Capacidade Processo"] > 0,
+    (dem_proc["Horas"] / dem_proc["Capacidade Processo"]) * 100,
+    0
 )
 
 dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].replace([float("inf"), -float("inf")], 0)
@@ -643,9 +662,11 @@ dem_proc["Faixa"] = dem_proc["Utilização (%)"].apply(faixa_utilizacao)
 pv_carga = df.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"].sum()
 
 # Capacidade média diária real da fábrica (global)
+recursos_ativos = sum(v for v in MAQUINAS.values() if v > 0)
+
 capacidade_media_diaria_global = (
-    ((HORAS_SEG_A_QUI * 4) + HORAS_SEXTA) / 5
-) * EFICIENCIA
+    HORAS_DIA_UTIL_MEDIA * recursos_ativos * EFICIENCIA
+)
 
 pv_carga["Dias Necessários"] = np.where(
     capacidade_media_diaria_global > 0,
@@ -801,11 +822,13 @@ fig = px.bar(
 
 fig.add_hline(y=100, line_dash="dash")
 
-fig.update_traces(textposition="outside")
+fig.update_traces(textposition="outside", cliponaxis=False)
 
 fig.update_layout(
     yaxis_title="Ocupação (%)",
-    xaxis_title="Período"
+    xaxis_title="Período",
+    uniformtext_minsize=8,
+    uniformtext_mode="hide"
 )
 
 st.plotly_chart(fig, use_container_width=True)
