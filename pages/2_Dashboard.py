@@ -28,7 +28,7 @@ with col1:
         st.image("logo.png", width=80)
 
 with col2:
-    st.title("📊 ELOHIM APS – Advanced Planning System")
+    st.title("APS | Carga & Capacidade")
 
 # ===============================
 # CONFIG
