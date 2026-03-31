@@ -1023,18 +1023,25 @@ fig_cap_proc = px.bar(
     title="Carga Real x Capacidade por Processo (h)"
 )
 
+fig_cap_proc.update_traces(
+    selector=dict(name="Horas"),
+    marker_color="#FF7A00"
+)
+
+fig_cap_proc.update_traces(
+    selector=dict(name="Capacidade Processo"),
+    marker_color="#1f3b73"
+)
+
 for trace in fig_cap_proc.data:
     trace.texttemplate = "%{text}"
     trace.textposition = "outside"
 
 fig_cap_proc.update_layout(
     yaxis_title="Horas",
-    xaxis_title="Processo"
-)
-
-fig_cap_proc.update_layout(
-    yaxis_title="Horas",
-    xaxis_title="Processo"
+    xaxis_title="Processo",
+    legend_title_text="Tipo",
+    legend=dict(orientation="h", y=1.1)
 )
 
 st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
