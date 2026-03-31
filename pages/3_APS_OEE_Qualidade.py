@@ -9,7 +9,7 @@ st.set_page_config(page_title="APS | OEE & Qualidade", layout="wide")
 st.title("APS | OEE & Qualidade")
 
 # ===============================
-# FUNÇÕES DE FORMATAÇÃO BR
+# FORMATAÇÃO BR
 # ===============================
 def fmt_br_num(valor, casas=1):
     try:
@@ -23,8 +23,7 @@ def fmt_br_num(valor, casas=1):
 def fmt_br_int(valor):
     try:
         valor = int(round(float(valor), 0))
-        texto = f"{valor:,}".replace(",", ".")
-        return texto
+        return f"{valor:,}".replace(",", ".")
     except:
         return "0"
 
@@ -36,6 +35,25 @@ def fmt_br_pct(valor, casas=1):
         return texto
     except:
         return "0,0%"
+
+# ===============================
+# SEMÁFORO INDUSTRIAL
+# ===============================
+def semaforo_oee(valor):
+    if valor < 60:
+        return "🔴 Crítico"
+    elif valor < 75:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Bom"
+
+def semaforo_indicador(valor, meta_amarela=75, meta_verde=85):
+    if valor < meta_amarela:
+        return "🔴"
+    elif valor < meta_verde:
+        return "🟡"
+    else:
+        return "🟢"
 
 # ===============================
 # LEITURA DA PLANILHA OEE
@@ -70,7 +88,7 @@ if faltantes:
     st.stop()
 
 # ===============================
-# LIMPEZA E FILTRO DE DADOS
+# LIMPEZA E RENOMEAÇÃO
 # ===============================
 df_oee = df_oee[colunas_esperadas].copy()
 
@@ -91,7 +109,9 @@ df_oee = df_oee.dropna(how="all")
 df_oee["Mes"] = df_oee["Mes"].astype(str).str.strip().str.upper()
 df_oee = df_oee[df_oee["Mes"] != ""].copy()
 
-# Trata campos numéricos
+# ===============================
+# TRATAMENTO DE CAMPOS NUMÉRICOS
+# ===============================
 for col in ["Planejadas", "Fabricadas", "Refugadas", "Disponibilidade_h", "Paradas_h", "Tempo_Operando_h"]:
     df_oee[col] = (
         df_oee[col]
@@ -100,12 +120,12 @@ for col in ["Planejadas", "Fabricadas", "Refugadas", "Disponibilidade_h", "Parad
         .replace("-", "0")
     )
 
-    # Só trata vírgula decimal (padrão BR)
+    # Trata apenas vírgula decimal
     df_oee[col] = df_oee[col].str.replace(",", ".", regex=False)
 
     df_oee[col] = pd.to_numeric(df_oee[col], errors="coerce").fillna(0)
 
-# Considera apenas meses já realizados
+# Considera apenas meses realizados
 df_oee = df_oee[df_oee["Planejadas"] > 0].copy()
 
 if df_oee.empty:
@@ -130,20 +150,29 @@ df_oee["Total Produzido"] = df_oee["Fabricadas"] + df_oee["Refugadas"]
 
 # Disponibilidade (%)
 df_oee["Disponibilidade (%)"] = df_oee.apply(
-    lambda r: (r["Tempo_Operando_h"] / r["Disponibilidade_h"] * 100) if r["Disponibilidade_h"] > 0 else 0,
+    lambda r: (r["Tempo_Operando_h"] / r["Disponibilidade_h"] * 100)
+    if r["Disponibilidade_h"] > 0 else 0,
     axis=1
 )
 
 # Performance (%)
 df_oee["Performance (%)"] = df_oee.apply(
-    lambda r: (r["Fabricadas"] / r["Planejadas"] * 100) if r["Planejadas"] > 0 else 0,
+    lambda r: (r["Fabricadas"] / r["Planejadas"] * 100)
+    if r["Planejadas"] > 0 else 0,
     axis=1
 )
 
 # Qualidade (%)
 df_oee["Qualidade (%)"] = df_oee.apply(
-    lambda r: (r["Fabricadas"] / (r["Fabricadas"] + r["Refugadas"]) * 100)
-    if (r["Fabricadas"] + r["Refugadas"]) > 0 else 0,
+    lambda r: (r["Fabricadas"] / r["Total Produzido"] * 100)
+    if r["Total Produzido"] > 0 else 0,
+    axis=1
+)
+
+# Refugo (%)
+df_oee["Refugo (%)"] = df_oee.apply(
+    lambda r: (r["Refugadas"] / r["Total Produzido"] * 100)
+    if r["Total Produzido"] > 0 else 0,
     axis=1
 )
 
@@ -154,22 +183,22 @@ df_oee["OEE (%)"] = (
     (df_oee["Qualidade (%)"] / 100)
 ) * 100
 
-
-# Arredondamento
-for col in [
+# Arredondamento seguro
+colunas_percentuais = [
     "Disponibilidade (%)",
     "Performance (%)",
     "Qualidade (%)",
     "Refugo (%)",
     "OEE (%)"
-]:
-    df_oee[col] = df_oee[col].round(1)
+]
+
+for col in colunas_percentuais:
+    if col in df_oee.columns:
+        df_oee[col] = df_oee[col].round(1)
 
 # ===============================
-# KPIs PRINCIPAIS
+# KPI GERAL
 # ===============================
-st.subheader("📌 Indicadores Principais")
-
 planejado_total = df_oee["Planejadas"].sum()
 fabricado_total = df_oee["Fabricadas"].sum()
 refugado_total = df_oee["Refugadas"].sum()
@@ -177,21 +206,20 @@ disponibilidade_total = df_oee["Disponibilidade_h"].sum()
 paradas_total = df_oee["Paradas_h"].sum()
 tempo_operando_total = df_oee["Tempo_Operando_h"].sum()
 
-atingimento_geral = round(
-    (fabricado_total / planejado_total * 100), 1
-) if planejado_total > 0 else 0
-
-qualidade_geral = round(
-    (fabricado_total / (fabricado_total + refugado_total) * 100), 1
-) if (fabricado_total + refugado_total) > 0 else 0
-
 disponibilidade_geral = round(
-    (tempo_operando_total / disponibilidade_total * 100), 1
+    (tempo_operando_total / disponibilidade_total * 100),
+    1
 ) if disponibilidade_total > 0 else 0
 
 performance_geral = round(
-    (fabricado_total / planejado_total * 100), 1
+    (fabricado_total / planejado_total * 100),
+    1
 ) if planejado_total > 0 else 0
+
+qualidade_geral = round(
+    (fabricado_total / (fabricado_total + refugado_total) * 100),
+    1
+) if (fabricado_total + refugado_total) > 0 else 0
 
 oee_geral = round(
     (disponibilidade_geral / 100) *
@@ -199,6 +227,11 @@ oee_geral = round(
     (qualidade_geral / 100) * 100,
     1
 )
+
+# ===============================
+# INDICADORES PRINCIPAIS
+# ===============================
+st.subheader("📌 Indicadores Principais")
 
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Peças Planejadas", fmt_br_int(planejado_total))
@@ -213,15 +246,28 @@ k7.metric("Qualidade", fmt_br_pct(qualidade_geral))
 k8.metric("Paradas de Máquina (h)", fmt_br_num(paradas_total, 1))
 
 # ===============================
-# TABELA ANALÍTICA
+# SEMÁFORO EXECUTIVO
+# ===============================
+st.subheader("🚦 Semáforo Industrial")
+
+s1, s2, s3, s4 = st.columns(4)
+
+s1.metric("OEE", semaforo_oee(oee_geral))
+s2.metric("Disponibilidade", semaforo_indicador(disponibilidade_geral, 75, 85))
+s3.metric("Performance", semaforo_indicador(performance_geral, 75, 90))
+s4.metric("Qualidade", semaforo_indicador(qualidade_geral, 95, 98))
+
+# ===============================
+# ANÁLISE MENSAL
 # ===============================
 st.subheader("📋 Análise Mensal")
 
-tabela = df_oee.copy()
-
-# Formatação para exibição
 tabela_exibir = df_oee.copy()
 
+# Coluna de semáforo por mês
+tabela_exibir["Status OEE"] = tabela_exibir["OEE (%)"].apply(semaforo_oee)
+
+# Formatação BR
 for col in ["Planejadas", "Fabricadas", "Refugadas"]:
     tabela_exibir[col] = tabela_exibir[col].apply(fmt_br_int)
 
@@ -234,6 +280,7 @@ for col in ["Disponibilidade (%)", "Performance (%)", "Qualidade (%)", "Refugo (
 st.dataframe(
     tabela_exibir[[
         "Mes",
+        "Status OEE",
         "Planejadas",
         "Fabricadas",
         "Refugadas",
@@ -263,7 +310,7 @@ fig1 = px.bar(
     x="Mes",
     y=["Planejadas", "Fabricadas"],
     barmode="group",
-    text_auto=".0f",
+    text_auto=".1f",
     title="Planejado x Fabricado por Mês"
 )
 
@@ -279,12 +326,15 @@ st.plotly_chart(fig1, use_container_width=True)
 # ===============================
 st.subheader("📈 OEE por Mês")
 
+df_oee_plot = df_oee.copy()
+df_oee_plot["OEE_label"] = df_oee_plot["OEE (%)"].apply(fmt_br_pct)
+
 fig2 = px.line(
-    df_oee,
+    df_oee_plot,
     x="Mes",
     y="OEE (%)",
     markers=True,
-    text="OEE (%)",
+    text="OEE_label",
     title="OEE por Mês"
 )
 
@@ -298,12 +348,17 @@ fig2.update_layout(
 st.plotly_chart(fig2, use_container_width=True)
 
 # ===============================
-# GRÁFICO 3 - DISPONIBILIDADE / PERFORMANCE / QUALIDADE
+# GRÁFICO 3 - D / P / Q
 # ===============================
 st.subheader("🎯 Disponibilidade x Performance x Qualidade")
 
+df_dpq = df_oee.copy()
+df_dpq["Disp_label"] = df_dpq["Disponibilidade (%)"].apply(fmt_br_pct)
+df_dpq["Perf_label"] = df_dpq["Performance (%)"].apply(fmt_br_pct)
+df_dpq["Qual_label"] = df_dpq["Qualidade (%)"].apply(fmt_br_pct)
+
 fig3 = px.line(
-    df_oee,
+    df_dpq,
     x="Mes",
     y=["Disponibilidade (%)", "Performance (%)", "Qualidade (%)"],
     markers=True,
@@ -326,7 +381,7 @@ fig4 = px.bar(
     df_oee,
     x="Mes",
     y="Refugadas",
-    text_auto=".0f",
+    text_auto=".1f",
     title="Peças Refugadas por Mês"
 )
 
