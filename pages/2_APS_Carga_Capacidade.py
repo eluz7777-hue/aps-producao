@@ -202,8 +202,8 @@ def capacidade_semana_por_processo(inicio, fim, processo):
 # ===============================
 # CACHE DE LEITURA
 # ===============================
-@st.cache_data
-def carregar_dados(base_path):
+@st.cache_data(ttl=0)
+def carregar_dados(base_path, file_mtime):
     df = pd.read_excel(os.path.join(base_path, "PV.xlsx"))
     return df
 
@@ -219,9 +219,18 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 # ===============================
 # LEITURA
 # ===============================
-BASE_PATH = os.getcwd()
+# ===============================
+# LEITURA
+# ===============================
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+BASE_PATH = os.path.dirname(BASE_PATH)  # volta para a raiz do projeto
 
-df_pv = carregar_dados(BASE_PATH)
+arquivo_pv = os.path.join(BASE_PATH, "PV.xlsx")
+file_mtime = os.path.getmtime(arquivo_pv)
+
+st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
+
+df_pv = carregar_dados(BASE_PATH, file_mtime)
 
 # Normaliza cabeçalhos
 df_pv.columns = [c.strip().upper() for c in df_pv.columns]
