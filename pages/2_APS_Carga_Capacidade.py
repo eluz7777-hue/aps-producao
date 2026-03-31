@@ -1,5 +1,7 @@
 import streamlit as st
 
+
+
 # ===============================
 # 🔐 BLOQUEIO DE ACESSO GLOBAL
 # ===============================
@@ -17,6 +19,34 @@ import holidays
 import math
 
 st.set_page_config(layout="wide")
+
+# ===============================
+# FORMATAÇÃO BR
+# ===============================
+def fmt_br_num(valor, casas=1):
+    try:
+        valor = float(valor)
+        texto = f"{valor:,.{casas}f}"
+        texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+        return texto
+    except:
+        return "0"
+
+def fmt_br_int(valor):
+    try:
+        valor = int(round(float(valor), 0))
+        return f"{valor:,}".replace(",", ".")
+    except:
+        return "0"
+
+def fmt_br_pct(valor, casas=1):
+    try:
+        valor = float(valor)
+        texto = f"{valor:,.{casas}f}%"
+        texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+        return texto
+    except:
+        return "0,0%"
 
 # ===============================
 # LOGO + TÍTULO
@@ -752,9 +782,9 @@ utilizacao_total = round((carga_total / capacidade_total) * 100, 1) if capacidad
 # -------------------------------
 k1, k2, k3 = st.columns(3)
 
-k1.metric("Carga Total (h)", f"{carga_total:,.1f}")
-k2.metric("Capacidade Mensal (h)", f"{capacidade_total:,.1f}")
-k3.metric("Utilização (%)", f"{utilizacao_total:.1f}%")
+k1.metric("Carga Total (h)", fmt_br_num(carga_total, 1))
+k2.metric("Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
+k3.metric("Utilização (%)", fmt_br_pct(utilizacao_total, 1))
 
 # ===============================
 # RESUMO
@@ -780,14 +810,14 @@ ok = max(0, pvs_no_aps - len(atrasos) - len(risco))
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric("🔴 Atraso", len(atrasos))
-col2.metric("🟡 Risco", len(risco))
-col3.metric("🟢 OK", ok)
+col1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
+col2.metric("🟡 Risco", fmt_br_int(len(risco)))
+col3.metric("🟢 OK", fmt_br_int(ok))
 
 c4, c5 = st.columns(2)
 
-c4.metric("PVs no Excel", pvs_totais_excel)
-c5.metric("PVs no APS", pvs_no_aps)
+c4.metric("PVs no Excel", fmt_br_int(pvs_totais_excel))
+c5.metric("PVs no APS", fmt_br_int(pvs_no_aps))
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -809,29 +839,43 @@ else:
 # ===============================
 st.subheader("📌 Ocupação por Processo (%)")
 
-dem["Label"] = dem["Ocupacao"].map(lambda x: f"{x:.1f}%")
+dem_plot = dem.copy()
+dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
+dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
 
 fig = px.bar(
-    dem.sort_values(["Ordem_Periodo", "Processo"]),
+    dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
     x="Periodo",
     y="Ocupacao",
     color="Processo",
     barmode="group",
-    text="Label"
+    text="Label",
+    custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
 )
 
 fig.add_hline(y=100, line_dash="dash")
 
-fig.update_traces(textposition="outside", cliponaxis=False)
+fig.update_traces(
+    textposition="outside",
+    hovertemplate=(
+        "<b>%{x}</b><br>"
+        "Processo: %{customdata[0]}<br>"
+        "Ocupação: %{customdata[1]}<br>"
+        "Carga: %{customdata[2]} h<br>"
+        "Capacidade: %{customdata[3]} h"
+        "<extra></extra>"
+    )
+)
 
 fig.update_layout(
     yaxis_title="Ocupação (%)",
-    xaxis_title="Período",
-    uniformtext_minsize=8,
-    uniformtext_mode="hide"
+    xaxis_title="Período"
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
 # ===============================
 # VISÃO CAPACIDADE POR PROCESSO
 # ===============================
@@ -954,21 +998,38 @@ gargalos = dem.sort_values(
 
 top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
 top_gargalos["Semáforo"] = top_gargalos["Ocupacao"].apply(status)
-top_gargalos["Ocupação (%)"] = top_gargalos["Ocupacao"].round(1)
+top_gargalos["Ocupação (%)"] = top_gargalos["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+top_gargalos["Horas"] = top_gargalos["Horas"].apply(lambda x: fmt_br_num(x, 1))
+top_gargalos["Capacidade"] = top_gargalos["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+top_gargalos["Saldo (h)"] = top_gargalos["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
 
 st.dataframe(
-    top_gargalos[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]]
+    top_gargalos[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
+    use_container_width=True
 )
 
 st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
+dem_proc_plot = dem_proc.copy()
+dem_proc_plot["Horas_label"] = dem_proc_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
+dem_proc_plot["Capacidade_label"] = dem_proc_plot["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
+
 fig_cap_proc = px.bar(
-    dem_proc.sort_values("Capacidade Processo", ascending=False),
+    dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
     x="Processo",
     y=["Horas", "Capacidade Processo"],
     barmode="group",
     text_auto=".1f",
     title="Carga Real x Capacidade por Processo (h)"
+)
+
+for trace in fig_cap_proc.data:
+    trace.texttemplate = "%{text}"
+    trace.textposition = "outside"
+
+fig_cap_proc.update_layout(
+    yaxis_title="Horas",
+    xaxis_title="Processo"
 )
 
 fig_cap_proc.update_layout(
@@ -1007,13 +1068,15 @@ st.dataframe(fila_exibicao)
 st.subheader("📌 Auditoria de Capacidade")
 
 auditoria = dem.copy()
-auditoria["Horas"] = auditoria["Horas"].round(1)
-auditoria["Capacidade"] = auditoria["Capacidade"].round(1)
-auditoria["Ocupação (%)"] = auditoria["Ocupacao"].round(1)
 auditoria["Semáforo"] = auditoria["Ocupacao"].apply(status)
+auditoria["Ocupação (%)"] = auditoria["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+auditoria["Horas"] = auditoria["Horas"].apply(lambda x: fmt_br_num(x, 1))
+auditoria["Capacidade"] = auditoria["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+auditoria["Saldo (h)"] = auditoria["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
 
 st.dataframe(
-    auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]]
+    auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
+    use_container_width=True
 )
 
 # ===============================

@@ -98,9 +98,11 @@ for col in ["Planejadas", "Fabricadas", "Refugadas", "Disponibilidade_h", "Parad
         .astype(str)
         .str.strip()
         .replace("-", "0")
-        .str.replace(".", "", regex=False)
-        .str.replace(",", ".", regex=False)
     )
+
+    # Só trata vírgula decimal (padrão BR)
+    df_oee[col] = df_oee[col].str.replace(",", ".", regex=False)
+
     df_oee[col] = pd.to_numeric(df_oee[col], errors="coerce").fillna(0)
 
 # Considera apenas meses já realizados
@@ -140,13 +142,8 @@ df_oee["Performance (%)"] = df_oee.apply(
 
 # Qualidade (%)
 df_oee["Qualidade (%)"] = df_oee.apply(
-    lambda r: (r["Fabricadas"] / r["Total Produzido"] * 100) if r["Total Produzido"] > 0 else 0,
-    axis=1
-)
-
-# Refugo (%)
-df_oee["Refugo (%)"] = df_oee.apply(
-    lambda r: (r["Refugadas"] / r["Total Produzido"] * 100) if r["Total Produzido"] > 0 else 0,
+    lambda r: (r["Fabricadas"] / (r["Fabricadas"] + r["Refugadas"]) * 100)
+    if (r["Fabricadas"] + r["Refugadas"]) > 0 else 0,
     axis=1
 )
 
@@ -154,8 +151,9 @@ df_oee["Refugo (%)"] = df_oee.apply(
 df_oee["OEE (%)"] = (
     (df_oee["Disponibilidade (%)"] / 100) *
     (df_oee["Performance (%)"] / 100) *
-    (df_oee["Qualidade (%)"] / 100) * 100
-)
+    (df_oee["Qualidade (%)"] / 100)
+) * 100
+
 
 # Arredondamento
 for col in [
@@ -222,7 +220,7 @@ st.subheader("📋 Análise Mensal")
 tabela = df_oee.copy()
 
 # Formatação para exibição
-tabela_exibir = tabela.copy()
+tabela_exibir = df_oee.copy()
 
 for col in ["Planejadas", "Fabricadas", "Refugadas"]:
     tabela_exibir[col] = tabela_exibir[col].apply(fmt_br_int)
