@@ -9,6 +9,35 @@ st.set_page_config(page_title="APS | OEE & Qualidade", layout="wide")
 st.title("APS | OEE & Qualidade")
 
 # ===============================
+# FUNÇÕES DE FORMATAÇÃO BR
+# ===============================
+def fmt_br_num(valor, casas=1):
+    try:
+        valor = float(valor)
+        texto = f"{valor:,.{casas}f}"
+        texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+        return texto
+    except:
+        return "0"
+
+def fmt_br_int(valor):
+    try:
+        valor = int(round(float(valor), 0))
+        texto = f"{valor:,}".replace(",", ".")
+        return texto
+    except:
+        return "0"
+
+def fmt_br_pct(valor, casas=1):
+    try:
+        valor = float(valor)
+        texto = f"{valor:,.{casas}f}%"
+        texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+        return texto
+    except:
+        return "0,0%"
+
+# ===============================
 # LEITURA DA PLANILHA OEE
 # ===============================
 ARQUIVO_OEE = "OEE - 2026.xlsx"
@@ -28,7 +57,10 @@ colunas_esperadas = [
     "MÊS",
     "PEÇAS PLANEJADAS PARA FABRICAÇÃO",
     "PEÇAS FABRICADAS (FATURADAS)",
-    "PEÇAS REFUGADAS"
+    "PEÇAS REFUGADAS",
+    "DISPONIBILIDADE (H)",
+    "PARADAS DE MAQUINA (H)",
+    "TEMPO OPERANDO (H)"
 ]
 
 faltantes = [c for c in colunas_esperadas if c not in df_oee.columns]
@@ -46,21 +78,32 @@ df_oee = df_oee.rename(columns={
     "MÊS": "Mes",
     "PEÇAS PLANEJADAS PARA FABRICAÇÃO": "Planejadas",
     "PEÇAS FABRICADAS (FATURADAS)": "Fabricadas",
-    "PEÇAS REFUGADAS": "Refugadas"
+    "PEÇAS REFUGADAS": "Refugadas",
+    "DISPONIBILIDADE (H)": "Disponibilidade_h",
+    "PARADAS DE MAQUINA (H)": "Paradas_h",
+    "TEMPO OPERANDO (H)": "Tempo_Operando_h"
 })
 
 # Remove linhas totalmente vazias
 df_oee = df_oee.dropna(how="all")
 
-# Preenche vazios numéricos com zero
-for col in ["Planejadas", "Fabricadas", "Refugadas"]:
-    df_oee[col] = pd.to_numeric(df_oee[col], errors="coerce").fillna(0)
-
-# Remove meses sem nome
+# Padroniza mês
 df_oee["Mes"] = df_oee["Mes"].astype(str).str.strip().str.upper()
 df_oee = df_oee[df_oee["Mes"] != ""].copy()
 
-# Considera apenas meses com dados do período já realizado
+# Trata campos numéricos
+for col in ["Planejadas", "Fabricadas", "Refugadas", "Disponibilidade_h", "Paradas_h", "Tempo_Operando_h"]:
+    df_oee[col] = (
+        df_oee[col]
+        .astype(str)
+        .str.strip()
+        .replace("-", "0")
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    df_oee[col] = pd.to_numeric(df_oee[col], errors="coerce").fillna(0)
+
+# Considera apenas meses já realizados
 df_oee = df_oee[df_oee["Planejadas"] > 0].copy()
 
 if df_oee.empty:
@@ -79,32 +122,49 @@ df_oee["Ordem"] = df_oee["Mes"].map(ordem_meses)
 df_oee = df_oee.sort_values("Ordem").reset_index(drop=True)
 
 # ===============================
-# CÁLCULOS OEE & QUALIDADE
+# CÁLCULOS INDUSTRIAIS
 # ===============================
 df_oee["Total Produzido"] = df_oee["Fabricadas"] + df_oee["Refugadas"]
 
-df_oee["Atingimento (%)"] = df_oee.apply(
+# Disponibilidade (%)
+df_oee["Disponibilidade (%)"] = df_oee.apply(
+    lambda r: (r["Tempo_Operando_h"] / r["Disponibilidade_h"] * 100) if r["Disponibilidade_h"] > 0 else 0,
+    axis=1
+)
+
+# Performance (%)
+df_oee["Performance (%)"] = df_oee.apply(
     lambda r: (r["Fabricadas"] / r["Planejadas"] * 100) if r["Planejadas"] > 0 else 0,
     axis=1
 )
 
+# Qualidade (%)
 df_oee["Qualidade (%)"] = df_oee.apply(
     lambda r: (r["Fabricadas"] / r["Total Produzido"] * 100) if r["Total Produzido"] > 0 else 0,
     axis=1
 )
 
+# Refugo (%)
 df_oee["Refugo (%)"] = df_oee.apply(
     lambda r: (r["Refugadas"] / r["Total Produzido"] * 100) if r["Total Produzido"] > 0 else 0,
     axis=1
 )
 
-df_oee["Eficiência Industrial (%)"] = (
-    (df_oee["Atingimento (%)"] / 100) *
+# OEE (%)
+df_oee["OEE (%)"] = (
+    (df_oee["Disponibilidade (%)"] / 100) *
+    (df_oee["Performance (%)"] / 100) *
     (df_oee["Qualidade (%)"] / 100) * 100
 )
 
-# Arredondamentos
-for col in ["Atingimento (%)", "Qualidade (%)", "Refugo (%)", "Eficiência Industrial (%)"]:
+# Arredondamento
+for col in [
+    "Disponibilidade (%)",
+    "Performance (%)",
+    "Qualidade (%)",
+    "Refugo (%)",
+    "OEE (%)"
+]:
     df_oee[col] = df_oee[col].round(1)
 
 # ===============================
@@ -112,9 +172,12 @@ for col in ["Atingimento (%)", "Qualidade (%)", "Refugo (%)", "Eficiência Indus
 # ===============================
 st.subheader("📌 Indicadores Principais")
 
-planejado_total = int(df_oee["Planejadas"].sum())
-fabricado_total = int(df_oee["Fabricadas"].sum())
-refugado_total = int(df_oee["Refugadas"].sum())
+planejado_total = df_oee["Planejadas"].sum()
+fabricado_total = df_oee["Fabricadas"].sum()
+refugado_total = df_oee["Refugadas"].sum()
+disponibilidade_total = df_oee["Disponibilidade_h"].sum()
+paradas_total = df_oee["Paradas_h"].sum()
+tempo_operando_total = df_oee["Tempo_Operando_h"].sum()
 
 atingimento_geral = round(
     (fabricado_total / planejado_total * 100), 1
@@ -124,20 +187,32 @@ qualidade_geral = round(
     (fabricado_total / (fabricado_total + refugado_total) * 100), 1
 ) if (fabricado_total + refugado_total) > 0 else 0
 
-eficiencia_geral = round(
-    (atingimento_geral / 100) * (qualidade_geral / 100) * 100, 1
+disponibilidade_geral = round(
+    (tempo_operando_total / disponibilidade_total * 100), 1
+) if disponibilidade_total > 0 else 0
+
+performance_geral = round(
+    (fabricado_total / planejado_total * 100), 1
+) if planejado_total > 0 else 0
+
+oee_geral = round(
+    (disponibilidade_geral / 100) *
+    (performance_geral / 100) *
+    (qualidade_geral / 100) * 100,
+    1
 )
 
 k1, k2, k3, k4 = st.columns(4)
+k1.metric("Peças Planejadas", fmt_br_int(planejado_total))
+k2.metric("Peças Fabricadas", fmt_br_int(fabricado_total))
+k3.metric("Peças Refugadas", fmt_br_int(refugado_total))
+k4.metric("OEE Geral", fmt_br_pct(oee_geral))
 
-k1.metric("Peças Planejadas", f"{planejado_total:,}")
-k2.metric("Peças Fabricadas", f"{fabricado_total:,}")
-k3.metric("Peças Refugadas", f"{refugado_total:,}")
-k4.metric("Eficiência Industrial (%)", f"{eficiencia_geral:.1f}%")
-
-k5, k6 = st.columns(2)
-k5.metric("Atingimento (%)", f"{atingimento_geral:.1f}%")
-k6.metric("Qualidade (%)", f"{qualidade_geral:.1f}%")
+k5, k6, k7, k8 = st.columns(4)
+k5.metric("Disponibilidade", fmt_br_pct(disponibilidade_geral))
+k6.metric("Performance", fmt_br_pct(performance_geral))
+k7.metric("Qualidade", fmt_br_pct(qualidade_geral))
+k8.metric("Paradas de Máquina (h)", fmt_br_num(paradas_total, 1))
 
 # ===============================
 # TABELA ANALÍTICA
@@ -146,17 +221,37 @@ st.subheader("📋 Análise Mensal")
 
 tabela = df_oee.copy()
 
+# Formatação para exibição
+tabela_exibir = tabela.copy()
+
+for col in ["Planejadas", "Fabricadas", "Refugadas"]:
+    tabela_exibir[col] = tabela_exibir[col].apply(fmt_br_int)
+
+for col in ["Disponibilidade_h", "Paradas_h", "Tempo_Operando_h"]:
+    tabela_exibir[col] = tabela_exibir[col].apply(lambda x: fmt_br_num(x, 1))
+
+for col in ["Disponibilidade (%)", "Performance (%)", "Qualidade (%)", "Refugo (%)", "OEE (%)"]:
+    tabela_exibir[col] = tabela_exibir[col].apply(fmt_br_pct)
+
 st.dataframe(
-    tabela[[
+    tabela_exibir[[
         "Mes",
         "Planejadas",
         "Fabricadas",
         "Refugadas",
-        "Atingimento (%)",
+        "Disponibilidade_h",
+        "Paradas_h",
+        "Tempo_Operando_h",
+        "Disponibilidade (%)",
+        "Performance (%)",
         "Qualidade (%)",
         "Refugo (%)",
-        "Eficiência Industrial (%)"
-    ]],
+        "OEE (%)"
+    ]].rename(columns={
+        "Disponibilidade_h": "Disponibilidade (h)",
+        "Paradas_h": "Paradas de Máquina (h)",
+        "Tempo_Operando_h": "Tempo Operando (h)"
+    }),
     use_container_width=True
 )
 
@@ -182,11 +277,54 @@ fig1.update_layout(
 st.plotly_chart(fig1, use_container_width=True)
 
 # ===============================
-# GRÁFICO 2 - REFUGO
+# GRÁFICO 2 - OEE POR MÊS
+# ===============================
+st.subheader("📈 OEE por Mês")
+
+fig2 = px.line(
+    df_oee,
+    x="Mes",
+    y="OEE (%)",
+    markers=True,
+    text="OEE (%)",
+    title="OEE por Mês"
+)
+
+fig2.update_traces(textposition="top center")
+
+fig2.update_layout(
+    xaxis_title="Mês",
+    yaxis_title="OEE (%)"
+)
+
+st.plotly_chart(fig2, use_container_width=True)
+
+# ===============================
+# GRÁFICO 3 - DISPONIBILIDADE / PERFORMANCE / QUALIDADE
+# ===============================
+st.subheader("🎯 Disponibilidade x Performance x Qualidade")
+
+fig3 = px.line(
+    df_oee,
+    x="Mes",
+    y=["Disponibilidade (%)", "Performance (%)", "Qualidade (%)"],
+    markers=True,
+    title="Disponibilidade x Performance x Qualidade"
+)
+
+fig3.update_layout(
+    xaxis_title="Mês",
+    yaxis_title="%"
+)
+
+st.plotly_chart(fig3, use_container_width=True)
+
+# ===============================
+# GRÁFICO 4 - REFUGO
 # ===============================
 st.subheader("🧯 Refugo por Mês")
 
-fig2 = px.bar(
+fig4 = px.bar(
     df_oee,
     x="Mes",
     y="Refugadas",
@@ -194,52 +332,9 @@ fig2 = px.bar(
     title="Peças Refugadas por Mês"
 )
 
-fig2.update_layout(
-    xaxis_title="Mês",
-    yaxis_title="Peças Refugadas"
-)
-
-st.plotly_chart(fig2, use_container_width=True)
-
-# ===============================
-# GRÁFICO 3 - EFICIÊNCIA INDUSTRIAL
-# ===============================
-st.subheader("📈 Eficiência Industrial (%)")
-
-fig3 = px.line(
-    df_oee,
-    x="Mes",
-    y="Eficiência Industrial (%)",
-    markers=True,
-    text="Eficiência Industrial (%)",
-    title="Eficiência Industrial por Mês"
-)
-
-fig3.update_traces(textposition="top center")
-
-fig3.update_layout(
-    xaxis_title="Mês",
-    yaxis_title="Eficiência Industrial (%)"
-)
-
-st.plotly_chart(fig3, use_container_width=True)
-
-# ===============================
-# GRÁFICO 4 - QUALIDADE X ATINGIMENTO
-# ===============================
-st.subheader("🎯 Qualidade x Atingimento")
-
-fig4 = px.line(
-    df_oee,
-    x="Mes",
-    y=["Atingimento (%)", "Qualidade (%)"],
-    markers=True,
-    title="Qualidade x Atingimento"
-)
-
 fig4.update_layout(
     xaxis_title="Mês",
-    yaxis_title="%"
+    yaxis_title="Peças Refugadas"
 )
 
 st.plotly_chart(fig4, use_container_width=True)
