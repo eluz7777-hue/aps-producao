@@ -233,7 +233,14 @@ st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
 df_pv = carregar_dados(BASE_PATH, file_mtime)
 
 # Normaliza cabeçalhos
-df_pv.columns = [c.strip().upper() for c in df_pv.columns]
+df_pv.columns = [
+    str(c)
+    .replace("\xa0", "")   # remove espaço invisível
+    .replace("  ", " ")
+    .strip()
+    .upper()
+    for c in df_pv.columns
+]
 
 # Padroniza nomes da planilha única
 df_pv = df_pv.rename(columns={
