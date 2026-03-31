@@ -219,9 +219,6 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 # ===============================
 # LEITURA
 # ===============================
-# ===============================
-# LEITURA
-# ===============================
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 BASE_PATH = os.path.dirname(BASE_PATH)  # volta para a raiz do projeto
 
@@ -232,26 +229,41 @@ st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
 
 df_pv = carregar_dados(BASE_PATH, file_mtime)
 
-# Normaliza cabeçalhos
+# ===============================
+# NORMALIZAÇÃO FORTE DE CABEÇALHOS
+# ===============================
 df_pv.columns = [
     str(c)
     .replace("\xa0", "")   # remove espaço invisível
+    .replace("\n", "")
+    .replace("\r", "")
     .replace("  ", " ")
     .strip()
     .upper()
     for c in df_pv.columns
 ]
 
-# Padroniza nomes da planilha única
-df_pv = df_pv.rename(columns={
+# ===============================
+# PADRONIZAÇÃO DE NOMES DE COLUNAS
+# ===============================
+mapa_colunas = {
     "CÓDIGO": "CODIGO_PV",
     "CODIGO": "CODIGO_PV",
     "DATA DE ENTREGA": "ENTREGA",
     "QUANTIDADE": "QTD",
     "QTD": "QTD",
     "QTDE": "QTD",
-    "QTD.": "QTD"
-})
+    "QTD.": "QTD",
+    "QTE": "QTD"
+}
+
+df_pv = df_pv.rename(columns=lambda x: mapa_colunas.get(x, x))
+
+# ===============================
+# DEBUG TEMPORÁRIO (PODE APAGAR DEPOIS)
+# ===============================
+st.write("Colunas lidas do Excel:", df_pv.columns.tolist())
+st.info(f"📊 PVs lidas diretamente do Excel: {df_pv['PV'].astype(str).str.strip().nunique() if 'PV' in df_pv.columns else 0}")
 
 # ===============================
 # VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
@@ -261,8 +273,12 @@ faltantes = [c for c in colunas_obrigatorias if c not in df_pv.columns]
 
 if faltantes:
     st.error(f"A planilha PV.xlsx está faltando as colunas obrigatórias: {', '.join(faltantes)}")
+    st.write("Colunas encontradas no arquivo:", df_pv.columns.tolist())
     st.stop()
 
+# ===============================
+# FUNÇÃO DE NORMALIZAÇÃO DE CÓDIGO
+# ===============================
 def normalizar_codigo(x):
     if pd.isna(x):
         return ""
@@ -285,7 +301,7 @@ df_pv["CODIGO_KEY"] = df_pv["CODIGO_PV"].astype(str).str.strip()
 df_pv["CLIENTE"] = df_pv["CLIENTE"].fillna("SEM CLIENTE")
 df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 
-# 🔥 CORREÇÃO CRÍTICA: leitura correta de data brasileira
+# Data brasileira
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce", dayfirst=True)
 
 # Quantidade e tempos aceitam decimal
