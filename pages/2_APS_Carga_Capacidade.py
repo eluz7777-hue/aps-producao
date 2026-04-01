@@ -974,7 +974,14 @@ st.plotly_chart(fig_carga, use_container_width=True)
 # ===============================
 st.subheader("📌 PV por Cliente")
 
-pv_cliente = df.groupby("Cliente", as_index=False)["PV"].nunique()
+# Usa a base auditada/original para não perder PVs sem carga expandida
+pv_cliente_base = df_auditoria_pv.copy()
+
+# Garante consistência com filtro de cliente
+if cliente_sel != "Todos":
+    pv_cliente_base = pv_cliente_base[pv_cliente_base["Cliente"] == cliente_sel].copy()
+
+pv_cliente = pv_cliente_base.groupby("Cliente", as_index=False)["PV"].nunique()
 total = pv_cliente["PV"].sum()
 
 pv_cliente = pd.concat(
@@ -982,8 +989,19 @@ pv_cliente = pd.concat(
     ignore_index=True
 )
 
-fig_cliente = px.bar(pv_cliente, x="Cliente", y="PV", text="PV")
+fig_cliente = px.bar(
+    pv_cliente.sort_values("PV", ascending=False),
+    x="Cliente",
+    y="PV",
+    text="PV",
+    title="PV por Cliente"
+)
+
 fig_cliente.update_traces(textposition="outside")
+fig_cliente.update_layout(
+    xaxis_title="Cliente",
+    yaxis_title="Quantidade de PVs"
+)
 
 st.plotly_chart(fig_cliente, use_container_width=True)
 
@@ -1157,9 +1175,9 @@ if not df_auditoria_pv.empty:
     resumo_auditoria.columns = ["Status", "Qtde"]
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("PVs no Excel", pvs_totais_excel)
-    col2.metric("PVs no APS", df["PV"].astype(str).str.strip().nunique())
-    col3.metric("PVs Auditadas", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
+col1.metric("PVs no Excel", pvs_totais_excel)
+col2.metric("PVs no APS", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
+col3.metric("PVs Auditadas", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
 
     st.dataframe(df_auditoria_pv.sort_values(["Status", "PV"]))
 else:
@@ -1200,9 +1218,13 @@ processos_ordenados = [
     "DIVERSOS"
 ]
 
-roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_ordenados].max().reset_index()
+# Usa apenas processos realmente existentes no Excel
+processos_roteiro_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
+
+roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_roteiro_validos].max().reset_index()
+
 # Garante formato numérico
-for proc in processos:
+for proc in processos_roteiro_validos:
     roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
 
 # Remove processos zerados (opcional visual)
@@ -1225,7 +1247,7 @@ roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
 # Transforma em formato vertical (mais legível)
 roteiro_detalhado = roteiro_sel.melt(
     id_vars=["CODIGO_KEY"],
-    value_vars=processos,
+    value_vars=processos_roteiro_validos,
     var_name="Processo",
     value_name="Tempo (min)"
 )
