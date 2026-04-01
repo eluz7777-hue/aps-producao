@@ -208,6 +208,87 @@ def carregar_dados(base_path, file_mtime):
     return df
 
 # ===============================
+# CSS VISUAL PREMIUM APS
+# ===============================
+st.markdown("""
+<style>
+/* ===== FUNDO E ESPAÇAMENTO ===== */
+.block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 2rem;
+}
+
+/* ===== TÍTULOS ===== */
+h1, h2, h3 {
+    letter-spacing: 0.2px;
+}
+
+/* ===== SUBTÍTULOS ===== */
+div[data-testid="stMarkdownContainer"] h2 {
+    border-left: 5px solid #FF7A00;
+    padding-left: 12px;
+    margin-top: 1.2rem;
+    margin-bottom: 0.8rem;
+}
+
+/* ===== MÉTRICAS ===== */
+div[data-testid="metric-container"] {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 16px 18px;
+    border-radius: 14px;
+    box-shadow: 0 0 0 rgba(0,0,0,0);
+    transition: all 0.2s ease-in-out;
+}
+
+div[data-testid="metric-container"]:hover {
+    transform: translateY(-2px);
+    border: 1px solid rgba(255,122,0,0.35);
+}
+
+/* ===== TABELAS ===== */
+div[data-testid="stDataFrame"] {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* ===== SELECTBOX / INPUT ===== */
+div[data-baseweb="select"],
+div[data-testid="stTextInput"] > div {
+    border-radius: 10px !important;
+}
+
+/* ===== BOTÕES ===== */
+button[kind="primary"] {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+}
+
+/* ===== DOWNLOAD BUTTON ===== */
+div.stDownloadButton > button {
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    background-color: #FF7A00 !important;
+    color: white !important;
+    border: none !important;
+}
+
+/* ===== ALERTAS ===== */
+div[data-testid="stAlert"] {
+    border-radius: 12px;
+}
+
+/* ===== DIVISORES ===== */
+hr {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin: 1.4rem 0;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ===============================
 # ATUALIZAÇÃO
 # ===============================
 if st.button("🔄 Atualizar Dados"):
