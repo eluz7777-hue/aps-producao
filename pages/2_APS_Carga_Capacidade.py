@@ -853,6 +853,12 @@ risco = pv_carga[
     (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
 ].copy()
 
+# ============================================================
+# ====================== VISÃO GERENCIAL =====================
+# ============================================================
+st.markdown("## 📊 Visão Gerencial")
+st.caption("Indicadores estratégicos, gráficos e visão consolidada da produção.")
+
 # ===============================
 # KPIs / VISÃO EXECUTIVA
 # ===============================
@@ -959,49 +965,49 @@ def semaforo_entrega(dias):
 # ============================================================
 # ======================= GRÁFICOS ============================
 # ============================================================
-st.markdown("## 📈 Visão Gráfica")
+with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
-# ===============================
-# GRÁFICO OCUPAÇÃO
-# ===============================
-st.subheader("📌 Ocupação por Processo (%)")
+    # ===============================
+    # GRÁFICO OCUPAÇÃO
+    # ===============================
+    st.subheader("📌 Ocupação por Processo (%)")
 
-dem_plot = dem.copy()
-dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
-dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+    dem_plot = dem.copy()
+    dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
+    dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
 
-fig = px.bar(
-    dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
-    x="Periodo",
-    y="Ocupacao",
-    color="Processo",
-    barmode="group",
-    text="Label",
-    custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
-)
-
-fig.add_hline(y=100, line_dash="dash")
-
-fig.update_traces(
-    textposition="outside",
-    hovertemplate=(
-        "<b>%{x}</b><br>"
-        "Processo: %{customdata[0]}<br>"
-        "Ocupação: %{customdata[1]}<br>"
-        "Carga: %{customdata[2]} h<br>"
-        "Capacidade: %{customdata[3]} h"
-        "<extra></extra>"
+    fig = px.bar(
+        dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
+        x="Periodo",
+        y="Ocupacao",
+        color="Processo",
+        barmode="group",
+        text="Label",
+        custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
     )
-)
 
-fig.update_layout(
-    yaxis_title="Ocupação (%)",
-    xaxis_title="Período"
-)
+    fig.add_hline(y=100, line_dash="dash")
 
-st.plotly_chart(fig, use_container_width=True)
+    fig.update_traces(
+        textposition="outside",
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Processo: %{customdata[0]}<br>"
+            "Ocupação: %{customdata[1]}<br>"
+            "Carga: %{customdata[2]} h<br>"
+            "Capacidade: %{customdata[3]} h"
+            "<extra></extra>"
+        )
+    )
+
+    fig.update_layout(
+        yaxis_title="Ocupação (%)",
+        xaxis_title="Período"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 # ===============================
 # VISÃO CAPACIDADE POR PROCESSO
@@ -1130,7 +1136,7 @@ else:
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
 # ============================================================
-st.markdown("## 🏭 Análise Operacional")
+with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
 # ===============================
 # GARGALO AUTOMÁTICO
@@ -1274,6 +1280,7 @@ st.plotly_chart(fig_cliente_carga, use_container_width=True)
 # ===================== PAINEL OPERACIONAL ===================
 # ============================================================
 st.markdown("## ⚡ Painel Operacional")
+st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
 
 # ============================================================
 # 1) PVs QUE VENCEM HOJE
@@ -1350,7 +1357,14 @@ else:
 # ============================================================
 # ==================== TABELAS E FILTROS =====================
 # ============================================================
-st.markdown("## 📋 Tabelas, Filtros e Auditoria")
+
+# ============================================================
+# ===================== VISÃO OPERACIONAL ====================
+# ============================================================
+st.markdown("## ⚙️ Visão Operacional")
+st.caption("Consulta detalhada, filtros, fila de produção e auditorias.")
+
+with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
 # ===============================
 # AUDITORIA DE CAPACIDADE
@@ -1560,99 +1574,98 @@ else:
 # ===============================
 # ROTEIRO POR CÓDIGO
 # ===============================
-st.markdown("## 🧩 Roteiro de Fabricação por Código")
+with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
+    base_roteiro = df_pv.copy()
+    base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
 
-base_roteiro = df_pv.copy()
-base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
+    processos_ordenados = [
+        "CORTE - SERRA",
+        "CORTE-PLASMA",
+        "CORTE-LASER",
+        "CORTE-GUILHOTINA",
+        "TORNO CONVENCIONAL",
+        "TORNO CNC",
+        "CENTRO DE USINAGEM",
+        "FRESADORAS",
+        "FURADEIRA DE BANCADA",
+        "PRENSA (AMASSAMENTO)",
+        "CALANDRA",
+        "DOBRADEIRA",
+        "ROSQUEADEIRA",
+        "METALEIRA",
+        "SOLDAGEM",
+        "ACABAMENTO",
+        "JATEAMENTO",
+        "PINTURA",
+        "MONTAGEM",
+        "DIVERSOS"
+    ]
 
-processos_ordenados = [
-    "CORTE - SERRA",
-    "CORTE-PLASMA",
-    "CORTE-LASER",
-    "CORTE-GUILHOTINA",
-    "TORNO CONVENCIONAL",
-    "TORNO CNC",
-    "CENTRO DE USINAGEM",
-    "FRESADORAS",
-    "FURADEIRA DE BANCADA",
-    "PRENSA (AMASSAMENTO)",
-    "CALANDRA",
-    "DOBRADEIRA",
-    "ROSQUEADEIRA",
-    "METALEIRA",
-    "SOLDAGEM",
-    "ACABAMENTO",
-    "JATEAMENTO",
-    "PINTURA",
-    "MONTAGEM",
-    "DIVERSOS"
-]
+    processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
 
-processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
+    if len(processos_validos) == 0:
+        st.warning("Nenhum processo válido encontrado na planilha.")
+    else:
+        roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
 
-if len(processos_validos) == 0:
-    st.warning("Nenhum processo válido encontrado na planilha.")
-else:
-    roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
+        for proc in processos_validos:
+            roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
 
-    for proc in processos_validos:
-        roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
+        st.subheader("📋 Base de Roteiros")
+        st.dataframe(roteiro)
 
-    st.subheader("📋 Base de Roteiros")
-    st.dataframe(roteiro)
+        st.subheader("🔎 Consultar Roteiro por Código")
 
-    st.subheader("🔎 Consultar Roteiro por Código")
+        codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+        codigo_sel = st.selectbox("Selecione o código", codigos)
 
-    codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
-    codigo_sel = st.selectbox("Selecione o código", codigos)
+        roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
 
-    roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
+        roteiro_detalhado = roteiro_sel.melt(
+            id_vars=["CODIGO_KEY"],
+            value_vars=processos_validos,
+            var_name="Processo",
+            value_name="Tempo (min)"
+        )
 
-    roteiro_detalhado = roteiro_sel.melt(
-        id_vars=["CODIGO_KEY"],
-        value_vars=processos_validos,
-        var_name="Processo",
-        value_name="Tempo (min)"
-    )
+        roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0]
 
-    roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0]
+        ordem = {p: i for i, p in enumerate(processos_ordenados)}
+        roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
 
-    ordem = {p: i for i, p in enumerate(processos_ordenados)}
-    roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
+        roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
 
-    roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
+        st.subheader(f"🛠️ Roteiro do Código: {codigo_sel}")
 
-    st.subheader(f"🛠️ Roteiro do Código: {codigo_sel}")
+        roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
+        roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
 
-    roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
-    roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
+        st.dataframe(roteiro_exibicao.reset_index(drop=True))
 
-    st.dataframe(roteiro_exibicao.reset_index(drop=True))
+        tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
+        tempo_total_h = round(tempo_total_min / 60, 2)
 
-    tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
-    tempo_total_h = round(tempo_total_min / 60, 2)
+        c1, c2 = st.columns(2)
+        c1.metric("⏱️ Tempo Total (min)", f"{tempo_total_min:,.0f}")
+        c2.metric("🕒 Tempo Total (h)", f"{tempo_total_h:,.2f}")
 
-    c1, c2 = st.columns(2)
-    c1.metric("⏱️ Tempo Total (min)", f"{tempo_total_min:,.0f}")
-    c2.metric("🕒 Tempo Total (h)", f"{tempo_total_h:,.2f}")
+        from io import BytesIO
 
-    from io import BytesIO
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            roteiro.to_excel(writer, index=False)
 
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        roteiro.to_excel(writer, index=False)
-
-    st.download_button(
-        label="📥 Baixar Roteiros em Excel",
-        data=buffer.getvalue(),
-        file_name="roteiro_fabricacao.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        st.download_button(
+            label="📥 Baixar Roteiros em Excel",
+            data=buffer.getvalue(),
+            file_name="roteiro_fabricacao.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
 # ============================================================
-st.markdown("## 🚨 Simulação de Gargalo por Processo")
+with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
 st.subheader("🔎 Verificar quais PVs estouram a capacidade do processo")
 
