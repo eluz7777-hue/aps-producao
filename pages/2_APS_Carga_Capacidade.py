@@ -260,12 +260,6 @@ mapa_colunas = {
 df_pv = df_pv.rename(columns=lambda x: mapa_colunas.get(x, x))
 
 # ===============================
-# DEBUG TEMPORÁRIO (PODE APAGAR DEPOIS)
-# ===============================
-st.write("Colunas lidas do Excel:", df_pv.columns.tolist())
-st.info(f"📊 PVs lidas diretamente do Excel: {df_pv['PV'].astype(str).str.strip().nunique() if 'PV' in df_pv.columns else 0}")
-
-# ===============================
 # VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
 # ===============================
 colunas_obrigatorias = ["PV", "CLIENTE", "CODIGO_PV", "ENTREGA", "QTD"]
