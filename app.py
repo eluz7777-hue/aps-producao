@@ -7,6 +7,46 @@ st.set_page_config(
 )
 
 # ===============================
+# CSS VISUAL APP PRINCIPAL
+# ===============================
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+div[data-testid="metric-container"] {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 16px 18px;
+    border-radius: 14px;
+    transition: all 0.2s ease-in-out;
+}
+
+div[data-testid="metric-container"]:hover {
+    transform: translateY(-2px);
+    border: 1px solid rgba(255,122,0,0.35);
+}
+
+div[data-testid="stAlert"] {
+    border-radius: 12px;
+}
+
+div[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin: 1.4rem 0;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ===============================
 # 🔐 USUÁRIOS
 # ===============================
 USUARIOS = {
@@ -32,7 +72,20 @@ def tela_login():
 
     with col2:
         if os.path.exists("logo.png"):
-            st.image("logo.png", width=140)
+            st.markdown("""
+            <div style="
+                background: rgba(255,255,255,0.03);
+                padding: 16px;
+                border-radius: 18px;
+                border: 1px solid rgba(255,255,255,0.08);
+                text-align: center;
+                margin-bottom: 18px;
+            ">
+            """, unsafe_allow_html=True)
+
+            st.image("logo.png", width=220)
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.title("🔐 ELOHIM APS")
         st.subheader("Acesso Restrito ao Sistema")
@@ -85,15 +138,28 @@ if st.sidebar.button("🚪 Sair", use_container_width=True):
 # ===============================
 if pagina == "🏠 Visão Geral":
 
-    col1, col2 = st.columns([1, 6])
+    col1, col2 = st.columns([1.3, 6])
 
     with col1:
         if os.path.exists("logo.png"):
-            st.image("logo.png", width=100)
+            st.markdown("""
+            <div style="
+                background: rgba(255,255,255,0.03);
+                padding: 12px;
+                border-radius: 18px;
+                border: 1px solid rgba(255,255,255,0.08);
+                text-align: center;
+            ">
+            """, unsafe_allow_html=True)
+
+            st.image("logo.png", width=170)
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.title("🚀 ELOHIM APS – Advanced Planning System")
         st.success(f"Bem-vindo, {st.session_state.usuario}")
+        st.caption("Sistema inteligente de planejamento, capacidade, desempenho e análise operacional da produção.")
 
     st.markdown("## 📌 Painel Central do Sistema")
     st.markdown("Selecione um módulo no menu lateral para navegar.")
