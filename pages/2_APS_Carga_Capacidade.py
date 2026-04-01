@@ -860,6 +860,21 @@ if not critico.empty:
 else:
     st.success("Capacidade sob controle.")
 
+# ===============================
+# FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
+# ===============================
+def semaforo_entrega(dias):
+    if pd.isna(dias):
+        return "⚪ Sem data"
+    elif dias < 0:
+        return "🔴 Atrasado"
+    elif dias <= 3:
+        return "🟠 Urgente"
+    elif dias <= 7:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Normal"
+
 # ============================================================
 # ======================= GRÁFICOS ============================
 # ============================================================
@@ -1226,19 +1241,6 @@ pvs_urgentes = df.copy()
 if "ENTREGA" in pvs_urgentes.columns:
     pvs_urgentes["ENTREGA"] = pd.to_datetime(pvs_urgentes["ENTREGA"], errors="coerce")
     pvs_urgentes["Dias para Entrega"] = (pvs_urgentes["ENTREGA"] - hoje).dt.days
-
-    def semaforo_entrega(dias):
-        if pd.isna(dias):
-            return "⚪ Sem data"
-        elif dias < 0:
-            return "🔴 Atrasado"
-        elif dias <= 3:
-            return "🟠 Urgente"
-        elif dias <= 7:
-            return "🟡 Atenção"
-        else:
-            return "🟢 Normal"
-
     pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
 
     urgentes = pvs_urgentes[pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")].copy()
