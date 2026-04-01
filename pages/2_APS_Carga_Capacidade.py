@@ -1185,18 +1185,6 @@ st.dataframe(dem_proc)
 st.markdown("## 📋 Tabelas e Auditoria")
 
 # ===============================
-# FILA POR PROCESSO
-# ===============================
-st.subheader("📦 Fila por Processo")
-
-fila_exibicao = df[["PV", "Cliente", "Processo", "Data", "Horas", "Fila Acumulada (h)", "Fila (dias)"]].copy()
-fila_exibicao["Horas"] = fila_exibicao["Horas"].round(1)
-fila_exibicao["Fila Acumulada (h)"] = fila_exibicao["Fila Acumulada (h)"].round(1)
-fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
-
-st.dataframe(fila_exibicao)
-
-# ===============================
 # AUDITORIA
 # ===============================
 st.subheader("📌 Auditoria de Capacidade")
@@ -1260,6 +1248,18 @@ if not df_auditoria_pv.empty:
 
 else:
     st.info("Nenhuma auditoria de PV disponível.")
+
+# ===============================
+# FILA POR PROCESSO
+# ===============================
+st.subheader("📦 Fila por Processo")
+
+fila_exibicao = df[["PV", "Cliente", "Processo", "Data", "Horas", "Fila Acumulada (h)", "Fila (dias)"]].copy()
+fila_exibicao["Horas"] = fila_exibicao["Horas"].round(1)
+fila_exibicao["Fila Acumulada (h)"] = fila_exibicao["Fila Acumulada (h)"].round(1)
+fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
+
+st.dataframe(fila_exibicao)
 
 # ===============================
 # ROTEIRO POR CÓDIGO
