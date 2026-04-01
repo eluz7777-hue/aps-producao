@@ -1053,54 +1053,8 @@ st.dataframe(
 )
 
 # ===============================
-# FILA POR PROCESSO
+# CARGA X CAPACIDADE POR PROCESSO
 # ===============================
-st.subheader("📌 Fila por Processo")
-
-fila = df.copy()
-
-# Filtro por processo
-processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
-
-processo_fila_sel = st.selectbox(
-    "Filtrar PVs por Processo",
-    ["Todos"] + processos_fila,
-    key="filtro_fila_processo"
-)
-
-if processo_fila_sel != "Todos":
-    fila = fila[fila["Processo"] == processo_fila_sel].copy()
-
-# Resumo da fila
-fila_resumo = fila.groupby("Processo", as_index=False)["Horas"].sum()
-fila_resumo["Horas"] = fila_resumo["Horas"].round(1)
-
-st.markdown("### 📊 Resumo da Fila")
-st.dataframe(fila_resumo.sort_values("Horas", ascending=False), use_container_width=True)
-
-# Detalhamento das PVs
-st.markdown("### 📋 PVs na Fila")
-
-fila_detalhe = fila.copy()
-fila_detalhe["Horas"] = fila_detalhe["Horas"].round(1)
-
-colunas_fila = [
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "ENTREGA"
-]
-
-# Mostra só colunas existentes
-colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
-
-st.dataframe(
-    fila_detalhe[colunas_fila].sort_values(["Processo", "Horas"], ascending=[True, False]),
-    use_container_width=True
-)
-
 st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
 dem_proc_plot = dem_proc.copy()
@@ -1109,42 +1063,7 @@ fig_cap_proc = px.bar(
     dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
     x="Processo",
     y=["Horas", "Capacidade Processo"],
-    barmode="group",
-    text_auto=".0f",
-    title="Carga Real x Capacidade por Processo (h)"
-)
-
-fig_cap_proc.update_traces(
-    selector=dict(name="Horas"),
-    marker_color="#FF7A00"
-)
-
-fig_cap_proc.update_traces(
-    selector=dict(name="Capacidade Processo"),
-    marker_color="#1f3b73"
-)
-
-for trace in fig_cap_proc.data:
-    trace.texttemplate = "%{text:.0f}"
-    trace.textposition = "outside"
-
-fig_cap_proc.update_layout(
-    yaxis_title="Horas",
-    xaxis_title="Processo",
-    legend_title_text="Tipo",
-    legend=dict(orientation="h", y=1.1),
-    uniformtext_minsize=8,
-    uniformtext_mode="hide"
-)
-
-dem_proc_plot = dem_proc.copy()
-
-fig_cap_proc = px.bar(
-    dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
-    x="Processo",
-    y=["Horas", "Capacidade Processo"],
-    barmode="group",
-    title="Carga Real x Capacidade por Processo (h)"
+    barmode="group"
 )
 
 fig_cap_proc.update_traces(
@@ -1175,9 +1094,11 @@ fig_cap_proc.update_layout(
 
 st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
 
-
+# ===============================
+# BASE RESUMIDA POR PROCESSO
+# ===============================
 st.subheader("🏭 Capacidade x Carga por Processo")
-st.dataframe(dem_proc)
+st.dataframe(dem_proc, use_container_width=True)
 
 # ============================================================
 # ==================== TABELAS E AUDITORIA ===================
@@ -1185,7 +1106,7 @@ st.dataframe(dem_proc)
 st.markdown("## 📋 Tabelas e Auditoria")
 
 # ===============================
-# AUDITORIA
+# AUDITORIA DE CAPACIDADE
 # ===============================
 st.subheader("📌 Auditoria de Capacidade")
 
@@ -1210,7 +1131,7 @@ pv_carga_exibicao = pv_carga.copy()
 pv_carga_exibicao["Horas"] = pv_carga_exibicao["Horas"].round(1)
 pv_carga_exibicao["Dias Necessários"] = pv_carga_exibicao["Dias Necessários"].round(1)
 
-st.dataframe(pv_carga_exibicao)
+st.dataframe(pv_carga_exibicao, use_container_width=True)
 
 # ===============================
 # RISCO
@@ -1222,75 +1143,48 @@ if not risco_exibicao.empty:
     risco_exibicao["Horas"] = risco_exibicao["Horas"].round(1)
     risco_exibicao["Dias Necessários"] = risco_exibicao["Dias Necessários"].round(1)
 
-st.dataframe(risco_exibicao)
+st.dataframe(risco_exibicao, use_container_width=True)
 
 # ===============================
 # CALENDÁRIO
 # ===============================
 st.subheader("📅 Calendário Industrial")
-st.dataframe(cal)
-
-# ===============================
-# AUDITORIA DE PV
-# ===============================
-st.subheader("🧪 Auditoria de PV")
-
-if not df_auditoria_pv.empty:
-    resumo_auditoria = df_auditoria_pv["Status"].value_counts().reset_index()
-    resumo_auditoria.columns = ["Status", "Qtde"]
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("PVs no Excel", pvs_totais_excel)
-    col2.metric("PVs no APS", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
-    col3.metric("PVs Auditadas", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
-
-    st.dataframe(df_auditoria_pv.sort_values(["Status", "PV"]), use_container_width=True)
-
-else:
-    st.info("Nenhuma auditoria de PV disponível.")
-
-st.divider()
+st.dataframe(cal, use_container_width=True)
 
 # ===============================
 # FILA POR PROCESSO
 # ===============================
+st.divider()
 st.subheader("📌 Fila por Processo")
 
 fila = df.copy()
 
-# 🔹 Filtro por processo (agora posicionado corretamente dentro da seção)
+# Filtro por processo
 processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
 
 processo_fila_sel = st.selectbox(
     "Filtrar PVs por Processo",
     ["Todos"] + processos_fila,
-    key="filtro_fila_processo"
+    key="filtro_fila_processo_unico"
 )
 
-# 🔹 Aplica filtro
+# Aplica filtro
 if processo_fila_sel != "Todos":
     fila = fila[fila["Processo"] == processo_fila_sel].copy()
 
 # ===============================
-# RESUMO DA FILA
-# ===============================
-st.markdown("### 📊 Resumo da Fila")
-
-fila_resumo = fila.groupby("Processo", as_index=False)["Horas"].sum()
-fila_resumo["Horas"] = fila_resumo["Horas"].round(1)
-
-st.dataframe(
-    fila_resumo.sort_values("Horas", ascending=False),
-    use_container_width=True
-)
-
-# ===============================
-# DETALHAMENTO DAS PVS
+# DETALHAMENTO DAS PVS NA FILA
 # ===============================
 st.markdown("### 📋 PVs na Fila")
 
 fila_detalhe = fila.copy()
 fila_detalhe["Horas"] = fila_detalhe["Horas"].round(1)
+
+# Formata entrega, se existir
+if "ENTREGA" in fila_detalhe.columns:
+    fila_detalhe["ENTREGA"] = pd.to_datetime(
+        fila_detalhe["ENTREGA"], errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
 
 colunas_fila = [
     "PV",
@@ -1304,11 +1198,36 @@ colunas_fila = [
 # Mostra apenas colunas existentes
 colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
 
+# Ordenação mais útil para operação
+ordenacao_fila = [c for c in ["ENTREGA", "Processo", "Horas"] if c in fila_detalhe.columns]
+asc_fila = [True, True, False][:len(ordenacao_fila)]
+
 st.dataframe(
-    fila_detalhe[colunas_fila].sort_values(["Processo", "Horas"], ascending=[True, False]),
+    fila_detalhe[colunas_fila].sort_values(ordenacao_fila, ascending=asc_fila),
     use_container_width=True
 )
 
+# ===============================
+# AUDITORIA DE PV
+# ===============================
+st.divider()
+st.subheader("🧪 Auditoria de PV")
+
+if not df_auditoria_pv.empty:
+    resumo_auditoria = df_auditoria_pv["Status"].value_counts().reset_index()
+    resumo_auditoria.columns = ["Status", "Qtde"]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("PVs no Excel", pvs_totais_excel)
+    col2.metric("PVs no APS", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
+    col3.metric("PVs Auditadas", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
+
+    st.dataframe(
+        df_auditoria_pv.sort_values(["Status", "PV"]),
+        use_container_width=True
+    )
+else:
+    st.info("Nenhuma auditoria de PV disponível.")
 
 # ===============================
 # ROTEIRO POR CÓDIGO
