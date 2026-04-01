@@ -1137,8 +1137,6 @@ fig_cap_proc.update_layout(
     uniformtext_mode="hide"
 )
 
-st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
-
 dem_proc_plot = dem_proc.copy()
 
 fig_cap_proc = px.bar(
