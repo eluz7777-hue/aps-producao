@@ -1088,6 +1088,44 @@ fig_cap_proc.update_layout(
     uniformtext_mode="hide"
 )
 
+st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
+
+dem_proc_plot = dem_proc.copy()
+
+fig_cap_proc = px.bar(
+    dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
+    x="Processo",
+    y=["Horas", "Capacidade Processo"],
+    barmode="group",
+    title="Carga Real x Capacidade por Processo (h)"
+)
+
+fig_cap_proc.update_traces(
+    selector=dict(name="Horas"),
+    marker_color="#FF7A00",
+    texttemplate="%{y:.0f}",
+    textposition="outside",
+    textfont=dict(size=11, color="white")
+)
+
+fig_cap_proc.update_traces(
+    selector=dict(name="Capacidade Processo"),
+    marker_color="#1f3b73",
+    texttemplate="%{y:.0f}",
+    textposition="outside",
+    textfont=dict(size=11, color="white")
+)
+
+fig_cap_proc.update_layout(
+    yaxis_title="Horas",
+    xaxis_title="Processo",
+    legend_title_text="Tipo",
+    legend=dict(orientation="h", y=1.1),
+    uniformtext_minsize=8,
+    uniformtext_mode="show",
+    height=650
+)
+
 st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
 
 # ===============================
