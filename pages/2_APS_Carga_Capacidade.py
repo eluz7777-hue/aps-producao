@@ -1249,17 +1249,65 @@ if not df_auditoria_pv.empty:
 else:
     st.info("Nenhuma auditoria de PV disponível.")
 
+st.divider()
+
 # ===============================
 # FILA POR PROCESSO
 # ===============================
-st.subheader("📦 Fila por Processo")
+st.subheader("📌 Fila por Processo")
 
-fila_exibicao = df[["PV", "Cliente", "Processo", "Data", "Horas", "Fila Acumulada (h)", "Fila (dias)"]].copy()
-fila_exibicao["Horas"] = fila_exibicao["Horas"].round(1)
-fila_exibicao["Fila Acumulada (h)"] = fila_exibicao["Fila Acumulada (h)"].round(1)
-fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
+fila = df.copy()
 
-st.dataframe(fila_exibicao)
+# 🔹 Filtro por processo (agora posicionado corretamente dentro da seção)
+processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
+
+processo_fila_sel = st.selectbox(
+    "Filtrar PVs por Processo",
+    ["Todos"] + processos_fila,
+    key="filtro_fila_processo"
+)
+
+# 🔹 Aplica filtro
+if processo_fila_sel != "Todos":
+    fila = fila[fila["Processo"] == processo_fila_sel].copy()
+
+# ===============================
+# RESUMO DA FILA
+# ===============================
+st.markdown("### 📊 Resumo da Fila")
+
+fila_resumo = fila.groupby("Processo", as_index=False)["Horas"].sum()
+fila_resumo["Horas"] = fila_resumo["Horas"].round(1)
+
+st.dataframe(
+    fila_resumo.sort_values("Horas", ascending=False),
+    use_container_width=True
+)
+
+# ===============================
+# DETALHAMENTO DAS PVS
+# ===============================
+st.markdown("### 📋 PVs na Fila")
+
+fila_detalhe = fila.copy()
+fila_detalhe["Horas"] = fila_detalhe["Horas"].round(1)
+
+colunas_fila = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "ENTREGA"
+]
+
+# Mostra apenas colunas existentes
+colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+
+st.dataframe(
+    fila_detalhe[colunas_fila].sort_values(["Processo", "Horas"], ascending=[True, False]),
+    use_container_width=True
+)
 
 
 # ===============================
