@@ -1177,9 +1177,7 @@ fig_cap_proc.update_layout(
 
 st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
 
-# ===============================
-# CAPACIDADE X CARGA POR PROCESSO
-# ===============================
+
 st.subheader("🏭 Capacidade x Carga por Processo")
 st.dataframe(dem_proc)
 
