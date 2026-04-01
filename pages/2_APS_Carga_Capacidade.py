@@ -1261,6 +1261,7 @@ fila_exibicao["Fila (dias)"] = fila_exibicao["Fila (dias)"].round(1)
 
 st.dataframe(fila_exibicao)
 
+
 # ===============================
 # ROTEIRO POR CÓDIGO
 # ===============================
