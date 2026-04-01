@@ -1159,18 +1159,63 @@ st.subheader("📌 Fila por Processo")
 
 fila = df.copy()
 
-# Filtro por processo
-processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
+# 🔹 Base de datas
+hoje = pd.Timestamp.today().normalize()
 
-processo_fila_sel = st.selectbox(
-    "Filtrar PVs por Processo",
+if "ENTREGA" in fila.columns:
+    fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
+    fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
+else:
+    fila["Dias para Entrega"] = None
+
+# 🔹 Semáforo da fila
+def semaforo_entrega(dias):
+    if pd.isna(dias):
+        return "⚪ Sem data"
+    elif dias < 0:
+        return "🔴 Atrasado"
+    elif dias <= 3:
+        return "🟠 Urgente"
+    elif dias <= 7:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Normal"
+
+fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
+
+# ===============================
+# FILTROS DA FILA
+# ===============================
+col_f1, col_f2 = st.columns(2)
+
+processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
+processo_fila_sel = col_f1.selectbox(
+    "Filtrar por Processo",
     ["Todos"] + processos_fila,
     key="filtro_fila_processo_unico"
 )
 
-# Aplica filtro
+pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
+pv_fila_sel = col_f2.selectbox(
+    "Filtrar por PV específica",
+    ["Todas"] + pvs_fila,
+    key="filtro_fila_pv_unico"
+)
+
+# 🔹 Aplica filtros
 if processo_fila_sel != "Todos":
     fila = fila[fila["Processo"] == processo_fila_sel].copy()
+
+if pv_fila_sel != "Todas":
+    fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
+
+# ===============================
+# KPIs RÁPIDOS DA FILA
+# ===============================
+col_k1, col_k2, col_k3 = st.columns(3)
+col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
+col_k2.metric("Processos na Fila", fila["Processo"].nunique())
+col_k3.metric("Horas na Fila", f"{fila['Horas'].sum():.1f} h")
 
 # ===============================
 # DETALHAMENTO DAS PVS NA FILA
@@ -1180,32 +1225,231 @@ st.markdown("### 📋 PVs na Fila")
 fila_detalhe = fila.copy()
 fila_detalhe["Horas"] = fila_detalhe["Horas"].round(1)
 
-# Formata entrega, se existir
 if "ENTREGA" in fila_detalhe.columns:
-    fila_detalhe["ENTREGA"] = pd.to_datetime(
-        fila_detalhe["ENTREGA"], errors="coerce"
-    ).dt.strftime("%d/%m/%Y")
+    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
 colunas_fila = [
+    "Semáforo",
     "PV",
     "Cliente",
     "CODIGO_PV",
     "Processo",
     "Horas",
+    "Dias para Entrega",
     "ENTREGA"
 ]
 
-# Mostra apenas colunas existentes
 colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
 
-# Ordenação mais útil para operação
-ordenacao_fila = [c for c in ["ENTREGA", "Processo", "Horas"] if c in fila_detalhe.columns]
+ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
 asc_fila = [True, True, False][:len(ordenacao_fila)]
 
 st.dataframe(
     fila_detalhe[colunas_fila].sort_values(ordenacao_fila, ascending=asc_fila),
     use_container_width=True
 )
+
+# ===============================
+# PAINEL DE PVS URGENTES
+# ===============================
+st.divider()
+st.subheader("🚨 PVs Urgentes da Semana")
+
+pvs_urgentes = df.copy()
+
+if "ENTREGA" in pvs_urgentes.columns:
+    pvs_urgentes["ENTREGA"] = pd.to_datetime(pvs_urgentes["ENTREGA"], errors="coerce")
+    pvs_urgentes["Dias para Entrega"] = (pvs_urgentes["ENTREGA"] - hoje).dt.days
+    pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
+
+    urgentes = pvs_urgentes[pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")].copy()
+    urgentes["Horas"] = urgentes["Horas"].round(1)
+    urgentes["ENTREGA"] = urgentes["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    colunas_urgentes = [
+        "Semáforo",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Dias para Entrega",
+        "ENTREGA"
+    ]
+    colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
+
+    st.dataframe(
+        urgentes[colunas_urgentes].sort_values(["Dias para Entrega", "Horas"], ascending=[True, False]),
+        use_container_width=True
+    )
+else:
+    st.info("Não foi possível gerar o painel de urgência porque a coluna ENTREGA não está disponível.")
+
+# ===============================
+# BACKLOG POR PROCESSO
+# ===============================
+st.divider()
+st.subheader("📊 Backlog por Processo")
+
+backlog = df.groupby("Processo", as_index=False).agg(
+    PVs=("PV", "nunique"),
+    Horas=("Horas", "sum")
+)
+
+backlog["Horas"] = backlog["Horas"].round(1)
+
+fig_backlog = px.bar(
+    backlog.sort_values("Horas", ascending=False),
+    x="Processo",
+    y="Horas",
+    text="Horas"
+)
+
+fig_backlog.update_traces(
+    marker_color="#FF7A00",
+    texttemplate="%{y:.1f}",
+    textposition="outside",
+    textfont=dict(size=11, color="white")
+)
+
+fig_backlog.update_layout(
+    xaxis_title="Processo",
+    yaxis_title="Horas em Backlog",
+    height=550
+)
+
+st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
+
+# ============================================================
+# ===================== PAINEL OPERACIONAL ===================
+# ============================================================
+st.markdown("## ⚡ Painel Operacional")
+
+hoje = pd.Timestamp.today().normalize()
+
+base_op = df.copy()
+
+if "ENTREGA" in base_op.columns:
+    base_op["ENTREGA"] = pd.to_datetime(base_op["ENTREGA"], errors="coerce")
+    base_op["Dias para Entrega"] = (base_op["ENTREGA"] - hoje).dt.days
+else:
+    base_op["Dias para Entrega"] = None
+
+# ============================================================
+# 1) PVs QUE VENCEM HOJE
+# ============================================================
+st.subheader("📅 PVs que vencem HOJE")
+
+pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
+
+if not pvs_hoje.empty:
+    pvs_hoje["Horas"] = pvs_hoje["Horas"].round(1)
+    pvs_hoje["ENTREGA"] = pvs_hoje["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    st.dataframe(
+        pvs_hoje.sort_values("Horas", ascending=False),
+        use_container_width=True
+    )
+else:
+    st.success("Nenhuma PV vence hoje ✅")
+
+# ============================================================
+# 2) TOP 10 PVS MAIS CRÍTICAS
+# ============================================================
+st.subheader("🔥 Top 10 PVs mais críticas")
+
+criticas = base_op.copy()
+
+criticas = criticas.sort_values(
+    ["Dias para Entrega", "Horas"],
+    ascending=[True, False]
+).head(10)
+
+criticas["Horas"] = criticas["Horas"].round(1)
+
+if "ENTREGA" in criticas.columns:
+    criticas["ENTREGA"] = criticas["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+st.dataframe(criticas, use_container_width=True)
+
+# ============================================================
+# 3) CARGA POR CLIENTE
+# ============================================================
+st.subheader("📊 Carga por Cliente")
+
+carga_cliente = base_op.groupby("Cliente", as_index=False).agg(
+    Horas=("Horas", "sum"),
+    PVs=("PV", "nunique")
+)
+
+carga_cliente["Horas"] = carga_cliente["Horas"].round(1)
+
+fig_cliente = px.bar(
+    carga_cliente.sort_values("Horas", ascending=False),
+    x="Cliente",
+    y="Horas",
+    text="Horas"
+)
+
+fig_cliente.update_traces(
+    marker_color="#1f3b73",
+    texttemplate="%{y:.1f}",
+    textposition="outside",
+    textfont=dict(color="white")
+)
+
+fig_cliente.update_layout(height=500)
+
+st.plotly_chart(fig_cliente, use_container_width=True)
+
+# ============================================================
+# 4) BUSCA RÁPIDA
+# ============================================================
+st.subheader("🔎 Busca rápida de PV / Cliente")
+
+col_b1, col_b2 = st.columns(2)
+
+busca_pv = col_b1.text_input("Buscar por PV")
+busca_cliente = col_b2.text_input("Buscar por Cliente")
+
+busca_df = base_op.copy()
+
+if busca_pv:
+    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
+
+if busca_cliente:
+    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
+
+if busca_pv or busca_cliente:
+    busca_df["Horas"] = busca_df["Horas"].round(1)
+
+    if "ENTREGA" in busca_df.columns:
+        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    st.dataframe(busca_df, use_container_width=True)
+
+# ============================================================
+# 5) EXPORTAÇÃO
+# ============================================================
+st.subheader("📥 Exportar dados filtrados")
+
+@st.cache_data
+def converter_excel(df):
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    return buffer.getvalue()
+
+if not busca_df.empty:
+    excel_bytes = converter_excel(busca_df)
+
+    st.download_button(
+        label="📥 Baixar Excel",
+        data=excel_bytes,
+        file_name="consulta_pvs.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # ===============================
 # AUDITORIA DE PV
