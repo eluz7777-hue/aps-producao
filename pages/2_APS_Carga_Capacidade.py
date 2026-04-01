@@ -214,7 +214,7 @@ st.markdown("""
 <style>
 /* ===== FUNDO E ESPAÇAMENTO ===== */
 .block-container {
-    padding-top: 1.2rem;
+    padding-top: 2.2rem;
     padding-bottom: 2rem;
 }
 
