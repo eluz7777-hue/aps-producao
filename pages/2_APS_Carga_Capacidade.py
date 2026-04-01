@@ -1055,15 +1055,13 @@ st.dataframe(
 st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
 dem_proc_plot = dem_proc.copy()
-dem_proc_plot["Horas_label"] = dem_proc_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
-dem_proc_plot["Capacidade_label"] = dem_proc_plot["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
 
 fig_cap_proc = px.bar(
     dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
     x="Processo",
     y=["Horas", "Capacidade Processo"],
     barmode="group",
-    text_auto=".1f",
+    text_auto=".0f",
     title="Carga Real x Capacidade por Processo (h)"
 )
 
@@ -1078,14 +1076,16 @@ fig_cap_proc.update_traces(
 )
 
 for trace in fig_cap_proc.data:
-    trace.texttemplate = "%{text}"
+    trace.texttemplate = "%{text:.0f}"
     trace.textposition = "outside"
 
 fig_cap_proc.update_layout(
     yaxis_title="Horas",
     xaxis_title="Processo",
     legend_title_text="Tipo",
-    legend=dict(orientation="h", y=1.1)
+    legend=dict(orientation="h", y=1.1),
+    uniformtext_minsize=8,
+    uniformtext_mode="hide"
 )
 
 st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
