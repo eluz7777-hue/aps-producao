@@ -1174,12 +1174,13 @@ if not df_auditoria_pv.empty:
     resumo_auditoria = df_auditoria_pv["Status"].value_counts().reset_index()
     resumo_auditoria.columns = ["Status", "Qtde"]
 
-col1, col2, col3 = st.columns(3)
-col1.metric("PVs no Excel", pvs_totais_excel)
-col2.metric("PVs no APS", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
-col3.metric("PVs Auditadas", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
+    col1, col2, col3 = st.columns(3)
+    col1.metric("PVs no Excel", pvs_totais_excel)
+    col2.metric("PVs no APS", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
+    col3.metric("PVs Auditadas", df_auditoria_pv["PV"].astype(str).str.strip().nunique())
 
-    st.dataframe(df_auditoria_pv.sort_values(["Status", "PV"]))
+    st.dataframe(df_auditoria_pv.sort_values(["Status", "PV"]), use_container_width=True)
+
 else:
     st.info("Nenhuma auditoria de PV disponível.")
 
