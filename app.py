@@ -16,6 +16,7 @@ st.markdown("""
     padding-bottom: 2rem;
 }
 
+/* ===== METRICS ===== */
 div[data-testid="metric-container"] {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
@@ -23,25 +24,35 @@ div[data-testid="metric-container"] {
     border-radius: 14px;
     transition: all 0.2s ease-in-out;
 }
-
 div[data-testid="metric-container"]:hover {
     transform: translateY(-2px);
     border: 1px solid rgba(255,122,0,0.35);
 }
 
+/* ===== ALERTAS ===== */
 div[data-testid="stAlert"] {
     border-radius: 12px;
 }
 
+/* ===== TABELAS ===== */
 div[data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
 }
 
+/* ===== DIVISORES ===== */
 hr {
     border: none;
     border-top: 1px solid rgba(255,255,255,0.08);
     margin: 1.4rem 0;
+}
+
+/* ===== SIDEBAR ===== */
+section[data-testid="stSidebar"] {
+    border-right: 1px solid rgba(255,255,255,0.06);
+}
+section[data-testid="stSidebar"] .block-container {
+    padding-top: 1.4rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -109,29 +120,39 @@ if not st.session_state.logado:
     st.stop()
 
 # ===============================
-# SIDEBAR
+# SIDEBAR PREMIUM
 # ===============================
-st.sidebar.markdown("## 👤 Sessão")
-st.sidebar.write(f"Usuário: **{st.session_state.usuario}**")
+with st.sidebar:
+    if os.path.exists("logo.png"):
+        st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+        st.image("logo.png", width=120)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("## 📊 Módulos")
+    st.markdown("## ELOHIM APS")
+    st.caption("Sistema de Planejamento e Performance Industrial")
 
-pagina = st.sidebar.radio(
-    "Navegação",
-    [
-        "🏠 Visão Geral",
-        "🏭 Carga & Capacidade",
-        "📊 OEE & Qualidade"
-    ]
-)
+    st.markdown("---")
 
-st.sidebar.markdown("---")
+    st.markdown("### 👤 Sessão")
+    st.info(f"Usuário: **{st.session_state.usuario}**")
 
-if st.sidebar.button("🚪 Sair", use_container_width=True):
-    st.session_state.logado = False
-    st.session_state.usuario = ""
-    st.rerun()
+    st.markdown("### 📊 Módulos")
+
+    pagina = st.radio(
+        "Navegação",
+        [
+            "🏠 Visão Geral",
+            "🏭 Carga & Capacidade",
+            "📊 OEE & Qualidade"
+        ]
+    )
+
+    st.markdown("---")
+
+    if st.button("🚪 Sair", use_container_width=True):
+        st.session_state.logado = False
+        st.session_state.usuario = ""
+        st.rerun()
 
 # ===============================
 # HOME / VISÃO GERAL
