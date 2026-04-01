@@ -1188,13 +1188,12 @@ else:
 # ===============================
 st.markdown("## 🧩 Roteiro de Fabricação por Código")
 
-# Base original (não expandida)
+# Base original
 base_roteiro = df_pv.copy()
 
 # Mantém apenas códigos válidos
 base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
 
-# Agrupa por código (caso tenha repetição)
 processos_ordenados = [
     "CORTE - SERRA",
     "CORTE-PLASMA",
@@ -1218,109 +1217,76 @@ processos_ordenados = [
     "DIVERSOS"
 ]
 
-# Usa apenas processos realmente existentes no Excel
-processos_roteiro_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
+# Filtra apenas processos existentes
+processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
 
-roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_roteiro_validos].max().reset_index()
+if len(processos_validos) == 0:
+    st.warning("Nenhum processo válido encontrado na planilha.")
+else:
+    roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
 
-# Garante formato numérico
-for proc in processos_roteiro_validos:
-    roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
+    # Converte para numérico
+    for proc in processos_validos:
+        roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
 
-# Remove processos zerados (opcional visual)
-# roteiro = roteiro.loc[:, (roteiro != 0).any(axis=0)]
+    st.subheader("📋 Base de Roteiros")
+    st.dataframe(roteiro)
 
-st.subheader("📋 Base de Roteiros")
-st.dataframe(roteiro)
+    # ===============================
+    # CONSULTA
+    # ===============================
+    st.subheader("🔎 Consultar Roteiro por Código")
 
-# ===============================
-# CONSULTA DE ROTEIRO
-# ===============================
-st.subheader("🔎 Consultar Roteiro por Código")
+    codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+    codigo_sel = st.selectbox("Selecione o código", codigos)
 
-codigos_disponiveis = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+    roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
 
-codigo_sel = st.selectbox("Selecione o código", codigos_disponiveis)
+    roteiro_detalhado = roteiro_sel.melt(
+        id_vars=["CODIGO_KEY"],
+        value_vars=processos_validos,
+        var_name="Processo",
+        value_name="Tempo (min)"
+    )
 
-roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
+    roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0]
 
-# Transforma em formato vertical (mais legível)
-roteiro_detalhado = roteiro_sel.melt(
-    id_vars=["CODIGO_KEY"],
-    value_vars=processos_roteiro_validos,
-    var_name="Processo",
-    value_name="Tempo (min)"
-)
+    # Ordenação lógica
+    ordem = {p: i for i, p in enumerate(processos_ordenados)}
+    roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
 
-# Remove processos sem tempo
-roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0]
+    roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
 
-# ===============================
-# ORDEM LÓGICA DO ROTEIRO (PADRÃO INDUSTRIAL)
-# ===============================
-ORDEM_PROCESSOS = {
-    "CORTE - SERRA": 10,
-    "CORTE-PLASMA": 20,
-    "CORTE-LASER": 30,
-    "CORTE-GUILHOTINA": 40,
-    "TORNO CONVENCIONAL": 50,
-    "TORNO CNC": 60,
-    "CENTRO DE USINAGEM": 70,
-    "FRESADORAS": 80,
-    "FURADEIRA DE BANCADA": 90,
-    "PRENSA (AMASSAMENTO)": 100,
-    "CALANDRA": 110,
-    "DOBRADEIRA": 120,
-    "ROSQUEADEIRA": 130,
-    "METALEIRA": 140,
-    "SOLDAGEM": 150,
-    "ACABAMENTO": 160,
-    "JATEAMENTO": 170,
-    "PINTURA": 180,
-    "MONTAGEM": 190,
-    "DIVERSOS": 200
-}
+    st.subheader(f"🛠️ Roteiro do Código: {codigo_sel}")
 
-roteiro_detalhado["Operação"] = roteiro_detalhado["Processo"].map(ORDEM_PROCESSOS).fillna(999)
-roteiro_detalhado = roteiro_detalhado.sort_values("Operação")
+    roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
+    roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
 
-st.subheader(f"🛠️ Roteiro do Código: {codigo_sel}")
+    st.dataframe(roteiro_exibicao.reset_index(drop=True))
 
-roteiro_exibicao = roteiro_detalhado[["Operação", "Processo", "Tempo (min)"]].copy()
-roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
-roteiro_exibicao = roteiro_exibicao.reset_index(drop=True)
+    # Totais
+    tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
+    tempo_total_h = round(tempo_total_min / 60, 2)
 
-st.dataframe(roteiro_exibicao)
-tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
-tempo_total_h = round(tempo_total_min / 60, 2)
+    c1, c2 = st.columns(2)
+    c1.metric("⏱️ Tempo Total (min)", f"{tempo_total_min:,.0f}")
+    c2.metric("🕒 Tempo Total (h)", f"{tempo_total_h:,.2f}")
 
-col_rt1, col_rt2 = st.columns(2)
-col_rt1.metric("⏱️ Tempo Total (min)", f"{tempo_total_min:,.0f}")
-col_rt2.metric("🕒 Tempo Total (h)", f"{tempo_total_h:,.2f}")
-
-# ===============================
-# EXPORTAÇÃO
-# ===============================
-st.subheader("📥 Exportar Roteiro")
-
-arquivo_excel = roteiro.copy()
-
-@st.cache_data
-def converter_excel(df):
+    # ===============================
+    # EXPORTAÇÃO
+    # ===============================
     from io import BytesIO
+
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Roteiro")
-    return buffer.getvalue()
+        roteiro.to_excel(writer, index=False)
 
-excel_bytes = converter_excel(arquivo_excel)
-
-st.download_button(
-    label="📥 Baixar Roteiros em Excel",
-    data=excel_bytes,
-    file_name="roteiro_fabricacao.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+    st.download_button(
+        label="📥 Baixar Roteiros em Excel",
+        data=buffer.getvalue(),
+        file_name="roteiro_fabricacao.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
