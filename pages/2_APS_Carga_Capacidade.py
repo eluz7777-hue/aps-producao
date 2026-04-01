@@ -1052,6 +1052,55 @@ st.dataframe(
     use_container_width=True
 )
 
+# ===============================
+# FILA POR PROCESSO
+# ===============================
+st.subheader("📌 Fila por Processo")
+
+fila = df.copy()
+
+# Filtro por processo
+processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
+
+processo_fila_sel = st.selectbox(
+    "Filtrar PVs por Processo",
+    ["Todos"] + processos_fila,
+    key="filtro_fila_processo"
+)
+
+if processo_fila_sel != "Todos":
+    fila = fila[fila["Processo"] == processo_fila_sel].copy()
+
+# Resumo da fila
+fila_resumo = fila.groupby("Processo", as_index=False)["Horas"].sum()
+fila_resumo["Horas"] = fila_resumo["Horas"].round(1)
+
+st.markdown("### 📊 Resumo da Fila")
+st.dataframe(fila_resumo.sort_values("Horas", ascending=False), use_container_width=True)
+
+# Detalhamento das PVs
+st.markdown("### 📋 PVs na Fila")
+
+fila_detalhe = fila.copy()
+fila_detalhe["Horas"] = fila_detalhe["Horas"].round(1)
+
+colunas_fila = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "ENTREGA"
+]
+
+# Mostra só colunas existentes
+colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+
+st.dataframe(
+    fila_detalhe[colunas_fila].sort_values(["Processo", "Horas"], ascending=[True, False]),
+    use_container_width=True
+)
+
 st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
 dem_proc_plot = dem_proc.copy()
