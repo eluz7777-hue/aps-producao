@@ -858,24 +858,15 @@ risco = pv_carga[
 # ====================== VISÃO GERENCIAL =====================
 # ============================================================
 st.markdown("## 📊 Visão Gerencial")
-st.caption("Indicadores estratégicos, gráficos e visão consolidada da produção.")
+st.caption("Indicadores estratégicos, gargalos, capacidade e visão consolidada da produção.")
 
 # ===============================
-# KPIs / VISÃO EXECUTIVA
+# BASE EXECUTIVA
 # ===============================
-st.subheader("📌 Indicadores Principais")
-
-# -------------------------------
-# CARGA TOTAL = demanda real
-# -------------------------------
 carga_total = round(df["Horas"].sum(), 1)
 
-# -------------------------------
-# CAPACIDADE GLOBAL DA FÁBRICA
-# -------------------------------
 recursos_ativos = sum(v for v in MAQUINAS.values() if v > 0)
 
-# Usa o mês mais frequente da base como referência executiva
 mes_ref = int(df["Mes"].mode()[0])
 ano_ref = int(df["Ano"].mode()[0])
 
@@ -886,26 +877,9 @@ capacidade_total = round(
     1
 )
 
-# -------------------------------
-# UTILIZAÇÃO GLOBAL
-# -------------------------------
 utilizacao_total = round((carga_total / capacidade_total) * 100, 1) if capacidade_total > 0 else 0
 
-# -------------------------------
-# EXIBIÇÃO DOS KPIs
-# -------------------------------
-k1, k2, k3 = st.columns(3)
-
-k1.metric("Carga Total (h)", fmt_br_num(carga_total, 1))
-k2.metric("Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
-k3.metric("Utilização (%)", fmt_br_pct(utilizacao_total, 1))
-
-# ===============================
-# RESUMO
-# ===============================
-st.subheader("📊 Resumo Geral")
-
-# Garantia de PVs no APS = universo auditado
+# Universo auditado
 pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
 
 # Atrasos
@@ -922,16 +896,74 @@ else:
 
 ok = max(0, pvs_no_aps - len(atrasos) - len(risco))
 
-col1, col2, col3 = st.columns(3)
+# ===============================
+# GARGALO EXECUTIVO
+# ===============================
+gargalo_exec = None
+processo_mais_carga = None
+ocupacao_max = 0.0
 
-col1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
-col2.metric("🟡 Risco", fmt_br_int(len(risco)))
-col3.metric("🟢 OK", fmt_br_int(ok))
+if not dem.empty:
+    gargalo_exec = (
+        dem.sort_values(["Ocupacao", "Horas"], ascending=[False, False])
+        .iloc[0]["Processo"]
+    )
+    ocupacao_max = float(
+        dem.sort_values(["Ocupacao", "Horas"], ascending=[False, False])
+        .iloc[0]["Ocupacao"]
+    )
 
-c4, c5 = st.columns(2)
+if not dem_proc.empty:
+    processo_mais_carga = (
+        dem_proc.sort_values("Horas", ascending=False)
+        .iloc[0]["Processo"]
+    )
 
-c4.metric("PVs no Excel", fmt_br_int(pvs_totais_excel))
-c5.metric("PVs no APS", fmt_br_int(pvs_no_aps))
+# ===============================
+# KPIs PRINCIPAIS
+# ===============================
+st.subheader("📌 Indicadores Principais")
+
+k1, k2, k3, k4 = st.columns(4)
+
+k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
+k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
+k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
+k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
+
+# ===============================
+# STATUS EXECUTIVO
+# ===============================
+st.subheader("🚦 Status Executivo")
+
+s1, s2, s3, s4 = st.columns(4)
+
+s1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
+s2.metric("🟡 Risco", fmt_br_int(len(risco)))
+s3.metric("🟢 OK", fmt_br_int(ok))
+s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
+
+# ===============================
+# DESTAQUES DA OPERAÇÃO
+# ===============================
+st.subheader("🔥 Destaques da Operação")
+
+d1, d2, d3 = st.columns(3)
+
+d1.metric(
+    "🔥 Gargalo Principal",
+    gargalo_exec if gargalo_exec else "N/D"
+)
+
+d2.metric(
+    "🏗️ Processo Mais Carregado",
+    processo_mais_carga if processo_mais_carga else "N/D"
+)
+
+d3.metric(
+    "📍 Pico de Ocupação",
+    fmt_br_pct(ocupacao_max, 1)
+)
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -942,8 +974,18 @@ critico = dem[dem["Ocupacao"] > 95].copy()
 
 if not critico.empty:
     st.error("Capacidade próxima ou acima do limite detectada.")
+
+    critico_exib = critico.copy()
+    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
+    critico_exib["Horas"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Capacidade"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Ocupação (%)"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+
     st.dataframe(
-        critico.sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True)
+        critico_exib[
+            ["Semáforo", "Periodo", "Processo", "Horas", "Capacidade", "Ocupação (%)"]
+        ].sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True),
+        use_container_width=True
     )
 else:
     st.success("Capacidade sob controle.")
