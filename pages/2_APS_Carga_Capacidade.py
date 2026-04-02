@@ -499,26 +499,32 @@ for _, row in df_pv.iterrows():
     # -------------------------------
     # Expansão dos processos válidos
     # -------------------------------
-    for proc in processos:
-        tempo = pd.to_numeric(row.get(proc), errors="coerce")
+    tempos_debug = []
 
-        if pd.notna(tempo) and tempo > 0 and tempo <= 2500:
-            qtde_processos_validos += 1
+for proc in processos:
+    valor_original = row.get(proc)
+    tempo = pd.to_numeric(valor_original, errors="coerce")
 
-            horas = (tempo * float(row["QTD"])) / 60
-            horas_totais_pv += horas
+    if pd.notna(tempo) and tempo > 0 and tempo <= 2500:
+        qtde_processos_validos += 1
 
-            linhas.append({
-                "PV": pv_atual,
-                "Cliente": cliente_atual,
-                "CODIGO_PV": codigo_atual,
-                "Processo": proc,
-                "Data": row["ENTREGA"],
-                "ENTREGA": row["ENTREGA"],
-                "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", row["ENTREGA"]),
-                "Horas": horas
-            })
+        horas = (tempo * float(row["QTD"])) / 60
+        horas_totais_pv += horas
 
+        linhas.append({
+            "PV": pv_atual,
+            "Cliente": cliente_atual,
+            "CODIGO_PV": codigo_atual,
+            "Processo": proc,
+            "Data": row["ENTREGA"],
+            "ENTREGA": row["ENTREGA"],
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", row["ENTREGA"]),
+            "Horas": horas
+        })
+    else:
+        # guarda para diagnóstico
+        tempos_debug.append(f"{proc}={valor_original}")
+        
     # -------------------------------
     # Se não teve nenhum processo válido
     # -------------------------------
@@ -531,7 +537,7 @@ for _, row in df_pv.iterrows():
             "CODIGO": codigo_atual,
             "CODIGO_PV": codigo_atual,
             "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
-            "Motivo": "Nenhum processo com tempo > 0 e <= 2500"
+            "Motivo": "Nenhum processo válido | " + " ; ".join(tempos_debug[:10])
         }
 
         pvs_excluidas.append(registro)
@@ -1576,7 +1582,7 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-    st.divider()
+        st.divider()
     st.subheader("🧪 Auditoria de PV")
 
     if not df_auditoria_pv.empty:
@@ -1602,6 +1608,8 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
                 return "🟡"
             elif x == "FALTANDO":
                 return "🔴"
+            elif x == "SEM PROCESSO VÁLIDO":
+                return "🟠"
             return "⚪"
 
         df_auditoria_exibicao = df_auditoria_pv.copy()
@@ -1610,14 +1618,16 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
         qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
         qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
         qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
+        qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
 
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
         col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
         col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
         col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
         col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
         col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
         col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
+        col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
 
         st.markdown("### 📊 Resumo da Auditoria")
         st.dataframe(
@@ -1625,6 +1635,40 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
             use_container_width=True,
             hide_index=True
         )
+
+        st.markdown("### 🚨 PVs com inconsistência de processo")
+
+        problemas_processo = df_auditoria_pv[
+            df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
+        ].copy()
+
+        if not problemas_processo.empty:
+            if "DATA_ENTREGA_APS" in problemas_processo.columns:
+                problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
+                    problemas_processo["DATA_ENTREGA_APS"],
+                    errors="coerce"
+                ).dt.strftime("%d/%m/%Y")
+
+            colunas_problema = [
+                "PV",
+                "Cliente",
+                "CODIGO_PV",
+                "DATA_ENTREGA_APS",
+                "Qtd",
+                "Status",
+                "Motivo"
+            ]
+            colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
+
+            st.dataframe(
+                problemas_processo[colunas_problema]
+                .sort_values(["PV"])
+                .reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
 
         st.markdown("### 📋 Detalhamento da Auditoria")
         colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
@@ -1746,6 +1790,8 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
                 file_name="roteiro_fabricacao.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+
 
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
