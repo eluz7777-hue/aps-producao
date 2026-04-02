@@ -593,7 +593,8 @@ df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
 if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
-    st.stop()    
+    st.stop()   
+ 
 # ===============================
 # FILTRO POR CLIENTE
 # ===============================
@@ -1667,91 +1668,91 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
 # ============================================================
 with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
-st.subheader("🔎 Verificar quais PVs estouram a capacidade do processo")
+    st.subheader("🔎 Verificar quais PVs estouram a capacidade do processo")
 
-processo_gargalo_sel = st.selectbox(
-    "Selecione o processo gargalo",
-    sorted(df["Processo"].dropna().unique().tolist()),
-    key="gargalo_processo_select"
-)
-
-df_gargalo = df[df["Processo"] == processo_gargalo_sel].copy()
-
-if not df_gargalo.empty:
-    gargalo_pv = (
-        df_gargalo.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"]
-        .sum()
-        .sort_values(["Data", "PV"])
-        .reset_index(drop=True)
+    processo_gargalo_sel = st.selectbox(
+        "Selecione o processo gargalo",
+        sorted(df["Processo"].dropna().unique().tolist()),
+        key="gargalo_processo_select"
     )
 
-    gargalo_pv["Carga Acumulada (h)"] = gargalo_pv["Horas"].cumsum()
+    df_gargalo = df[df["Processo"] == processo_gargalo_sel].copy()
 
-    recursos_gargalo = MAQUINAS.get(processo_gargalo_sel, 0)
-    capacidade_dia_gargalo = capacidade_diaria_real(processo_gargalo_sel)
+    if not df_gargalo.empty:
+        gargalo_pv = (
+            df_gargalo.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"]
+            .sum()
+            .sort_values(["Data", "PV"])
+            .reset_index(drop=True)
+        )
 
-    hoje = pd.Timestamp.today().normalize()
+        gargalo_pv["Carga Acumulada (h)"] = gargalo_pv["Horas"].cumsum()
 
-    gargalo_pv["Horas Disponíveis até Entrega"] = gargalo_pv["Data"].apply(
-        lambda x: horas_uteis_periodo(hoje, x) * recursos_gargalo * EFICIENCIA
-    )
+        recursos_gargalo = MAQUINAS.get(processo_gargalo_sel, 0)
+        capacidade_dia_gargalo = capacidade_diaria_real(processo_gargalo_sel)
 
-    gargalo_pv["Saldo Gargalo (h)"] = (
-        gargalo_pv["Horas Disponíveis até Entrega"] - gargalo_pv["Carga Acumulada (h)"]
-    ).round(1)
+        hoje = pd.Timestamp.today().normalize()
 
-    gargalo_pv["Estoura Gargalo?"] = np.where(
-        gargalo_pv["Saldo Gargalo (h)"] < 0,
-        "SIM",
-        "NÃO"
-    )
+        gargalo_pv["Horas Disponíveis até Entrega"] = gargalo_pv["Data"].apply(
+            lambda x: horas_uteis_periodo(hoje, x) * recursos_gargalo * EFICIENCIA
+        )
 
-    gargalo_pv["Dias de Estouro"] = np.where(
-        capacidade_dia_gargalo > 0,
-        np.ceil(np.abs(np.minimum(gargalo_pv["Saldo Gargalo (h)"], 0)) / capacidade_dia_gargalo),
-        0
-    )
+        gargalo_pv["Saldo Gargalo (h)"] = (
+            gargalo_pv["Horas Disponíveis até Entrega"] - gargalo_pv["Carga Acumulada (h)"]
+        ).round(1)
 
-    gargalo_pv["Dias de Estouro"] = gargalo_pv["Dias de Estouro"].astype(int)
+        gargalo_pv["Estoura Gargalo?"] = np.where(
+            gargalo_pv["Saldo Gargalo (h)"] < 0,
+            "SIM",
+            "NÃO"
+        )
 
-    def semaforo_gargalo(x):
-        if x == "SIM":
-            return "🔴"
-        return "🟢"
+        gargalo_pv["Dias de Estouro"] = np.where(
+            capacidade_dia_gargalo > 0,
+            np.ceil(np.abs(np.minimum(gargalo_pv["Saldo Gargalo (h)"], 0)) / capacidade_dia_gargalo),
+            0
+        )
 
-    gargalo_pv["Semáforo"] = gargalo_pv["Estoura Gargalo?"].apply(semaforo_gargalo)
+        gargalo_pv["Dias de Estouro"] = gargalo_pv["Dias de Estouro"].astype(int)
 
-    st.subheader(f"📋 Sequência de PVs no processo: {processo_gargalo_sel}")
+        def semaforo_gargalo(x):
+            if x == "SIM":
+                return "🔴"
+            return "🟢"
 
-    exib_gargalo = gargalo_pv.copy()
-    exib_gargalo["Horas"] = exib_gargalo["Horas"].round(1)
-    exib_gargalo["Carga Acumulada (h)"] = exib_gargalo["Carga Acumulada (h)"].round(1)
-    exib_gargalo["Horas Disponíveis até Entrega"] = exib_gargalo["Horas Disponíveis até Entrega"].round(1)
+        gargalo_pv["Semáforo"] = gargalo_pv["Estoura Gargalo?"].apply(semaforo_gargalo)
 
-    st.dataframe(
-        exib_gargalo[
-            [
-                "Semáforo",
-                "PV",
-                "Cliente",
-                "Data",
-                "Horas",
-                "Carga Acumulada (h)",
-                "Horas Disponíveis até Entrega",
-                "Saldo Gargalo (h)",
-                "Estoura Gargalo?",
-                "Dias de Estouro"
+        st.subheader(f"📋 Sequência de PVs no processo: {processo_gargalo_sel}")
+
+        exib_gargalo = gargalo_pv.copy()
+        exib_gargalo["Horas"] = exib_gargalo["Horas"].round(1)
+        exib_gargalo["Carga Acumulada (h)"] = exib_gargalo["Carga Acumulada (h)"].round(1)
+        exib_gargalo["Horas Disponíveis até Entrega"] = exib_gargalo["Horas Disponíveis até Entrega"].round(1)
+
+        st.dataframe(
+            exib_gargalo[
+                [
+                    "Semáforo",
+                    "PV",
+                    "Cliente",
+                    "Data",
+                    "Horas",
+                    "Carga Acumulada (h)",
+                    "Horas Disponíveis até Entrega",
+                    "Saldo Gargalo (h)",
+                    "Estoura Gargalo?",
+                    "Dias de Estouro"
+                ]
             ]
-        ]
-    )
+        )
 
-    total_estouro = (gargalo_pv["Estoura Gargalo?"] == "SIM").sum()
-    total_ok = (gargalo_pv["Estoura Gargalo?"] == "NÃO").sum()
+        total_estouro = (gargalo_pv["Estoura Gargalo?"] == "SIM").sum()
+        total_ok = (gargalo_pv["Estoura Gargalo?"] == "NÃO").sum()
 
-    g1, g2, g3 = st.columns(3)
-    g1.metric("🔴 PVs que Estouram", int(total_estouro))
-    g2.metric("🟢 PVs Viáveis", int(total_ok))
-    g3.metric("⚙️ Recursos do Processo", int(recursos_gargalo))
+        g1, g2, g3 = st.columns(3)
+        g1.metric("🔴 PVs que Estouram", int(total_estouro))
+        g2.metric("🟢 PVs Viáveis", int(total_ok))
+        g3.metric("⚙️ Recursos do Processo", int(recursos_gargalo))
 
-else:
-    st.info("Não há carga para o processo selecionado.")
+    else:
+        st.info("Não há carga para o processo selecionado.")
