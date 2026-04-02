@@ -2091,7 +2091,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         # --------------------------------------------------------
         st.markdown("### 🧾 Histórico de Baixas Operacionais")
 
-        df_baixas_exib = df_baixas.copy()
+        # Garantia de existência da base de baixas
+        if "df_baixas" not in locals() or df_baixas is None:
+            df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
+        else:
+            df_baixas_exib = df_baixas.copy()
 
         if not df_baixas_exib.empty:
             if "Data_Baixa" in df_baixas_exib.columns:
