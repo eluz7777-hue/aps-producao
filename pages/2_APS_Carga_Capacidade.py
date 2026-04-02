@@ -641,7 +641,22 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
         _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(_df_aux["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
 
 if df.empty:
-    st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
+    st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
+
+    st.markdown("### 🔎 Diagnóstico da expansão da base")
+
+    st.write("**Total de linhas em df_pv:**", len(df_pv))
+    st.write("**Total de PVs únicas no Excel:**", df_pv["PV"].astype(str).str.strip().nunique())
+
+    if "ENTREGA" in df_pv.columns:
+        st.write("**Linhas com ENTREGA válida:**", df_pv["ENTREGA"].notna().sum())
+
+    if "QTD" in df_pv.columns:
+        st.write("**Linhas com QTD > 0:**", (pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0) > 0).sum())
+
+    st.markdown("### 📋 Prévia da base lida")
+    st.dataframe(df_pv.head(20), use_container_width=True)
+
     st.stop()   
  
 # ===============================
