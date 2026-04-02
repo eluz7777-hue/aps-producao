@@ -1233,7 +1233,7 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
         use_container_width=True
     )
 
-        st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
+    st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
     dem_proc_plot = dem_proc.copy()
 
@@ -1271,7 +1271,11 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
         height=650
     )
 
-    st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
+    st.plotly_chart(
+        fig_cap_proc,
+        use_container_width=True,
+        key="grafico_capacidade_carga_processo"
+    )
 
     st.subheader("📊 Backlog por Processo")
 
