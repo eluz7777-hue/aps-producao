@@ -474,6 +474,8 @@ for _, row in df_pv.iterrows():
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
+            "CODIGO_PV": codigo_atual,
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Motivo": " | ".join(motivos_pv)
         }
 
@@ -484,6 +486,8 @@ for _, row in df_pv.iterrows():
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
+            "CODIGO_PV": codigo_atual,
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Status": status_pv,
             "Qtd": row["QTD"],
             "Total Processos Válidos": 0,
@@ -507,8 +511,11 @@ for _, row in df_pv.iterrows():
             linhas.append({
                 "PV": pv_atual,
                 "Cliente": cliente_atual,
+                "CODIGO_PV": codigo_atual,
                 "Processo": proc,
                 "Data": row["ENTREGA"],
+                "ENTREGA": row["ENTREGA"],
+                "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", row["ENTREGA"]),
                 "Horas": horas
             })
 
@@ -522,6 +529,8 @@ for _, row in df_pv.iterrows():
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
+            "CODIGO_PV": codigo_atual,
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Motivo": "Nenhum processo com tempo > 0 e <= 2500"
         }
 
@@ -532,6 +541,8 @@ for _, row in df_pv.iterrows():
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
+            "CODIGO_PV": codigo_atual,
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Status": status_pv,
             "Qtd": row["QTD"],
             "Total Processos Válidos": 0,
@@ -543,6 +554,8 @@ for _, row in df_pv.iterrows():
             "PV": pv_atual,
             "Cliente": cliente_atual,
             "CODIGO": codigo_atual,
+            "CODIGO_PV": codigo_atual,
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Status": status_pv,
             "Qtd": row["QTD"],
             "Total Processos Válidos": qtde_processos_validos,
@@ -553,10 +566,26 @@ for _, row in df_pv.iterrows():
 # Base principal de carga
 df = pd.DataFrame(linhas)
 
+# Blindagem de colunas críticas
+if not df.empty:
+    if "DATA_ENTREGA_APS" in df.columns:
+        df["DATA_ENTREGA_APS"] = pd.to_datetime(df["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
+
+    if "ENTREGA" in df.columns:
+        df["ENTREGA"] = pd.to_datetime(df["ENTREGA"], errors="coerce", dayfirst=True)
+
+    if "Data" in df.columns:
+        df["Data"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
+
 # DataFrames auxiliares
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
+
+# Blindagem dos auxiliares
+for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
+    if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
+        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(_df_aux["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
 
 # -------------------------------
 # Garantia de rastreabilidade
@@ -574,6 +603,8 @@ for pv_faltante in pvs_nao_auditadas:
             "PV": str(row["PV"]).strip(),
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
             "CODIGO": row["CODIGO_PV"],
+            "CODIGO_PV": row["CODIGO_PV"],
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Motivo": "PV não auditada por falha de processamento"
         }
 
@@ -584,6 +615,8 @@ for pv_faltante in pvs_nao_auditadas:
             "PV": str(row["PV"]).strip(),
             "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
             "CODIGO": row["CODIGO_PV"],
+            "CODIGO_PV": row["CODIGO_PV"],
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
             "Status": "Falha de processamento",
             "Qtd": row["QTD"],
             "Total Processos Válidos": 0,
@@ -595,6 +628,11 @@ for pv_faltante in pvs_nao_auditadas:
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
+
+# Blindagem final dos auxiliares
+for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
+    if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
+        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(_df_aux["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
 
 if df.empty:
     st.warning("Nenhum dado válido foi encontrado para exibir no dashboard.")
@@ -1287,11 +1325,21 @@ st.caption("Prioridades imediatas de produção — foco no que precisa ser feit
 
 st.subheader("📅 PVs que vencem HOJE")
 
+base_op = df.copy()
+
+if "DATA_ENTREGA_APS" in base_op.columns:
+    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(base_op["DATA_ENTREGA_APS"], errors="coerce")
+    base_op["Dias para Entrega"] = (base_op["DATA_ENTREGA_APS"] - hoje).dt.days
+    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
+else:
+    base_op["Dias para Entrega"] = None
+    base_op["ENTREGA"] = pd.NaT
+
 pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
 
 if not pvs_hoje.empty:
     pvs_hoje["Horas"] = pvs_hoje["Horas"].round(1)
-    pvs_hoje["ENTREGA"] = pvs_hoje["ENTREGA"].dt.strftime("%d/%m/%Y")
+    pvs_hoje["ENTREGA"] = pd.to_datetime(pvs_hoje["ENTREGA"], errors="coerce").dt.strftime("%d/%m/%Y")
 
     st.dataframe(
         pvs_hoje.sort_values("Horas", ascending=False),
@@ -1312,7 +1360,7 @@ criticas = criticas.sort_values(
 criticas["Horas"] = criticas["Horas"].round(1)
 
 if "ENTREGA" in criticas.columns:
-    criticas["ENTREGA"] = criticas["ENTREGA"].dt.strftime("%d/%m/%Y")
+    criticas["ENTREGA"] = pd.to_datetime(criticas["ENTREGA"], errors="coerce").dt.strftime("%d/%m/%Y")
 
 st.dataframe(criticas, use_container_width=True)
 
@@ -1331,13 +1379,14 @@ if "DATA_ENTREGA_APS" in pvs_urgentes.columns:
     ).dt.days
 
     pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
+    pvs_urgentes["ENTREGA"] = pvs_urgentes["DATA_ENTREGA_APS"]
 
     urgentes = pvs_urgentes[
         pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
     ].copy()
 
     urgentes["Horas"] = urgentes["Horas"].round(1)
-    urgentes["Entrega Exibição"] = urgentes["DATA_ENTREGA_APS"].dt.strftime("%d/%m/%Y")
+    urgentes["ENTREGA"] = pd.to_datetime(urgentes["ENTREGA"], errors="coerce").dt.strftime("%d/%m/%Y")
 
     colunas_urgentes = [
         "Semáforo",
@@ -1347,7 +1396,7 @@ if "DATA_ENTREGA_APS" in pvs_urgentes.columns:
         "Processo",
         "Horas",
         "Dias para Entrega",
-        "Entrega Exibição"
+        "ENTREGA"
     ]
     colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
 
