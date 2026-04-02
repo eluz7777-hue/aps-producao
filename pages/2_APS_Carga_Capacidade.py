@@ -1233,7 +1233,7 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
         use_container_width=True
     )
 
-    st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
+        st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
     dem_proc_plot = dem_proc.copy()
 
@@ -1246,6 +1246,7 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
     fig_cap_proc.update_traces(
         selector=dict(name="Horas"),
+        name="Horas Aplicadas",
         marker_color="#FF7A00",
         texttemplate="%{y:.0f}",
         textposition="outside",
