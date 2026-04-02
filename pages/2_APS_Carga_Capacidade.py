@@ -379,6 +379,11 @@ df_pv["PV"] = df_pv["PV"].astype(str).str.strip()
 # Data brasileira
 df_pv["ENTREGA"] = pd.to_datetime(df_pv["ENTREGA"], errors="coerce", dayfirst=True)
 
+# ===============================
+# COLUNA PADRÃO DE ENTREGA DO APS
+# ===============================
+df_pv["DATA_ENTREGA_APS"] = df_pv["ENTREGA"]
+
 # Quantidade e tempos aceitam decimal
 df_pv["QTD"] = pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0)
 
@@ -1315,14 +1320,24 @@ st.subheader("🚨 PVs Urgentes da Semana")
 
 pvs_urgentes = df.copy()
 
-if "ENTREGA" in pvs_urgentes.columns:
-    pvs_urgentes["ENTREGA"] = pd.to_datetime(pvs_urgentes["ENTREGA"], errors="coerce")
-    pvs_urgentes["Dias para Entrega"] = (pvs_urgentes["ENTREGA"] - hoje).dt.days
+if "DATA_ENTREGA_APS" in pvs_urgentes.columns:
+    pvs_urgentes["DATA_ENTREGA_APS"] = pd.to_datetime(
+        pvs_urgentes["DATA_ENTREGA_APS"],
+        errors="coerce"
+    )
+
+    pvs_urgentes["Dias para Entrega"] = (
+        pvs_urgentes["DATA_ENTREGA_APS"] - hoje
+    ).dt.days
+
     pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
 
-    urgentes = pvs_urgentes[pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")].copy()
+    urgentes = pvs_urgentes[
+        pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
+    ].copy()
+
     urgentes["Horas"] = urgentes["Horas"].round(1)
-    urgentes["ENTREGA"] = urgentes["ENTREGA"].dt.strftime("%d/%m/%Y")
+    urgentes["Entrega Exibição"] = urgentes["DATA_ENTREGA_APS"].dt.strftime("%d/%m/%Y")
 
     colunas_urgentes = [
         "Semáforo",
@@ -1332,16 +1347,19 @@ if "ENTREGA" in pvs_urgentes.columns:
         "Processo",
         "Horas",
         "Dias para Entrega",
-        "ENTREGA"
+        "Entrega Exibição"
     ]
     colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
 
     st.dataframe(
-        urgentes[colunas_urgentes].sort_values(["Dias para Entrega", "Horas"], ascending=[True, False]),
+        urgentes[colunas_urgentes].sort_values(
+            ["Dias para Entrega", "Horas"],
+            ascending=[True, False]
+        ),
         use_container_width=True
     )
 else:
-    st.info("Não foi possível gerar o painel de urgência porque a coluna ENTREGA não está disponível.")
+    st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
 
 # ============================================================
 # ===================== VISÃO OPERACIONAL ====================
