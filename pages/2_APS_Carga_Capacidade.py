@@ -453,6 +453,7 @@ for _, row in df_pv.iterrows():
     qtde_processos_validos = 0
     horas_totais_pv = 0
     motivos_pv = []
+    tempos_debug = []
 
     # -------------------------------
     # Validações básicas
@@ -499,37 +500,38 @@ for _, row in df_pv.iterrows():
     # -------------------------------
     # Expansão dos processos válidos
     # -------------------------------
-    tempos_debug = []
+    for proc in processos:
+        valor_original = row.get(proc)
+        tempo = pd.to_numeric(valor_original, errors="coerce")
 
-for proc in processos:
-    valor_original = row.get(proc)
-    tempo = pd.to_numeric(valor_original, errors="coerce")
+        if pd.notna(tempo) and tempo > 0:
+            qtde_processos_validos += 1
 
-    if pd.notna(tempo) and tempo > 0 and tempo <= 2500:
-        qtde_processos_validos += 1
+            horas = (tempo * float(row["QTD"])) / 60
+            horas_totais_pv += horas
 
-        horas = (tempo * float(row["QTD"])) / 60
-        horas_totais_pv += horas
+            linhas.append({
+                "PV": pv_atual,
+                "Cliente": cliente_atual,
+                "CODIGO_PV": codigo_atual,
+                "Processo": proc,
+                "Data": row["ENTREGA"],
+                "ENTREGA": row["ENTREGA"],
+                "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", row["ENTREGA"]),
+                "Horas": horas
+            })
+        else:
+            tempos_debug.append(f"{proc}={valor_original}")
 
-        linhas.append({
-            "PV": pv_atual,
-            "Cliente": cliente_atual,
-            "CODIGO_PV": codigo_atual,
-            "Processo": proc,
-            "Data": row["ENTREGA"],
-            "ENTREGA": row["ENTREGA"],
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", row["ENTREGA"]),
-            "Horas": horas
-        })
-    else:
-        # guarda para diagnóstico
-        tempos_debug.append(f"{proc}={valor_original}")
-        
     # -------------------------------
     # Se não teve nenhum processo válido
     # -------------------------------
     if qtde_processos_validos == 0:
         status_pv = "Sem processo válido"
+
+        motivo_sem_processo = "Nenhum processo com tempo > 0"
+        if tempos_debug:
+            motivo_sem_processo += " | " + " ; ".join(tempos_debug[:10])
 
         registro = {
             "PV": pv_atual,
@@ -537,7 +539,7 @@ for proc in processos:
             "CODIGO": codigo_atual,
             "CODIGO_PV": codigo_atual,
             "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
-            "Motivo": "Nenhum processo válido | " + " ; ".join(tempos_debug[:10])
+            "Motivo": motivo_sem_processo
         }
 
         pvs_excluidas.append(registro)
@@ -553,7 +555,7 @@ for proc in processos:
             "Qtd": row["QTD"],
             "Total Processos Válidos": 0,
             "Horas Totais": 0,
-            "Motivo": "Nenhum processo com tempo > 0 e <= 2500"
+            "Motivo": motivo_sem_processo
         })
     else:
         auditoria_pv.append({
