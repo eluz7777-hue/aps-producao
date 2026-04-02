@@ -1662,7 +1662,6 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
             file_name="roteiro_fabricacao.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
 # ============================================================
