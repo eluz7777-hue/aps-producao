@@ -200,12 +200,102 @@ def capacidade_semana_por_processo(inicio, fim, processo):
     return horas_uteis_semana(inicio, fim) * recursos * EFICIENCIA
 
 # ===============================
+# ===============================
 # CACHE DE LEITURA
 # ===============================
 @st.cache_data(ttl=0)
 def carregar_dados(base_path, file_mtime):
     df = pd.read_excel(os.path.join(base_path, "PV.xlsx"))
     return df
+
+# ===============================
+# BAIXAS OPERACIONAIS APS
+# ===============================
+ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
+
+COLUNAS_BAIXAS = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Data_Baixa",
+    "Usuario",
+    "Observacao"
+]
+
+def caminho_arquivo_baixas(base_path):
+    return os.path.join(base_path, ARQUIVO_BAIXAS)
+
+@st.cache_data(ttl=0)
+def carregar_baixas_operacionais(base_path):
+    caminho = caminho_arquivo_baixas(base_path)
+
+    if not os.path.exists(caminho):
+        return pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    try:
+        df_baixas = pd.read_excel(caminho)
+
+        for col in COLUNAS_BAIXAS:
+            if col not in df_baixas.columns:
+                df_baixas[col] = None
+
+        df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
+
+        if "PV" in df_baixas.columns:
+            df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip()
+
+        if "Processo" in df_baixas.columns:
+            df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip()
+
+        if "Cliente" in df_baixas.columns:
+            df_baixas["Cliente"] = df_baixas["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
+
+        if "CODIGO_PV" in df_baixas.columns:
+            df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].fillna("").astype(str).str.strip()
+
+        if "Horas" in df_baixas.columns:
+            df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+
+        if "Data_Baixa" in df_baixas.columns:
+            df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
+
+        return df_baixas
+
+    except Exception as e:
+        st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
+        return pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+def salvar_baixa_operacional(base_path, registro_baixa):
+    caminho = caminho_arquivo_baixas(base_path)
+
+    if os.path.exists(caminho):
+        try:
+            df_existente = pd.read_excel(caminho)
+        except:
+            df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+    else:
+        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    for col in COLUNAS_BAIXAS:
+        if col not in df_existente.columns:
+            df_existente[col] = None
+
+    novo_registro = pd.DataFrame([registro_baixa])
+
+    for col in COLUNAS_BAIXAS:
+        if col not in novo_registro.columns:
+            novo_registro[col] = None
+
+    df_final = pd.concat(
+        [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
+        ignore_index=True
+    )
+
+    df_final.to_excel(caminho, index=False)
+
+    st.cache_data.clear()
 
 # ===============================
 # CSS VISUAL PREMIUM APS
