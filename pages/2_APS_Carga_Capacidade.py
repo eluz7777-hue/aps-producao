@@ -879,13 +879,10 @@ capacidade_total = round(
 
 utilizacao_total = round((carga_total / capacidade_total) * 100, 1) if capacidade_total > 0 else 0
 
-# Universo auditado
 pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
 
-# Atrasos
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
-# Risco = sem atraso, mas com pouca folga
 if "Dias Disponíveis" in pv_carga.columns:
     risco = pv_carga[
         (pv_carga["Atraso (dias)"] == 0) &
@@ -896,9 +893,6 @@ else:
 
 ok = max(0, pvs_no_aps - len(atrasos) - len(risco))
 
-# ===============================
-# GARGALO EXECUTIVO
-# ===============================
 gargalo_exec = None
 processo_mais_carga = None
 ocupacao_max = 0.0
@@ -925,7 +919,6 @@ if not dem_proc.empty:
 st.subheader("📌 Indicadores Principais")
 
 k1, k2, k3, k4 = st.columns(4)
-
 k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
 k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
 k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
@@ -937,7 +930,6 @@ k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
 st.subheader("🚦 Status Executivo")
 
 s1, s2, s3, s4 = st.columns(4)
-
 s1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
 s2.metric("🟡 Risco", fmt_br_int(len(risco)))
 s3.metric("🟢 OK", fmt_br_int(ok))
@@ -949,21 +941,9 @@ s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
 st.subheader("🔥 Destaques da Operação")
 
 d1, d2, d3 = st.columns(3)
-
-d1.metric(
-    "🔥 Gargalo Principal",
-    gargalo_exec if gargalo_exec else "N/D"
-)
-
-d2.metric(
-    "🏗️ Processo Mais Carregado",
-    processo_mais_carga if processo_mais_carga else "N/D"
-)
-
-d3.metric(
-    "📍 Pico de Ocupação",
-    fmt_br_pct(ocupacao_max, 1)
-)
+d1.metric("🔥 Gargalo Principal", gargalo_exec if gargalo_exec else "N/D")
+d2.metric("🏗️ Processo Mais Carregado", processo_mais_carga if processo_mais_carga else "N/D")
+d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
 
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
@@ -977,18 +957,22 @@ if not critico.empty:
 
     critico_exib = critico.copy()
     critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
-    critico_exib["Horas"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    critico_exib["Capacidade"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-    critico_exib["Ocupação (%)"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
 
     critico_exib = critico_exib.sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True)
 
-st.dataframe(
-    critico_exib[
-        ["Semáforo", "Periodo", "Processo", "Horas", "Capacidade", "Ocupação (%)"]
-    ],
-    use_container_width=True
-)
+    st.dataframe(
+        critico_exib[
+            ["Semáforo", "Periodo", "Processo", "Horas_fmt", "Capacidade_fmt", "Ocupação_fmt"]
+        ].rename(columns={
+            "Horas_fmt": "Horas",
+            "Capacidade_fmt": "Capacidade",
+            "Ocupação_fmt": "Ocupação (%)"
+        }),
+        use_container_width=True
+    )
 else:
     st.success("Capacidade sob controle.")
 
@@ -1012,9 +996,6 @@ def semaforo_entrega(dias):
 # ============================================================
 with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
-    # ===============================
-    # GRÁFICO OCUPAÇÃO
-    # ===============================
     st.subheader("📌 Ocupação por Processo (%)")
 
     dem_plot = dem.copy()
@@ -1054,9 +1035,6 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ===============================
-    # VISÃO CAPACIDADE POR PROCESSO
-    # ===============================
     st.subheader("📊 Utilização por Processo (%)")
 
     fig_proc = px.bar(
@@ -1078,9 +1056,6 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig_proc, use_container_width=True)
 
-    # ===============================
-    # STATUS DOS PROCESSOS
-    # ===============================
     st.subheader("🥧 Distribuição de Status dos Processos")
 
     status_proc = dem_proc.groupby("Faixa", as_index=False)["Processo"].count()
@@ -1101,9 +1076,6 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig_status, use_container_width=True)
 
-    # ===============================
-    # CURVA DE CARGA
-    # ===============================
     st.subheader("📈 Evolução da Carga")
 
     carga = df.groupby("Data", as_index=False)["Horas"].sum().sort_values("Data")
@@ -1119,9 +1091,6 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig_carga, use_container_width=True)
 
-    # ===============================
-    # PV CLIENTE
-    # ===============================
     st.subheader("📌 PV por Cliente")
 
     pv_cliente_base = df_auditoria_pv.copy()
@@ -1152,9 +1121,6 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig_cliente, use_container_width=True)
 
-    # ===============================
-    # PIZZA
-    # ===============================
     st.subheader("🥧 Distribuição de Atraso")
 
     if not atrasos.empty:
@@ -1173,20 +1139,15 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
         detalhe["Dias Necessários"] = detalhe["Dias Necessários"].round(1)
 
         st.subheader("📋 Detalhamento")
-        st.dataframe(detalhe)
-
+        st.dataframe(detalhe, use_container_width=True)
     else:
         st.success("Nenhum atraso 🎉")
-
 
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
 # ============================================================
 with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
-    # ===============================
-    # GARGALO AUTOMÁTICO
-    # ===============================
     st.subheader("🔥 Gargalos do Período")
 
     gargalos = dem.sort_values(
@@ -1206,9 +1167,6 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
         use_container_width=True
     )
 
-    # ===============================
-    # CARGA X CAPACIDADE POR PROCESSO
-    # ===============================
     st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
 
     dem_proc_plot = dem_proc.copy()
@@ -1248,9 +1206,6 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
     st.plotly_chart(fig_cap_proc, use_container_width=True, key="grafico_capacidade_carga_processo")
 
-    # ===============================
-    # BACKLOG POR PROCESSO
-    # ===============================
     st.subheader("📊 Backlog por Processo")
 
     backlog = df.groupby("Processo", as_index=False).agg(
@@ -1282,9 +1237,6 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
     st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
 
-    # ===============================
-    # CARGA POR CLIENTE
-    # ===============================
     st.subheader("📊 Carga por Cliente")
 
     hoje = pd.Timestamp.today().normalize()
@@ -1328,9 +1280,6 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 st.markdown("## ⚡ Painel Operacional")
 st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
 
-# ============================================================
-# 1) PVs QUE VENCEM HOJE
-# ============================================================
 st.subheader("📅 PVs que vencem HOJE")
 
 pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
@@ -1346,9 +1295,6 @@ if not pvs_hoje.empty:
 else:
     st.success("Nenhuma PV vence hoje ✅")
 
-# ============================================================
-# 2) TOP 10 PVS MAIS CRÍTICAS
-# ============================================================
 st.subheader("🔥 Top 10 PVs mais críticas")
 
 criticas = base_op.copy()
@@ -1365,9 +1311,6 @@ if "ENTREGA" in criticas.columns:
 
 st.dataframe(criticas, use_container_width=True)
 
-# ===============================
-# PVS URGENTES DA SEMANA
-# ===============================
 st.subheader("🚨 PVs Urgentes da Semana")
 
 pvs_urgentes = df.copy()
@@ -1408,9 +1351,6 @@ st.caption("Consulta detalhada, filtros, fila de produção e auditorias.")
 
 with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
-    # ===============================
-    # AUDITORIA DE CAPACIDADE
-    # ===============================
     st.subheader("📌 Auditoria de Capacidade")
 
     auditoria = dem.copy()
@@ -1425,9 +1365,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
         use_container_width=True
     )
 
-    # ===============================
-    # PREVISÃO DE ATRASO
-    # ===============================
     st.subheader("⏱️ Previsão de Atraso por PV")
 
     pv_carga_exibicao = pv_carga.copy()
@@ -1441,9 +1378,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
     st.dataframe(pv_carga_exibicao, use_container_width=True)
 
-    # ===============================
-    # PVS EM RISCO
-    # ===============================
     st.subheader("⚠️ PVs em Risco")
 
     risco_exibicao = risco.copy()
@@ -1457,21 +1391,12 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
     st.dataframe(risco_exibicao, use_container_width=True)
 
-    # ===============================
-    # CALENDÁRIO INDUSTRIAL
-    # ===============================
     st.subheader("📅 Calendário Industrial")
     st.dataframe(cal, use_container_width=True)
 
-    # ===============================
-    # BASE RESUMIDA POR PROCESSO
-    # ===============================
     st.subheader("🏭 Capacidade x Carga por Processo")
     st.dataframe(dem_proc, use_container_width=True)
 
-    # ===============================
-    # FILA POR PROCESSO
-    # ===============================
     st.divider()
     st.subheader("📌 Fila por Processo")
 
@@ -1485,9 +1410,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
     fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
 
-    # ===============================
-    # FILTROS DA FILA
-    # ===============================
     col_f1, col_f2 = st.columns(2)
 
     processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
@@ -1510,17 +1432,11 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     if pv_fila_sel != "Todas":
         fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
 
-    # ===============================
-    # KPIs RÁPIDOS DA FILA
-    # ===============================
     col_k1, col_k2, col_k3 = st.columns(3)
     col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
     col_k2.metric("Processos na Fila", fila["Processo"].nunique())
     col_k3.metric("Horas na Fila", f"{fila['Horas'].sum():.1f} h")
 
-    # ===============================
-    # DETALHAMENTO DAS PVS NA FILA
-    # ===============================
     st.markdown("### 📋 PVs na Fila")
 
     fila_detalhe = fila.copy()
@@ -1549,9 +1465,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
         use_container_width=True
     )
 
-    # ===============================
-    # BUSCA RÁPIDA
-    # ===============================
     st.divider()
     st.subheader("🔎 Busca rápida de PV / Cliente")
 
@@ -1576,9 +1489,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
         st.dataframe(busca_df, use_container_width=True)
 
-    # ===============================
-    # EXPORTAÇÃO
-    # ===============================
     st.subheader("📥 Exportar dados filtrados")
 
     @st.cache_data
@@ -1599,9 +1509,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-    # ===============================
-    # AUDITORIA DE PV
-    # ===============================
     st.divider()
     st.subheader("🧪 Auditoria de PV")
 
@@ -1666,9 +1573,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     else:
         st.info("Nenhuma auditoria de PV disponível.")
 
-    # ===============================
-    # ROTEIRO POR CÓDIGO
-    # ===============================
     with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
 
         base_roteiro = df_pv.copy()
