@@ -981,12 +981,14 @@ if not critico.empty:
     critico_exib["Capacidade"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Ocupação (%)"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
 
-    st.dataframe(
-        critico_exib[
-            ["Semáforo", "Periodo", "Processo", "Horas", "Capacidade", "Ocupação (%)"]
-        ].sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True),
-        use_container_width=True
-    )
+    critico_exib = critico_exib.sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True)
+
+st.dataframe(
+    critico_exib[
+        ["Semáforo", "Periodo", "Processo", "Horas", "Capacidade", "Ocupação (%)"]
+    ],
+    use_container_width=True
+)
 else:
     st.success("Capacidade sob controle.")
 
