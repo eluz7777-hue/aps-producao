@@ -1903,7 +1903,227 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
+# ============================================================
+# =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS ============
+# ============================================================
+with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
+    st.subheader("🏭 Operações mais carregadas do APS")
+    st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
+
+    # --------------------------------------------------------
+    # BASE DOS GARGALOS ATUAIS
+    # --------------------------------------------------------
+    gargalos_top3 = (
+        df.groupby("Processo", as_index=False)
+        .agg(
+            Horas_Pendentes=("Horas", "sum"),
+            PVs_Pendentes=("PV", "nunique")
+        )
+        .merge(
+            dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]],
+            on="Processo",
+            how="left"
+        )
+        .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
+        .head(3)
+        .reset_index(drop=True)
+    )
+
+    if gargalos_top3.empty:
+        st.info("Nenhum gargalo pendente encontrado no APS.")
+    else:
+        gargalos_top3["Horas_Pendentes"] = gargalos_top3["Horas_Pendentes"].round(1)
+        gargalos_top3["Capacidade Processo"] = gargalos_top3["Capacidade Processo"].fillna(0).round(1)
+        gargalos_top3["Utilização (%)"] = gargalos_top3["Utilização (%)"].fillna(0).round(0).astype(int)
+        gargalos_top3["Ranking"] = gargalos_top3.index + 1
+
+        st.markdown("### 📌 Top 3 Gargalos Atuais")
+
+        exib_top3 = gargalos_top3.copy()
+        exib_top3["Horas Pendentes (h)"] = exib_top3["Horas_Pendentes"].apply(lambda x: fmt_br_num(x, 1))
+        exib_top3["Capacidade Processo (h)"] = exib_top3["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
+        exib_top3["Utilização (%)"] = exib_top3["Utilização (%)"].apply(lambda x: f"{int(x)}%")
+
+        st.dataframe(
+            exib_top3[
+                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes", "Capacidade Processo (h)", "Utilização (%)"]
+            ].rename(columns={
+                "PVs_Pendentes": "PVs Pendentes"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.divider()
+
+        # --------------------------------------------------------
+        # FILA DOS GARGALOS
+        # --------------------------------------------------------
+        processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
+
+        base_gargalos = df[df["Processo"].isin(processos_top3)].copy()
+
+        if "ENTREGA" in base_gargalos.columns:
+            base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
+            base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
+            base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
+            base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
+        else:
+            base_gargalos["Dias para Entrega"] = None
+            base_gargalos["Semáforo"] = "⚪ Sem data"
+            base_gargalos["ENTREGA_FMT"] = ""
+
+        base_gargalos["Horas"] = base_gargalos["Horas"].round(1)
+
+        st.markdown("### 📋 PVs Pendentes nos Gargalos")
+
+        processo_baixa_sel = st.selectbox(
+            "Selecione o gargalo para trabalhar",
+            processos_top3,
+            key="gargalo_top3_select_operacional"
+        )
+
+        fila_gargalo = base_gargalos[
+            base_gargalos["Processo"] == processo_baixa_sel
+        ].copy()
+
+        fila_gargalo = fila_gargalo.sort_values(
+            ["Dias para Entrega", "Horas", "PV"],
+            ascending=[True, False, True]
+        ).reset_index(drop=True)
+
+        col_g1, col_g2, col_g3 = st.columns(3)
+        col_g1.metric("Processo Selecionado", processo_baixa_sel)
+        col_g2.metric("PVs Pendentes", fmt_br_int(fila_gargalo["PV"].nunique()))
+        col_g3.metric("Horas Pendentes", fmt_br_num(fila_gargalo["Horas"].sum(), 1) + " h")
+
+        fila_gargalo_exib = fila_gargalo.copy()
+
+        st.dataframe(
+            fila_gargalo_exib[
+                [
+                    "Semáforo",
+                    "PV",
+                    "Cliente",
+                    "CODIGO_PV",
+                    "Processo",
+                    "Horas",
+                    "Dias para Entrega",
+                    "ENTREGA_FMT"
+                ]
+            ].rename(columns={
+                "ENTREGA_FMT": "Entrega"
+            }),
+            use_container_width=True,
+            hide_index=True,
+            height=360
+        )
+
+        st.divider()
+
+        # --------------------------------------------------------
+        # BAIXA OPERACIONAL
+        # --------------------------------------------------------
+        st.markdown("### ✅ Dar Baixa em Operação Concluída")
+
+        if fila_gargalo.empty:
+            st.info("Nenhuma PV pendente disponível para baixa neste gargalo.")
+        else:
+            opcoes_pv_baixa = sorted(
+                fila_gargalo["PV"].dropna().astype(str).str.strip().unique().tolist()
+            )
+
+            col_bx1, col_bx2 = st.columns([2, 2])
+
+            pv_baixa_sel = col_bx1.selectbox(
+                "Selecione a PV concluída",
+                opcoes_pv_baixa,
+                key="pv_baixa_top3_select"
+            )
+
+            observacao_baixa = col_bx2.text_input(
+                "Observação da baixa (opcional)",
+                key="obs_baixa_top3_input"
+            )
+
+            registro_baixa_df = fila_gargalo[
+                fila_gargalo["PV"].astype(str).str.strip() == str(pv_baixa_sel).strip()
+            ].copy()
+
+            if not registro_baixa_df.empty:
+                registro_baixa_df = registro_baixa_df.sort_values(
+                    ["Dias para Entrega", "Horas"],
+                    ascending=[True, False]
+                ).head(1)
+
+                linha_baixa = registro_baixa_df.iloc[0]
+
+                st.info(
+                    f"Você está prestes a dar baixa da operação **{linha_baixa['Processo']}** "
+                    f"da PV **{linha_baixa['PV']}** "
+                    f"({fmt_br_num(linha_baixa['Horas'], 1)} h)."
+                )
+
+                if st.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
+                    registro_baixa = {
+                        "PV": str(linha_baixa["PV"]).strip(),
+                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
+                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip(),
+                        "Processo": str(linha_baixa["Processo"]).strip(),
+                        "Horas": float(linha_baixa["Horas"]),
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Usuario": "APS",
+                        "Observacao": observacao_baixa.strip() if observacao_baixa else ""
+                    }
+
+                    try:
+                        salvar_baixa_operacional(BASE_PATH, registro_baixa)
+                        st.success("Baixa operacional registrada com sucesso. Atualizando APS...")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao salvar baixa operacional: {e}")
+
+        st.divider()
+
+        # --------------------------------------------------------
+        # HISTÓRICO DE BAIXAS
+        # --------------------------------------------------------
+        st.markdown("### 🧾 Histórico de Baixas Operacionais")
+
+        df_baixas_exib = df_baixas.copy()
+
+        if not df_baixas_exib.empty:
+            if "Data_Baixa" in df_baixas_exib.columns:
+                df_baixas_exib["Data_Baixa"] = pd.to_datetime(
+                    df_baixas_exib["Data_Baixa"],
+                    errors="coerce"
+                ).dt.strftime("%d/%m/%Y %H:%M")
+
+            if cliente_sel != "Todos" and "Cliente" in df_baixas_exib.columns:
+                df_baixas_exib = df_baixas_exib[
+                    df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_sel
+                ].copy()
+
+            st.dataframe(
+                df_baixas_exib[
+                    [
+                        "PV",
+                        "Cliente",
+                        "CODIGO_PV",
+                        "Processo",
+                        "Horas",
+                        "Data_Baixa",
+                        "Usuario",
+                        "Observacao"
+                    ]
+                ].sort_values("Data_Baixa", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+                height=260
+            )
+        else:
+            st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
