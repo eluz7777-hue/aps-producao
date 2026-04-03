@@ -698,18 +698,85 @@ for _, row in df_pv.iterrows():
         })
 
 # Base principal de carga
-df = pd.DataFrame(linhas)
+df_original = pd.DataFrame(linhas)
 
 # Blindagem de colunas críticas
-if not df.empty:
-    if "DATA_ENTREGA_APS" in df.columns:
-        df["DATA_ENTREGA_APS"] = pd.to_datetime(df["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
+if not df_original.empty:
+    if "DATA_ENTREGA_APS" in df_original.columns:
+        df_original["DATA_ENTREGA_APS"] = pd.to_datetime(
+            df_original["DATA_ENTREGA_APS"],
+            errors="coerce",
+            dayfirst=True
+        )
 
-    if "ENTREGA" in df.columns:
-        df["ENTREGA"] = pd.to_datetime(df["ENTREGA"], errors="coerce", dayfirst=True)
+    if "ENTREGA" in df_original.columns:
+        df_original["ENTREGA"] = pd.to_datetime(
+            df_original["ENTREGA"],
+            errors="coerce",
+            dayfirst=True
+        )
 
-    if "Data" in df.columns:
-        df["Data"] = pd.to_datetime(df["Data"], errors="coerce", dayfirst=True)
+    if "Data" in df_original.columns:
+        df_original["Data"] = pd.to_datetime(
+            df_original["Data"],
+            errors="coerce",
+            dayfirst=True
+        )
+
+# ===============================
+# BAIXAS OPERACIONAIS APLICADAS
+# ===============================
+df_baixas = carregar_baixas_operacionais(BASE_PATH)
+
+if not df_baixas.empty:
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col in df_baixas.columns:
+            df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+# Chave única da operação
+if not df_original.empty:
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col not in df_original.columns:
+            df_original[col] = ""
+
+    df_original["PV"] = df_original["PV"].fillna("").astype(str).str.strip()
+    df_original["Processo"] = df_original["Processo"].fillna("").astype(str).str.strip()
+    df_original["CODIGO_PV"] = df_original["CODIGO_PV"].fillna("").astype(str).str.strip()
+
+    df_original["CHAVE_OPERACAO"] = (
+        df_original["PV"] + "||" +
+        df_original["Processo"] + "||" +
+        df_original["CODIGO_PV"]
+    )
+
+if not df_baixas.empty:
+    df_baixas["CHAVE_OPERACAO"] = (
+        df_baixas["PV"].astype(str).str.strip() + "||" +
+        df_baixas["Processo"].astype(str).str.strip() + "||" +
+        df_baixas["CODIGO_PV"].astype(str).str.strip()
+    )
+
+    chaves_baixadas = set(
+        df_baixas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
+    )
+else:
+    chaves_baixadas = set()
+
+# ============================================================
+# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
+# ============================================================
+df_operacional = df_original.copy()
+
+if not df_operacional.empty:
+    df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
+        lambda x: "✅ Baixado" if x in chaves_baixadas else "⏳ Pendente"
+    )
+
+# ============================================================
+# BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
+# ============================================================
+df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
+df = df.reset_index(drop=True)
 
 # DataFrames auxiliares
 df_excluidas = pd.DataFrame(pvs_excluidas)
@@ -719,7 +786,11 @@ df_auditoria_pv = pd.DataFrame(auditoria_pv)
 # Blindagem dos auxiliares
 for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
     if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
-        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(_df_aux["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
+        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
+            _df_aux["DATA_ENTREGA_APS"],
+            errors="coerce",
+            dayfirst=True
+        )
 
 # -------------------------------
 # Garantia de rastreabilidade
