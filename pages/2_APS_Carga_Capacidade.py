@@ -2065,7 +2065,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     f"({fmt_br_num(linha_baixa['Horas'], 1)} h)."
                 )
 
-                if st.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
+                                if st.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
                     registro_baixa = {
                         "PV": str(linha_baixa["PV"]).strip(),
                         "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
@@ -2077,12 +2077,36 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Observacao": observacao_baixa.strip() if observacao_baixa else ""
                     }
 
-                    try:
-                        salvar_baixa_operacional(BASE_PATH, registro_baixa)
-                        st.success("Baixa operacional registrada com sucesso. Atualizando APS...")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao salvar baixa operacional: {e}")
+                    # --------------------------------------------
+                    # BLOQUEIO DE BAIXA DUPLICADA
+                    # --------------------------------------------
+                    baixa_duplicada = False
+
+                    if "df_baixas" in locals() and df_baixas is not None and not df_baixas.empty:
+                        base_validacao = df_baixas.copy()
+
+                        for col in ["PV", "Processo", "CODIGO_PV"]:
+                            if col in base_validacao.columns:
+                                base_validacao[col] = base_validacao[col].fillna("").astype(str).str.strip()
+
+                        baixa_existente = base_validacao[
+                            (base_validacao["PV"] == registro_baixa["PV"]) &
+                            (base_validacao["Processo"] == registro_baixa["Processo"]) &
+                            (base_validacao["CODIGO_PV"] == registro_baixa["CODIGO_PV"])
+                        ].copy()
+
+                        if not baixa_existente.empty:
+                            baixa_duplicada = True
+
+                    if baixa_duplicada:
+                        st.warning("⚠️ Esta operação já foi baixada anteriormente. Nenhuma nova baixa foi registrada.")
+                    else:
+                        try:
+                            salvar_baixa_operacional(BASE_PATH, registro_baixa)
+                            st.success("Baixa operacional registrada com sucesso. Atualizando APS...")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao salvar baixa operacional: {e}")
 
         st.divider()
 
