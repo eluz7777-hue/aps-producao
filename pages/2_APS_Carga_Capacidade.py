@@ -1871,45 +1871,45 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
     st.markdown("### 📋 PVs na Fila")
 
-fila_detalhe = fila.copy()
-fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
+    fila_detalhe = fila.copy()
+    fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
 
-if "ENTREGA" in fila_detalhe.columns:
-    fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
-    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
+    if "ENTREGA" in fila_detalhe.columns:
+        fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
+        fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-colunas_fila = [
-    "Semáforo",
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "Dias para Entrega",
-    "ENTREGA"
-]
-colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+    colunas_fila = [
+        "Semáforo",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Dias para Entrega",
+        "ENTREGA"
+    ]
+    colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
 
-ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
-asc_fila = [True, True, False][:len(ordenacao_fila)]
+    ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
+    asc_fila = [True, True, False][:len(ordenacao_fila)]
 
-fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
+    fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
 
-if ordenacao_fila:
-    fila_detalhe_exib = fila_detalhe_exib.sort_values(
-        ordenacao_fila,
-        ascending=asc_fila
+    if ordenacao_fila:
+        fila_detalhe_exib = fila_detalhe_exib.sort_values(
+            ordenacao_fila,
+            ascending=asc_fila
+        )
+
+    fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
+
+    st.dataframe(
+        fila_detalhe_exib,
+        use_container_width=True,
+        hide_index=True
     )
 
-fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
-
-st.dataframe(
-    fila_detalhe_exib,
-    use_container_width=True,
-    hide_index=True
-)
-
-st.divider()
+    st.divider()
 
     st.subheader("🔎 Busca rápida de PV / Cliente")
 
