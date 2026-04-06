@@ -373,9 +373,22 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
         if col not in df_baixas.columns:
             df_baixas[col] = None
 
-    for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa"]:
+    # Padronização segura
+    for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa", "Motivo_Estorno", "Cliente", "Usuario", "Observacao"]:
         if col in df_baixas.columns:
             df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    if "Horas" in df_baixas.columns:
+        df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+
+    if "Data_Baixa" in df_baixas.columns:
+        df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
+
+    # MUITO IMPORTANTE: forçar Data_Estorno como datetime antes de atribuir timestamp
+    if "Data_Estorno" in df_baixas.columns:
+        df_baixas["Data_Estorno"] = pd.to_datetime(df_baixas["Data_Estorno"], errors="coerce")
+    else:
+        df_baixas["Data_Estorno"] = pd.NaT
 
     pv = str(pv).strip()
     processo = str(processo).strip()
