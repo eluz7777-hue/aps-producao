@@ -2243,15 +2243,28 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         # --------------------------------------------------------
         # TEMPO ACUMULADO DE FILA
         # --------------------------------------------------------
-        capacidade_dia_gargalo = gargalos_top3.loc[
-            gargalos_top3["Processo"] == processo_baixa_sel,
-            "Capacidade/Dia"
-        ]
+                # --------------------------------------------------------
+        # TEMPO ACUMULADO DE FILA
+        # --------------------------------------------------------
+        capacidade_dia_gargalo = np.nan
 
-        if not capacidade_dia_gargalo.empty:
-            capacidade_dia_gargalo = pd.to_numeric(capacidade_dia_gargalo.iloc[0], errors="coerce")
-        else:
-            capacidade_dia_gargalo = np.nan
+        if "Capacidade/Dia" in gargalos_top3.columns:
+            capacidade_tmp = gargalos_top3.loc[
+                gargalos_top3["Processo"] == processo_baixa_sel,
+                "Capacidade/Dia"
+            ]
+
+            if not capacidade_tmp.empty:
+                capacidade_dia_gargalo = pd.to_numeric(capacidade_tmp.iloc[0], errors="coerce")
+
+        elif "Capacidade" in gargalos_top3.columns:
+            capacidade_tmp = gargalos_top3.loc[
+                gargalos_top3["Processo"] == processo_baixa_sel,
+                "Capacidade"
+            ]
+
+            if not capacidade_tmp.empty:
+                capacidade_dia_gargalo = pd.to_numeric(capacidade_tmp.iloc[0], errors="coerce")
 
         fila_gargalo["Horas"] = pd.to_numeric(fila_gargalo["Horas"], errors="coerce").fillna(0)
 
