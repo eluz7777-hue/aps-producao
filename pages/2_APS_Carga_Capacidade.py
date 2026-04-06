@@ -264,7 +264,7 @@ def carregar_baixas_operacionais(base_path):
             df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
 
         if "Data_Estorno" in df_baixas.columns:
-            df_baixas["Data_Estorno"] = pd.to_datetime(df_baixas["Data_Estorno"], errors="coerce")
+            df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
 
         # Remove duplicidades exatas se existirem
         df_baixas = df_baixas.drop_duplicates(
@@ -386,9 +386,9 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
 
     # MUITO IMPORTANTE: forçar Data_Estorno como datetime antes de atribuir timestamp
     if "Data_Estorno" in df_baixas.columns:
-        df_baixas["Data_Estorno"] = pd.to_datetime(df_baixas["Data_Estorno"], errors="coerce")
+        df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
     else:
-        df_baixas["Data_Estorno"] = pd.NaT
+        df_baixas["Data_Estorno"] = ""
 
     pv = str(pv).strip()
     processo = str(processo).strip()
@@ -407,7 +407,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     idx_estorno = df_baixas.loc[filtro].index[-1]
 
     df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now()
+    df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M:%S")
     df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
 
     df_baixas.to_excel(caminho, index=False)
