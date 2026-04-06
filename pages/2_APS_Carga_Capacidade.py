@@ -247,7 +247,10 @@ def carregar_baixas_operacionais(base_path):
         df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
 
         # Padronização forte
-        for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno"]:
+        for col in [
+            "PV", "Cliente", "CODIGO_PV", "Processo",
+            "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+        ]:
             if col in df_baixas.columns:
                 df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
@@ -255,7 +258,13 @@ def carregar_baixas_operacionais(base_path):
             df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
 
         if "Status_Baixa" in df_baixas.columns:
-            df_baixas["Status_Baixa"] = df_baixas["Status_Baixa"].replace("", "ATIVA").str.upper()
+            df_baixas["Status_Baixa"] = (
+                df_baixas["Status_Baixa"]
+                .replace("", "ATIVA")
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
 
         if "Horas" in df_baixas.columns:
             df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
@@ -263,12 +272,9 @@ def carregar_baixas_operacionais(base_path):
         if "Data_Baixa" in df_baixas.columns:
             df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
 
-        if "Data_Estorno" in df_baixas.columns:
-            df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
-
-        # Remove duplicidades exatas se existirem
+        # Remove duplicidades exatas de mesma baixa ativa/estornada com mesmo timestamp
         df_baixas = df_baixas.drop_duplicates(
-            subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa"],
+            subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
             keep="first"
         ).reset_index(drop=True)
 
@@ -277,6 +283,7 @@ def carregar_baixas_operacionais(base_path):
     except Exception as e:
         st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS)
+
 
 def salvar_baixa_operacional(base_path, registro_baixa):
     caminho = caminho_arquivo_baixas(base_path)
@@ -300,7 +307,10 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo_registro[col] = None
 
     # Padronização forte
-    for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno"]:
+    for col in [
+        "PV", "Cliente", "CODIGO_PV", "Processo",
+        "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+    ]:
         if col in df_existente.columns:
             df_existente[col] = df_existente[col].fillna("").astype(str).str.strip()
 
@@ -314,10 +324,22 @@ def salvar_baixa_operacional(base_path, registro_baixa):
         novo_registro["Cliente"] = novo_registro["Cliente"].replace("", "SEM CLIENTE")
 
     if "Status_Baixa" in df_existente.columns:
-        df_existente["Status_Baixa"] = df_existente["Status_Baixa"].replace("", "ATIVA").str.upper()
+        df_existente["Status_Baixa"] = (
+            df_existente["Status_Baixa"]
+            .replace("", "ATIVA")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
     if "Status_Baixa" in novo_registro.columns:
-        novo_registro["Status_Baixa"] = novo_registro["Status_Baixa"].replace("", "ATIVA").str.upper()
+        novo_registro["Status_Baixa"] = (
+            novo_registro["Status_Baixa"]
+            .replace("", "ATIVA")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
     if "Horas" in df_existente.columns:
         df_existente["Horas"] = pd.to_numeric(df_existente["Horas"], errors="coerce").fillna(0)
@@ -331,20 +353,21 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     if "Data_Baixa" in novo_registro.columns:
         novo_registro["Data_Baixa"] = pd.to_datetime(novo_registro["Data_Baixa"], errors="coerce")
 
+    # Data_Estorno como texto para estabilidade no Excel
     if "Data_Estorno" in df_existente.columns:
-        df_existente["Data_Estorno"] = pd.to_datetime(df_existente["Data_Estorno"], errors="coerce")
+        df_existente["Data_Estorno"] = df_existente["Data_Estorno"].fillna("").astype(str).str.strip()
 
     if "Data_Estorno" in novo_registro.columns:
-        novo_registro["Data_Estorno"] = pd.to_datetime(novo_registro["Data_Estorno"], errors="coerce")
+        novo_registro["Data_Estorno"] = novo_registro["Data_Estorno"].fillna("").astype(str).str.strip()
 
     df_final = pd.concat(
         [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
         ignore_index=True
     ).copy()
 
-    # Blindagem contra duplicidade exata da mesma baixa
+    # Blindagem contra duplicidade exata da MESMA BAIXA
     df_final = df_final.drop_duplicates(
-        subset=["PV", "CODIGO_PV", "Processo", "Status_Baixa"],
+        subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
         keep="first"
     ).reset_index(drop=True)
 
@@ -373,22 +396,31 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
         if col not in df_baixas.columns:
             df_baixas[col] = None
 
-    # Padronização segura
-    for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa", "Motivo_Estorno", "Cliente", "Usuario", "Observacao"]:
+    # Padronização forte
+    for col in [
+        "PV", "Cliente", "CODIGO_PV", "Processo",
+        "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+    ]:
         if col in df_baixas.columns:
             df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    if "Cliente" in df_baixas.columns:
+        df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
+
+    if "Status_Baixa" in df_baixas.columns:
+        df_baixas["Status_Baixa"] = (
+            df_baixas["Status_Baixa"]
+            .replace("", "ATIVA")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
     if "Horas" in df_baixas.columns:
         df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
 
     if "Data_Baixa" in df_baixas.columns:
         df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-
-    # MUITO IMPORTANTE: forçar Data_Estorno como datetime antes de atribuir timestamp
-    if "Data_Estorno" in df_baixas.columns:
-        df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
-    else:
-        df_baixas["Data_Estorno"] = ""
 
     pv = str(pv).strip()
     processo = str(processo).strip()
@@ -398,7 +430,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
         (df_baixas["PV"] == pv) &
         (df_baixas["Processo"] == processo) &
         (df_baixas["CODIGO_PV"] == codigo_pv) &
-        (df_baixas["Status_Baixa"].str.upper() == "ATIVA")
+        (df_baixas["Status_Baixa"] == "ATIVA")
     )
 
     if not filtro.any():
@@ -406,9 +438,24 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
 
     idx_estorno = df_baixas.loc[filtro].index[-1]
 
+    # ESTORNO = altera a própria linha da baixa ativa
     df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
     df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M:%S")
     df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
+
+    # Repadronização antes de salvar
+    for col in [
+        "PV", "Cliente", "CODIGO_PV", "Processo",
+        "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+    ]:
+        if col in df_baixas.columns:
+            df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    if "Horas" in df_baixas.columns:
+        df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+
+    if "Data_Baixa" in df_baixas.columns:
+        df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
 
     df_baixas.to_excel(caminho, index=False)
 
