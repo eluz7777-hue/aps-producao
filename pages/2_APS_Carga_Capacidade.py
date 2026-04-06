@@ -1869,12 +1869,13 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     col_k2.metric("Processos na Fila", fila["Processo"].nunique())
     col_k3.metric("Horas na Fila", f"{fila['Horas'].sum():.1f} h")
 
-    st.markdown("### 📋 PVs na Fila")
+        st.markdown("### 📋 PVs na Fila")
 
     fila_detalhe = fila.copy()
-    fila_detalhe["Horas"] = fila_detalhe["Horas"].round(1)
+    fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
 
     if "ENTREGA" in fila_detalhe.columns:
+        fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
         fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
     colunas_fila = [
@@ -1892,12 +1893,24 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
     asc_fila = [True, True, False][:len(ordenacao_fila)]
 
+    fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
+
+    if ordenacao_fila:
+        fila_detalhe_exib = fila_detalhe_exib.sort_values(
+            ordenacao_fila,
+            ascending=asc_fila
+        )
+
+    fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
+
     st.dataframe(
-        fila_detalhe[colunas_fila].sort_values(ordenacao_fila, ascending=asc_fila),
-        use_container_width=True
+        fila_detalhe_exib,
+        use_container_width=True,
+        hide_index=True
     )
 
     st.divider()
+
     st.subheader("🔎 Busca rápida de PV / Cliente")
 
     col_b1, col_b2 = st.columns(2)
