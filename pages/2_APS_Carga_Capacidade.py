@@ -226,6 +226,7 @@ COLUNAS_BAIXAS = [
     "Data_Estorno",
     "Motivo_Estorno"
 ]
+
 def caminho_arquivo_baixas(base_path):
     return os.path.join(base_path, ARQUIVO_BAIXAS)
 
@@ -246,12 +247,15 @@ def carregar_baixas_operacionais(base_path):
         df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
 
         # Padronização forte
-        for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao"]:
+        for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno"]:
             if col in df_baixas.columns:
                 df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
         if "Cliente" in df_baixas.columns:
             df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
+
+        if "Status_Baixa" in df_baixas.columns:
+            df_baixas["Status_Baixa"] = df_baixas["Status_Baixa"].replace("", "ATIVA").str.upper()
 
         if "Horas" in df_baixas.columns:
             df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
@@ -259,9 +263,12 @@ def carregar_baixas_operacionais(base_path):
         if "Data_Baixa" in df_baixas.columns:
             df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
 
+        if "Data_Estorno" in df_baixas.columns:
+            df_baixas["Data_Estorno"] = pd.to_datetime(df_baixas["Data_Estorno"], errors="coerce")
+
         # Remove duplicidades exatas se existirem
         df_baixas = df_baixas.drop_duplicates(
-            subset=["PV", "CODIGO_PV", "Processo"],
+            subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa"],
             keep="first"
         ).reset_index(drop=True)
 
@@ -293,7 +300,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo_registro[col] = None
 
     # Padronização forte
-    for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao"]:
+    for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno"]:
         if col in df_existente.columns:
             df_existente[col] = df_existente[col].fillna("").astype(str).str.strip()
 
@@ -305,6 +312,12 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     if "Cliente" in novo_registro.columns:
         novo_registro["Cliente"] = novo_registro["Cliente"].replace("", "SEM CLIENTE")
+
+    if "Status_Baixa" in df_existente.columns:
+        df_existente["Status_Baixa"] = df_existente["Status_Baixa"].replace("", "ATIVA").str.upper()
+
+    if "Status_Baixa" in novo_registro.columns:
+        novo_registro["Status_Baixa"] = novo_registro["Status_Baixa"].replace("", "ATIVA").str.upper()
 
     if "Horas" in df_existente.columns:
         df_existente["Horas"] = pd.to_numeric(df_existente["Horas"], errors="coerce").fillna(0)
@@ -318,14 +331,20 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     if "Data_Baixa" in novo_registro.columns:
         novo_registro["Data_Baixa"] = pd.to_datetime(novo_registro["Data_Baixa"], errors="coerce")
 
+    if "Data_Estorno" in df_existente.columns:
+        df_existente["Data_Estorno"] = pd.to_datetime(df_existente["Data_Estorno"], errors="coerce")
+
+    if "Data_Estorno" in novo_registro.columns:
+        novo_registro["Data_Estorno"] = pd.to_datetime(novo_registro["Data_Estorno"], errors="coerce")
+
     df_final = pd.concat(
         [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
         ignore_index=True
     ).copy()
 
-    # Blindagem contra duplicidade exata
+    # Blindagem contra duplicidade exata da mesma baixa
     df_final = df_final.drop_duplicates(
-        subset=["PV", "CODIGO_PV", "Processo"],
+        subset=["PV", "CODIGO_PV", "Processo", "Status_Baixa"],
         keep="first"
     ).reset_index(drop=True)
 
@@ -334,6 +353,55 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     st.cache_data.clear()
 
     return df_final
+
+
+def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
+    caminho = caminho_arquivo_baixas(base_path)
+
+    if not os.path.exists(caminho):
+        return False, "Arquivo de baixas operacionais não encontrado."
+
+    try:
+        df_baixas = pd.read_excel(caminho)
+    except Exception as e:
+        return False, f"Erro ao ler arquivo de baixas: {e}"
+
+    if df_baixas.empty:
+        return False, "Nenhuma baixa operacional encontrada."
+
+    for col in COLUNAS_BAIXAS:
+        if col not in df_baixas.columns:
+            df_baixas[col] = None
+
+    for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa"]:
+        if col in df_baixas.columns:
+            df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    pv = str(pv).strip()
+    processo = str(processo).strip()
+    codigo_pv = str(codigo_pv).strip()
+
+    filtro = (
+        (df_baixas["PV"] == pv) &
+        (df_baixas["Processo"] == processo) &
+        (df_baixas["CODIGO_PV"] == codigo_pv) &
+        (df_baixas["Status_Baixa"].str.upper() == "ATIVA")
+    )
+
+    if not filtro.any():
+        return False, "Nenhuma baixa ativa encontrada para estorno."
+
+    idx_estorno = df_baixas.loc[filtro].index[-1]
+
+    df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
+    df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now()
+    df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
+
+    df_baixas.to_excel(caminho, index=False)
+
+    st.cache_data.clear()
+
+    return True, "Baixa operacional estornada com sucesso."
 
 # ===============================
 # CSS VISUAL PREMIUM APS
@@ -2248,6 +2316,92 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             st.error(f"Erro ao salvar baixa operacional: {e}")
 
         st.divider()
+
+        # --------------------------------------------------------
+        # DESFAZER BAIXA OPERACIONAL
+        # --------------------------------------------------------
+        st.markdown("### 🔁 Desfazer Baixa Operacional")
+
+        if "df_baixas" not in locals() or df_baixas is None or df_baixas.empty:
+            st.info("Nenhuma baixa operacional disponível para estorno.")
+        else:
+            df_baixas_ativas_ui = df_baixas.copy()
+
+            if "Status_Baixa" not in df_baixas_ativas_ui.columns:
+                df_baixas_ativas_ui["Status_Baixa"] = "ATIVA"
+
+            df_baixas_ativas_ui["Status_Baixa"] = (
+                df_baixas_ativas_ui["Status_Baixa"]
+                .fillna("ATIVA")
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
+
+            df_baixas_ativas_ui = df_baixas_ativas_ui[
+                df_baixas_ativas_ui["Status_Baixa"] == "ATIVA"
+            ].copy()
+
+            if cliente_sel != "Todos" and "Cliente" in df_baixas_ativas_ui.columns:
+                df_baixas_ativas_ui = df_baixas_ativas_ui[
+                    df_baixas_ativas_ui["Cliente"].astype(str).str.strip() == cliente_sel
+                ].copy()
+
+            if df_baixas_ativas_ui.empty:
+                st.info("Nenhuma baixa ativa disponível para estorno.")
+            else:
+                df_baixas_ativas_ui["ROTULO_ESTORNO"] = (
+                    "PV " + df_baixas_ativas_ui["PV"].astype(str).str.strip() +
+                    " | " + df_baixas_ativas_ui["Processo"].astype(str).str.strip() +
+                    " | " + df_baixas_ativas_ui["CODIGO_PV"].astype(str).str.strip() +
+                    " | " + df_baixas_ativas_ui["Horas"].astype(str)
+                )
+
+                opcoes_estorno = df_baixas_ativas_ui["ROTULO_ESTORNO"].dropna().astype(str).tolist()
+
+                col_est1, col_est2 = st.columns([2, 2])
+
+                baixa_estorno_sel = col_est1.selectbox(
+                    "Selecione a baixa para desfazer",
+                    opcoes_estorno,
+                    key="select_estorno_baixa_operacional"
+                )
+
+                motivo_estorno = col_est2.text_input(
+                    "Motivo do estorno",
+                    key="motivo_estorno_baixa_operacional"
+                )
+
+                linha_estorno = df_baixas_ativas_ui[
+                    df_baixas_ativas_ui["ROTULO_ESTORNO"] == baixa_estorno_sel
+                ].copy()
+
+                if not linha_estorno.empty:
+                    linha_estorno = linha_estorno.iloc[0]
+
+                    st.warning(
+                        f"Você está prestes a desfazer a baixa da PV **{linha_estorno['PV']}** "
+                        f"no processo **{linha_estorno['Processo']}**."
+                    )
+
+                    if st.button("🔁 Confirmar Estorno da Baixa", key="btn_estornar_baixa_operacional"):
+                        try:
+                            ok_estorno, msg_estorno = estornar_baixa_operacional(
+                                BASE_PATH,
+                                pv=linha_estorno["PV"],
+                                processo=linha_estorno["Processo"],
+                                codigo_pv=linha_estorno.get("CODIGO_PV", ""),
+                                motivo_estorno=motivo_estorno
+                            )
+
+                            if ok_estorno:
+                                st.success(f"✅ {msg_estorno}")
+                                st.rerun()
+                            else:
+                                st.warning(f"⚠️ {msg_estorno}")
+
+                        except Exception as e:
+                            st.error(f"Erro ao estornar baixa operacional: {e}")
 
         # --------------------------------------------------------
         # HISTÓRICO DE BAIXAS
