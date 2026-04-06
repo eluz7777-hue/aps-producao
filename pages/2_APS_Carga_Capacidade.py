@@ -2158,7 +2158,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
     st.subheader("🏭 Operações mais carregadas do APS")
     st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
 
-    # --------------------------------------------------------
+        # --------------------------------------------------------
     # BASE DOS GARGALOS ATUAIS
     # --------------------------------------------------------
     gargalos_top3 = (
@@ -2180,10 +2180,19 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
     if gargalos_top3.empty:
         st.info("Nenhum gargalo pendente encontrado no APS.")
     else:
-        gargalos_top3["Horas_Pendentes"] = gargalos_top3["Horas_Pendentes"].round(1)
-        gargalos_top3["Capacidade Processo"] = gargalos_top3["Capacidade Processo"].fillna(0).round(1)
-        gargalos_top3["Utilização (%)"] = gargalos_top3["Utilização (%)"].fillna(0).round(0).astype(int)
+        gargalos_top3["Horas_Pendentes"] = pd.to_numeric(gargalos_top3["Horas_Pendentes"], errors="coerce").fillna(0).round(1)
+        gargalos_top3["Capacidade Processo"] = pd.to_numeric(gargalos_top3["Capacidade Processo"], errors="coerce").fillna(0).round(1)
+        gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
         gargalos_top3["Ranking"] = gargalos_top3.index + 1
+
+        # --------------------------------------------------------
+        # DIAS DE FILA DO GARGALO
+        # --------------------------------------------------------
+        gargalos_top3["Dias de Fila"] = np.where(
+            gargalos_top3["Capacidade Processo"] > 0,
+            (gargalos_top3["Horas_Pendentes"] / gargalos_top3["Capacidade Processo"]).round(1),
+            np.nan
+        )
 
         st.markdown("### 📌 Top 3 Gargalos Atuais")
 
@@ -2191,10 +2200,21 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         exib_top3["Horas Pendentes (h)"] = exib_top3["Horas_Pendentes"].apply(lambda x: fmt_br_num(x, 1))
         exib_top3["Capacidade Processo (h)"] = exib_top3["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
         exib_top3["Utilização (%)"] = exib_top3["Utilização (%)"].apply(lambda x: f"{int(x)}%")
+        exib_top3["Dias de Fila"] = exib_top3["Dias de Fila"].apply(
+            lambda x: f"{fmt_br_num(x, 1)} dias" if pd.notna(x) else "-"
+        )
 
         st.dataframe(
             exib_top3[
-                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes", "Capacidade Processo (h)", "Utilização (%)"]
+                [
+                    "Ranking",
+                    "Processo",
+                    "Horas Pendentes (h)",
+                    "PVs_Pendentes",
+                    "Capacidade Processo (h)",
+                    "Dias de Fila",
+                    "Utilização (%)"
+                ]
             ].rename(columns={
                 "PVs_Pendentes": "PVs Pendentes"
             }),
@@ -2204,7 +2224,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.divider()
 
-                # --------------------------------------------------------
+        # --------------------------------------------------------
         # FILA DOS GARGALOS
         # --------------------------------------------------------
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
