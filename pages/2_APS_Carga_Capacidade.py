@@ -221,9 +221,11 @@ COLUNAS_BAIXAS = [
     "Horas",
     "Data_Baixa",
     "Usuario",
-    "Observacao"
+    "Observacao",
+    "Status_Baixa",
+    "Data_Estorno",
+    "Motivo_Estorno"
 ]
-
 def caminho_arquivo_baixas(base_path):
     return os.path.join(base_path, ARQUIVO_BAIXAS)
 
@@ -750,16 +752,26 @@ if not df_original.empty:
     )
 
 if not df_baixas.empty:
+    if "Status_Baixa" not in df_baixas.columns:
+        df_baixas["Status_Baixa"] = "ATIVA"
+
+    df_baixas["Status_Baixa"] = df_baixas["Status_Baixa"].fillna("ATIVA").astype(str).str.strip().str.upper()
+
     df_baixas["CHAVE_OPERACAO"] = (
         df_baixas["PV"].astype(str).str.strip() + "||" +
         df_baixas["Processo"].astype(str).str.strip() + "||" +
         df_baixas["CODIGO_PV"].astype(str).str.strip()
     )
 
+    df_baixas_ativas = df_baixas[
+        df_baixas["Status_Baixa"] == "ATIVA"
+    ].copy()
+
     chaves_baixadas = set(
-        df_baixas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
+        df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
     )
 else:
+    df_baixas_ativas = pd.DataFrame(columns=COLUNAS_BAIXAS)
     chaves_baixadas = set()
 
 # ============================================================
@@ -2187,7 +2199,10 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Horas": float(linha_baixa["Horas"]),
                         "Data_Baixa": pd.Timestamp.now(),
                         "Usuario": "APS",
-                        "Observacao": observacao_baixa.strip() if observacao_baixa else ""
+                        "Observacao": observacao_baixa.strip() if observacao_baixa else "",
+                        "Status_Baixa": "ATIVA",
+                        "Data_Estorno": pd.NaT,
+                        "Motivo_Estorno": ""
                     }
 
                     # --------------------------------------------
