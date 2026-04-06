@@ -2240,14 +2240,58 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             ascending=[True, True, False, True]
         ).reset_index(drop=True)
 
+        # --------------------------------------------------------
+        # TEMPO ACUMULADO DE FILA
+        # --------------------------------------------------------
+        capacidade_dia_gargalo = gargalos_top3.loc[
+            gargalos_top3["Processo"] == processo_baixa_sel,
+            "Capacidade/Dia"
+        ]
+
+        if not capacidade_dia_gargalo.empty:
+            capacidade_dia_gargalo = pd.to_numeric(capacidade_dia_gargalo.iloc[0], errors="coerce")
+        else:
+            capacidade_dia_gargalo = np.nan
+
+        fila_gargalo["Horas"] = pd.to_numeric(fila_gargalo["Horas"], errors="coerce").fillna(0)
+
+        # Só operações pendentes entram na fila acumulada real
+        fila_gargalo["Horas_Pendentes_Acumuladas"] = np.where(
+            fila_gargalo["Status Operacional"] == "⏳ Pendente",
+            fila_gargalo["Horas"],
+            0
+        )
+
+        fila_gargalo["Fila Acumulada (h)"] = fila_gargalo["Horas_Pendentes_Acumuladas"].cumsum().round(1)
+
+        if pd.notna(capacidade_dia_gargalo) and capacidade_dia_gargalo > 0:
+            fila_gargalo["Dias até Entrada"] = (
+                fila_gargalo["Fila Acumulada (h)"] / capacidade_dia_gargalo
+            ).round(1)
+
+            fila_gargalo["Entrada Prevista"] = fila_gargalo["Dias até Entrada"].apply(
+                lambda x: "Hoje" if x <= 1 else f"{int(np.ceil(x))} dias"
+            )
+        else:
+            fila_gargalo["Dias até Entrada"] = np.nan
+            fila_gargalo["Entrada Prevista"] = "Sem capacidade"
+
         fila_gargalo_pendente = fila_gargalo[
             fila_gargalo["Status Operacional"] == "⏳ Pendente"
         ].copy()
 
-        col_g1, col_g2, col_g3 = st.columns(3)
+        col_g1, col_g2, col_g3, col_g4 = st.columns(4)
+
         col_g1.metric("Processo Selecionado", processo_baixa_sel)
         col_g2.metric("PVs Pendentes", fmt_br_int(fila_gargalo_pendente["PV"].nunique()))
         col_g3.metric("Horas Pendentes", fmt_br_num(fila_gargalo_pendente["Horas"].sum(), 1) + " h")
+
+        if not fila_gargalo_pendente.empty and "Fila Acumulada (h)" in fila_gargalo_pendente.columns:
+            fila_total_h = pd.to_numeric(fila_gargalo_pendente["Fila Acumulada (h)"], errors="coerce").max()
+        else:
+            fila_total_h = 0
+
+        col_g4.metric("Fila Total do Gargalo", fmt_br_num(fila_total_h, 1) + " h")
 
         fila_gargalo_exib = fila_gargalo.copy()
 
@@ -2261,6 +2305,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     "CODIGO_PV",
                     "Processo",
                     "Horas",
+                    "Fila Acumulada (h)",
+                    "Entrada Prevista",
                     "Dias para Entrega",
                     "ENTREGA_FMT"
                 ]
