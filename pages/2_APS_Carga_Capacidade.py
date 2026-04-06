@@ -2464,9 +2464,9 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             st.error(f"Erro ao estornar baixa operacional: {e}")
 
         # --------------------------------------------------------
-        # HISTÓRICO DE BAIXAS
+        # HISTÓRICO PREMIUM DE BAIXAS
         # --------------------------------------------------------
-        st.markdown("### 🧾 Histórico de Baixas Operacionais")
+        st.markdown("### 🧾 Histórico Premium de Baixas Operacionais")
 
         if "df_baixas" not in locals() or df_baixas is None:
             df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
@@ -2474,23 +2474,93 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             df_baixas_exib = df_baixas.copy()
 
         if not df_baixas_exib.empty:
+            # Padronização segura
+            for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"]:
+                if col in df_baixas_exib.columns:
+                    df_baixas_exib[col] = df_baixas_exib[col].fillna("").astype(str).str.strip()
+
+            if "Status_Baixa" in df_baixas_exib.columns:
+                df_baixas_exib["Status_Baixa"] = (
+                    df_baixas_exib["Status_Baixa"]
+                    .replace("", "ATIVA")
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                )
+            else:
+                df_baixas_exib["Status_Baixa"] = "ATIVA"
+
             if "Data_Baixa" in df_baixas_exib.columns:
                 df_baixas_exib["Data_Baixa"] = pd.to_datetime(
                     df_baixas_exib["Data_Baixa"],
                     errors="coerce"
                 )
 
-            if cliente_sel != "Todos" and "Cliente" in df_baixas_exib.columns:
+            # Filtros premium
+            col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
+
+            status_hist_sel = col_hist1.selectbox(
+                "Filtrar por status",
+                ["Todos", "ATIVA", "ESTORNADA"],
+                key="filtro_status_historico_baixas"
+            )
+
+            processo_hist_sel = col_hist2.selectbox(
+                "Filtrar por processo",
+                ["Todos"] + sorted(df_baixas_exib["Processo"].dropna().astype(str).str.strip().unique().tolist()),
+                key="filtro_processo_historico_baixas"
+            )
+
+            cliente_hist_sel = col_hist3.selectbox(
+                "Filtrar por cliente",
+                ["Todos"] + sorted(df_baixas_exib["Cliente"].dropna().astype(str).str.strip().unique().tolist()),
+                key="filtro_cliente_historico_baixas"
+            )
+
+            # Aplicação dos filtros
+            if status_hist_sel != "Todos":
                 df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_sel
+                    df_baixas_exib["Status_Baixa"] == status_hist_sel
                 ].copy()
 
-            df_baixas_exib = df_baixas_exib.sort_values("Data_Baixa", ascending=False).copy()
-            df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+            if processo_hist_sel != "Todos":
+                df_baixas_exib = df_baixas_exib[
+                    df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
+                ].copy()
+
+            if cliente_hist_sel != "Todos":
+                df_baixas_exib = df_baixas_exib[
+                    df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
+                ].copy()
+
+            # KPIs do histórico
+            col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
+            col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
+            col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
+            col_hk3.metric("Baixas Estornadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ESTORNADA").sum()))
+            col_hk4.metric("Horas Registradas", fmt_br_num(pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(), 1) + " h")
+
+            # Formatação visual
+            if "Data_Baixa" in df_baixas_exib.columns:
+                df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+
+            if "Status_Baixa" in df_baixas_exib.columns:
+                df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(
+                    lambda x: "✅ Ativa" if str(x).strip().upper() == "ATIVA" else "🔁 Estornada"
+                )
+            else:
+                df_baixas_exib["Status Exibição"] = "✅ Ativa"
+
+            df_baixas_exib = df_baixas_exib.sort_values(
+                by=["Data_Baixa"],
+                ascending=False,
+                na_position="last"
+            ).copy()
 
             st.dataframe(
                 df_baixas_exib[
                     [
+                        "Status Exibição",
                         "PV",
                         "Cliente",
                         "CODIGO_PV",
@@ -2498,12 +2568,21 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Horas",
                         "Data_Baixa",
                         "Usuario",
-                        "Observacao"
+                        "Observacao",
+                        "Data_Estorno",
+                        "Motivo_Estorno"
                     ]
-                ],
+                ].rename(columns={
+                    "Status Exibição": "Status",
+                    "Data_Baixa": "Data da Baixa",
+                    "Usuario": "Usuário",
+                    "Observacao": "Observação",
+                    "Data_Estorno": "Data do Estorno",
+                    "Motivo_Estorno": "Motivo do Estorno"
+                }),
                 use_container_width=True,
                 hide_index=True,
-                height=260
+                height=340
             )
         else:
             st.info("Nenhuma baixa operacional registrada até o momento.")
