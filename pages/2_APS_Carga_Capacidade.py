@@ -880,9 +880,25 @@ if not df_original.empty:
 df_operacional = df_original.copy()
 
 if not df_operacional.empty:
-    df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
-        lambda x: "✅ Baixado" if x in chaves_baixadas else "⏳ Pendente"
+    # Blindagem estrutural
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col not in df_operacional.columns:
+            df_operacional[col] = ""
+        df_operacional[col] = df_operacional[col].fillna("").astype(str).str.strip()
+
+    # Cria a chave operacional no visual
+    df_operacional["CHAVE_OPERACAO"] = (
+        df_operacional["PV"].astype(str).str.strip() + "||" +
+        df_operacional["Processo"].astype(str).str.strip() + "||" +
+        df_operacional["CODIGO_PV"].astype(str).str.strip()
     )
+
+    # Marca status conforme histórico de baixas ativas
+    df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
+        lambda x: "✅ Baixado" if str(x).strip() in chaves_baixadas else "⏳ Pendente"
+    )
+else:
+    df_operacional["Status Operacional"] = ""
 
 # ============================================================
 # BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
