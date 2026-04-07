@@ -937,87 +937,13 @@ if not df_original.empty:
 # ============================================================
 # BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
 # ============================================================
+
 df_operacional = df_original.copy()
 
 # --------------------------------------------
-# BLINDAGEM E CHAVE OPERACIONAL DA BASE
+# FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE
 # --------------------------------------------
-if not df_operacional.empty:
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col not in df_operacional.columns:
-            df_operacional[col] = ""
-        df_operacional[col] = df_operacional[col].fillna("").astype(str).str.strip()
-
-    df_operacional["CHAVE_OPERACAO"] = (
-        df_operacional["PV"].astype(str).str.strip() + "||" +
-        df_operacional["Processo"].astype(str).str.strip() + "||" +
-        df_operacional["CODIGO_PV"].astype(str).str.strip()
-    )
-else:
-    df_operacional["CHAVE_OPERACAO"] = ""
-
-# --------------------------------------------
-# BASE DE BAIXAS ATIVAS / TERCEIRIZADAS
-# --------------------------------------------
-if "df_baixas_historico" in locals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-    baixas_status = df_baixas_historico.copy()
-
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col not in baixas_status.columns:
-            baixas_status[col] = ""
-        baixas_status[col] = baixas_status[col].fillna("").astype(str).str.strip()
-
-    if "Status_Baixa" not in baixas_status.columns:
-        baixas_status["Status_Baixa"] = "ATIVA"
-
-    baixas_status["Status_Baixa"] = (
-        baixas_status["Status_Baixa"]
-        .fillna("ATIVA")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    baixas_status["CHAVE_OPERACAO"] = (
-        baixas_status["PV"].astype(str).str.strip() + "||" +
-        baixas_status["Processo"].astype(str).str.strip() + "||" +
-        baixas_status["CODIGO_PV"].astype(str).str.strip()
-    )
-
-    # Ordena pela data mais recente para pegar o último status válido da operação
-    if "Data_Baixa" in baixas_status.columns:
-        baixas_status["Data_Baixa"] = pd.to_datetime(baixas_status["Data_Baixa"], errors="coerce")
-        baixas_status = baixas_status.sort_values("Data_Baixa", ascending=True)
-
-    # Pega o último status por operação
-    mapa_status_operacao = (
-        baixas_status.groupby("CHAVE_OPERACAO")["Status_Baixa"]
-        .last()
-        .to_dict()
-    )
-else:
-    mapa_status_operacao = {}
-
-# --------------------------------------------
-# CLASSIFICAÇÃO FINAL DO STATUS OPERACIONAL
-# --------------------------------------------
-def classificar_status_operacional(chave):
-    chave = str(chave).strip()
-
-    status = mapa_status_operacao.get(chave, "")
-
-    if status == "ATIVA":
-        return "✅ Baixado"
-    elif status == "TERCEIRIZADA":
-        return "🟣 Terceirizada"
-    else:
-        return "⏳ Pendente"
-
-# ============================================================
-# NORMALIZAÇÃO TOTAL DA CHAVE (CORREÇÃO DEFINITIVA)
-# ============================================================
-
-def normalizar_chave(pv, processo, codigo):
+def normalizar_chave_operacao(pv, processo, codigo):
     return (
         str(pv).strip().upper() + "||" +
         str(processo).strip().upper() + "||" +
@@ -1025,10 +951,9 @@ def normalizar_chave(pv, processo, codigo):
     )
 
 # --------------------------------------------
-# GARANTE CHAVE PADRÃO NO OPERACIONAL
+# GARANTE CHAVE PADRÃO NA BASE OPERACIONAL
 # --------------------------------------------
 if not df_operacional.empty:
-
     for col in ["PV", "Processo", "CODIGO_PV"]:
         if col not in df_operacional.columns:
             df_operacional[col] = ""
@@ -1042,66 +967,74 @@ if not df_operacional.empty:
         )
 
     df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
-        lambda r: normalizar_chave(r["PV"], r["Processo"], r["CODIGO_PV"]),
+        lambda r: normalizar_chave_operacao(r["PV"], r["Processo"], r["CODIGO_PV"]),
         axis=1
     )
+else:
+    df_operacional["CHAVE_OPERACAO"] = ""
 
 # --------------------------------------------
-# MONTA MAPA REAL DE STATUS DAS BAIXAS
+# BASE OFICIAL PARA TIRAR DA FILA
+# SOMENTE BAIXAS ATIVAS / TERCEIRIZADAS
 # --------------------------------------------
-mapa_status = {}
-
-if "df_baixas_historico" in locals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-
-    df_tmp = df_baixas_historico.copy()
+if "df_baixas_ativas" in locals() and df_baixas_ativas is not None and not df_baixas_ativas.empty:
+    df_baixas_status = df_baixas_ativas.copy()
 
     for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col not in df_tmp.columns:
-            df_tmp[col] = ""
+        if col not in df_baixas_status.columns:
+            df_baixas_status[col] = ""
 
-        df_tmp[col] = (
-            df_tmp[col]
+        df_baixas_status[col] = (
+            df_baixas_status[col]
             .fillna("")
             .astype(str)
             .str.strip()
             .str.upper()
         )
 
-    df_tmp["CHAVE_OPERACAO"] = df_tmp.apply(
-        lambda r: normalizar_chave(r["PV"], r["Processo"], r["CODIGO_PV"]),
+    df_baixas_status["CHAVE_OPERACAO"] = df_baixas_status.apply(
+        lambda r: normalizar_chave_operacao(r["PV"], r["Processo"], r["CODIGO_PV"]),
         axis=1
     )
 
-    df_tmp["Status_Baixa"] = (
-        df_tmp["Status_Baixa"]
-        .fillna("ATIVA")
+    chaves_baixadas_ativas = set(
+        df_baixas_status["CHAVE_OPERACAO"]
+        .dropna()
         .astype(str)
         .str.strip()
         .str.upper()
+        .unique()
     )
 
-    if "Data_Baixa" in df_tmp.columns:
-        df_tmp["Data_Baixa"] = pd.to_datetime(df_tmp["Data_Baixa"], errors="coerce")
-        df_tmp = df_tmp.sort_values("Data_Baixa")
-
-    # pega o ÚLTIMO status da operação
-    mapa_status = df_tmp.groupby("CHAVE_OPERACAO")["Status_Baixa"].last().to_dict()
+    mapa_status_operacao = (
+        df_baixas_status
+        .groupby("CHAVE_OPERACAO")["Status_Baixa"]
+        .last()
+        .to_dict()
+    )
+else:
+    chaves_baixadas_ativas = set()
+    mapa_status_operacao = {}
 
 # --------------------------------------------
-# CLASSIFICAÇÃO FINAL
+# CLASSIFICAÇÃO FINAL OFICIAL
 # --------------------------------------------
 def classificar_status_operacional(chave):
     chave = str(chave).strip().upper()
 
-    status = mapa_status.get(chave, "")
-
-    if status == "ATIVA":
-        return "✅ Baixado"
-    elif status == "TERCEIRIZADA":
-        return "🟣 Terceirizada"
-    else:
+    if chave not in chaves_baixadas_ativas:
         return "⏳ Pendente"
 
+    status = str(mapa_status_operacao.get(chave, "")).strip().upper()
+
+    if status == "TERCEIRIZADA":
+        return "🟣 Terceirizada"
+    else:
+        return "✅ Baixado"
+
+# --------------------------------------------
+# APLICA STATUS OPERACIONAL
+# --------------------------------------------
 if not df_operacional.empty:
     df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
         classificar_status_operacional
@@ -1114,7 +1047,6 @@ else:
 # ============================================================
 df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
 df = df.reset_index(drop=True)
-
 # DataFrames auxiliares
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
