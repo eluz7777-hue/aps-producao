@@ -298,9 +298,16 @@ def _padronizar_df_baixas(df_baixas):
 def carregar_baixas_operacionais(base_path):
     caminho = garantir_arquivo_baixas(base_path)
 
+    print("📥 LENDO BAIXAS DE:", caminho)
+
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
+        print("📥 TOTAL DE REGISTROS LIDOS:", len(df_baixas))
         return _padronizar_df_baixas(df_baixas)
+    except Exception as e:
+        print("❌ ERRO AO LER BAIXAS:", e)
+        st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
     except Exception as e:
         st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
@@ -312,10 +319,79 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     """
     caminho = garantir_arquivo_baixas(base_path)
 
+    print("💾 SALVANDO BAIXA EM:", caminho)
+    print("🧾 REGISTRO RECEBIDO:", registro_baixa)
+
     try:
         df_existente = pd.read_excel(caminho, dtype=str)
-    except Exception:
+        print("📂 REGISTROS JÁ EXISTENTES:", len(df_existente))
+    except Exception as e:
+        print("⚠️ ARQUIVO AINDA NÃO EXISTIA OU NÃO FOI LIDO:", e)
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    df_existente = _padronizar_df_baixas(df_existente)
+
+    novo_registro = pd.DataFrame([registro_baixa])
+
+    for col in COLUNAS_BAIXAS:
+        if col not in novo_registro.columns:
+            novo_registro[col] = None
+
+    if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
+        novo_registro["Data_Baixa"] = pd.Timestamp.now()
+
+    novo_registro = _padronizar_df_baixas(novo_registro)
+
+    print("🆕 NOVO REGISTRO PADRONIZADO:")
+    print(novo_registro.to_dict(orient="records"))
+
+    # --------------------------------------------
+    # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
+    # --------------------------------------------
+    if not df_existente.empty:
+        pv_novo = str(novo_registro.iloc[0]["PV"]).strip()
+        processo_novo = str(novo_registro.iloc[0]["Processo"]).strip()
+        codigo_novo = str(novo_registro.iloc[0]["CODIGO_PV"]).strip()
+
+        duplicado = df_existente[
+            (df_existente["PV"].astype(str).str.strip() == pv_novo) &
+            (df_existente["Processo"].astype(str).str.strip() == processo_novo) &
+            (df_existente["CODIGO_PV"].astype(str).str.strip() == codigo_novo) &
+            (
+                df_existente["Status_Baixa"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .isin(["ATIVA", "TERCEIRIZADA"])
+            )
+        ]
+
+        if not duplicado.empty:
+            print("⚠️ DUPLICIDADE DETECTADA - BAIXA NÃO SALVA")
+            print(duplicado[["PV", "Processo", "CODIGO_PV", "Status_Baixa"]].to_dict(orient="records"))
+            return df_existente
+
+    # --------------------------------------------
+    # CONCATENA E SALVA
+    # --------------------------------------------
+    df_final = pd.concat(
+        [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
+        ignore_index=True
+    )
+
+    df_final = _padronizar_df_baixas(df_final)
+
+    print("💾 TOTAL DE REGISTROS APÓS CONCATENAR:", len(df_final))
+
+    # Persistência física garantida
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_final.to_excel(writer, index=False)
+
+    print("✅ ARQUIVO SALVO COM SUCESSO:", caminho)
+
+    st.cache_data.clear()
+
+    return df_final
 
     df_existente = _padronizar_df_baixas(df_existente)
 
@@ -638,7 +714,6 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 # LEITURA
 # ===============================
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
-BASE_PATH = os.path.dirname(BASE_PATH)  # volta para a raiz do projeto
 
 arquivo_pv = os.path.join(BASE_PATH, "PV.xlsx")
 file_mtime = os.path.getmtime(arquivo_pv)
