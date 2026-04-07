@@ -1437,7 +1437,10 @@ if not critico.empty:
     critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
 
-    critico_exib = critico_exib.sort_values(["Ocupacao", "Horas"], ascending=[False, False]).reset_index(drop=True)
+    critico_exib = critico_exib.sort_values(
+        ["Ocupacao", "Horas"],
+        ascending=[False, False]
+    ).reset_index(drop=True)
 
     st.dataframe(
         critico_exib[
@@ -1451,6 +1454,38 @@ if not critico.empty:
     )
 else:
     st.success("Capacidade sob controle.")
+
+# ===============================
+# ALERTA DE COLAPSO DO GARGALO
+# ===============================
+st.subheader("🚨 Semáforo de Colapso dos Gargalos")
+
+if not ranking_colapso.empty:
+    colapso_exib = ranking_colapso.copy()
+
+    colapso_exib["Ocupação (%)"] = colapso_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    colapso_exib["Fila Acumulada (h)"] = colapso_exib["Fila Acumulada Max (h)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Fila (dias)"] = colapso_exib["Fila Max (dias)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Saldo (h)"] = colapso_exib["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
+
+    st.dataframe(
+        colapso_exib[
+            ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo (h)"]
+        ],
+        use_container_width=True
+    )
+
+    topo_colapso = ranking_colapso.iloc[0]["Semáforo Colapso"]
+    processo_topo = ranking_colapso.iloc[0]["Processo"]
+
+    if "🔥" in topo_colapso or "🔴" in topo_colapso:
+        st.error(f"Risco elevado detectado no processo: {processo_topo}")
+    elif "🟡" in topo_colapso:
+        st.warning(f"Atenção para pressão crescente no processo: {processo_topo}")
+    else:
+        st.success("Nenhum gargalo em risco de colapso no momento.")
+else:
+    st.info("Sem dados suficientes para cálculo de colapso.")
 
 # ===============================
 # FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
@@ -1487,6 +1522,7 @@ def classificar_colapso_gargalo(ocupacao, fila_dias, saldo_horas):
         return "🟡 Atenção"
     else:
         return "🟢 Sob Controle"
+
 
 # ============================================================
 # ======================= GRÁFICOS ============================
@@ -1623,7 +1659,6 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 if not atrasos.empty:
     atrasos_plot = atrasos.copy()
 
-    # Faixas executivas de atraso
     atrasos_plot["Faixa de Atraso"] = pd.cut(
         atrasos_plot["Atraso (dias)"],
         bins=[0, 3, 7, 15, 9999],
@@ -1632,7 +1667,6 @@ if not atrasos.empty:
         include_lowest=False
     )
 
-    # Conta PVs únicas por faixa
     dist = (
         atrasos_plot.groupby("Faixa de Atraso", as_index=False)["PV"]
         .nunique()
@@ -1671,8 +1705,8 @@ if not atrasos.empty:
         detalhe.sort_values(["Atraso (dias)", "Horas"], ascending=[False, False]),
         use_container_width=True
     )
-    else:
-        st.success("Nenhum atraso 🎉")
+else:
+    st.success("Nenhum atraso 🎉")
 
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
