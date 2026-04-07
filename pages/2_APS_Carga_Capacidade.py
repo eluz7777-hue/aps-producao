@@ -390,21 +390,27 @@ def historico_baixas_completo(df_baixas):
 # ===============================
 # INTEGRAÇÃO DO HISTÓRICO DE BAIXAS OPERACIONAIS
 # ===============================
-df_baixas = carregar_baixas_operacionais(BASE_PATH)
-df_baixas_historico = historico_baixas_completo(df_baixas)
-df_baixas_ativas = historico_baixas_ativas(df_baixas)
+if "BASE_PATH" in globals():
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+    df_baixas_historico = historico_baixas_completo(df_baixas)
+    df_baixas_ativas = historico_baixas_ativas(df_baixas)
 
-for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
-    if not _df.empty:
-        for col in ["PV", "Processo", "CODIGO_PV"]:
-            if col in _df.columns:
-                _df[col] = _df[col].fillna("").astype(str).str.strip()
+    for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
+        if not _df.empty:
+            for col in ["PV", "Processo", "CODIGO_PV"]:
+                if col in _df.columns:
+                    _df[col] = _df[col].fillna("").astype(str).str.strip()
 
-if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
-    chaves_baixadas = set(
-        df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
-    )
+    if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
+        chaves_baixadas = set(
+            df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
+        )
+    else:
+        chaves_baixadas = set()
 else:
+    df_baixas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+    df_baixas_historico = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+    df_baixas_ativas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
     chaves_baixadas = set()
 
 # ===============================
