@@ -235,7 +235,7 @@ def _padronizar_df_baixas(df_baixas):
     Mantém histórico completo (ativas + estornadas) sem sobrescrever dias anteriores.
     """
     if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS)
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
     df_baixas = df_baixas.copy()
 
@@ -245,7 +245,6 @@ def _padronizar_df_baixas(df_baixas):
 
     df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
 
-    # Padronização textual forte
     colunas_texto = [
         "PV", "Cliente", "CODIGO_PV", "Processo",
         "Usuario", "Observacao", "Status_Baixa",
@@ -266,26 +265,20 @@ def _padronizar_df_baixas(df_baixas):
     )
 
     df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-
     df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-
-    # Data_Estorno fica texto para estabilidade no Excel
     df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
 
-    # Chave operacional
     df_baixas["CHAVE_OPERACAO"] = (
         df_baixas["PV"].astype(str).str.strip() + "||" +
         df_baixas["Processo"].astype(str).str.strip() + "||" +
         df_baixas["CODIGO_PV"].astype(str).str.strip()
     )
 
-    # Remove apenas duplicidade exata da mesma ocorrência
     df_baixas = df_baixas.drop_duplicates(
         subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
         keep="first"
     ).reset_index(drop=True)
 
-    # Ordena do mais recente para o mais antigo
     df_baixas = df_baixas.sort_values(
         by=["Data_Baixa", "PV", "Processo"],
         ascending=[False, True, True]
@@ -298,20 +291,16 @@ def carregar_baixas_operacionais(base_path):
     caminho = caminho_arquivo_baixas(base_path)
 
     if not os.path.exists(caminho):
-        return pd.DataFrame(columns=COLUNAS_BAIXAS)
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
-        df_baixas = _padronizar_df_baixas(df_baixas)
-        return df_baixas
+        return _padronizar_df_baixas(df_baixas)
     except Exception as e:
         st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
-        return pd.DataFrame(columns=COLUNAS_BAIXAS)
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 def salvar_baixa_operacional(base_path, registro_baixa):
-    """
-    Salva uma nova baixa operacional SEM apagar histórico anterior.
-    """
     caminho = caminho_arquivo_baixas(base_path)
 
     if os.path.exists(caminho):
@@ -330,7 +319,6 @@ def salvar_baixa_operacional(base_path, registro_baixa):
         if col not in novo_registro.columns:
             novo_registro[col] = None
 
-    # Se vier sem data, grava agora
     if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
         novo_registro["Data_Baixa"] = pd.Timestamp.now()
 
@@ -342,18 +330,12 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     )
 
     df_final = _padronizar_df_baixas(df_final)
-
-    # Persistência blindada
     df_final.to_excel(caminho, index=False)
 
     st.cache_data.clear()
-
     return df_final
 
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
-    """
-    Estorna a última baixa ATIVA daquela operação sem apagar histórico.
-    """
     caminho = caminho_arquivo_baixas(base_path)
 
     if not os.path.exists(caminho):
@@ -383,7 +365,6 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if not filtro.any():
         return False, "Nenhuma baixa ativa encontrada para estorno."
 
-    # Estorna a mais recente
     idx_estorno = df_baixas.loc[filtro].sort_values("Data_Baixa", ascending=False).index[0]
 
     df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
@@ -391,50 +372,34 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
 
     df_baixas = _padronizar_df_baixas(df_baixas)
-
     df_baixas.to_excel(caminho, index=False)
 
     st.cache_data.clear()
-
     return True, "Baixa operacional estornada com sucesso."
 
 def historico_baixas_ativas(df_baixas):
-    """
-    Retorna apenas as baixas ativas (usadas para remover da fila operacional).
-    """
     if df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
     return df_baixas[df_baixas["Status_Baixa"] == "ATIVA"].copy()
 
 def historico_baixas_completo(df_baixas):
-    """
-    Retorna o histórico completo consolidado (ativas + estornadas).
-    """
     if df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
     return df_baixas.copy()
 
 # ===============================
-# CARGA DO HISTÓRICO DE BAIXAS OPERACIONAIS
+# INTEGRAÇÃO DO HISTÓRICO DE BAIXAS OPERACIONAIS
 # ===============================
 df_baixas = carregar_baixas_operacionais(BASE_PATH)
-
-# Histórico completo (ativas + estornadas)
 df_baixas_historico = historico_baixas_completo(df_baixas)
-
-# Apenas baixas ainda válidas operacionalmente
 df_baixas_ativas = historico_baixas_ativas(df_baixas)
 
-# Blindagem de padronização
 for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
     if not _df.empty:
         for col in ["PV", "Processo", "CODIGO_PV"]:
             if col in _df.columns:
                 _df[col] = _df[col].fillna("").astype(str).str.strip()
 
-# Chaves ativas que efetivamente removem itens da fila operacional
 if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
     chaves_baixadas = set(
         df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
@@ -450,7 +415,6 @@ st.subheader("📜 Histórico de Baixas Operacionais")
 if not df_baixas_historico.empty:
     hist_exib = df_baixas_historico.copy()
 
-    # Formatação visual
     if "Data_Baixa" in hist_exib.columns:
         hist_exib["Data_Baixa"] = pd.to_datetime(hist_exib["Data_Baixa"], errors="coerce")
         hist_exib["Data_Baixa"] = hist_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
@@ -464,7 +428,6 @@ if not df_baixas_historico.empty:
             "ESTORNADA": "🔴 ESTORNADA"
         })
 
-    # Filtros rápidos do histórico
     col_hist1, col_hist2 = st.columns(2)
 
     with col_hist1:
