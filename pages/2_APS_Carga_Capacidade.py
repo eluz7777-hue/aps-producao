@@ -471,7 +471,18 @@ def historico_baixas_completo(df_baixas):
 # INTEGRAÇÃO DO HISTÓRICO DE BAIXAS OPERACIONAIS
 # ===============================
 if "BASE_PATH" in globals():
-    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+    caminho_baixas = caminho_arquivo_baixas(BASE_PATH)
+
+    if os.path.exists(caminho_baixas):
+        try:
+            df_baixas_raw = pd.read_excel(caminho_baixas, dtype=str)
+        except Exception as e:
+            st.warning(f"Erro ao ler histórico físico de baixas: {e}")
+            df_baixas_raw = pd.DataFrame(columns=COLUNAS_BAIXAS)
+    else:
+        df_baixas_raw = pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    df_baixas = _padronizar_df_baixas(df_baixas_raw)
     df_baixas_historico = historico_baixas_completo(df_baixas)
     df_baixas_ativas = historico_baixas_ativas(df_baixas)
 
@@ -479,14 +490,27 @@ if "BASE_PATH" in globals():
         if not _df.empty:
             for col in ["PV", "Processo", "CODIGO_PV", "CHAVE_OPERACAO"]:
                 if col in _df.columns:
-                    _df[col] = _df[col].fillna("").astype(str).str.strip().str.upper()
+                    _df[col] = (
+                        _df[col]
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                        .str.upper()
+                    )
 
     if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
         chaves_baixadas = set(
-            df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().str.upper().unique()
+            df_baixas_ativas["CHAVE_OPERACAO"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .unique()
         )
     else:
         chaves_baixadas = set()
+
+    st.caption(f"📁 Histórico físico carregado: {len(df_baixas_historico)} registro(s)")
 else:
     df_baixas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
     df_baixas_historico = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
@@ -503,17 +527,24 @@ if not df_baixas_historico.empty:
 
     if "Data_Baixa" in hist_exib.columns:
         hist_exib["Data_Baixa"] = pd.to_datetime(hist_exib["Data_Baixa"], errors="coerce")
+        hist_exib = hist_exib.sort_values("Data_Baixa", ascending=False)
         hist_exib["Data_Baixa"] = hist_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
 
     if "Horas" in hist_exib.columns:
         hist_exib["Horas"] = pd.to_numeric(hist_exib["Horas"], errors="coerce").fillna(0).round(1)
 
     if "Status_Baixa" in hist_exib.columns:
-        hist_exib["Status_Baixa"] = hist_exib["Status_Baixa"].replace({
-            "ATIVA": "🟢 ATIVA",
-            "TERCEIRIZADA": "🟣 TERCEIRIZADA",
-            "ESTORNADA": "🔴 ESTORNADA"
-        })
+        hist_exib["Status_Baixa"] = (
+            hist_exib["Status_Baixa"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace({
+                "ATIVA": "🟢 ATIVA",
+                "TERCEIRIZADA": "🟣 TERCEIRIZADA",
+                "ESTORNADA": "🔴 ESTORNADA"
+            })
+        )
 
     col_hist1, col_hist2 = st.columns(2)
 
@@ -537,8 +568,6 @@ if not df_baixas_historico.empty:
         hist_exib = hist_exib[
             hist_exib["PV"].astype(str).str.contains(filtro_pv_hist, case=False, na=False)
         ].copy()
-
-    hist_exib = hist_exib.sort_values("Data_Baixa", ascending=False)
 
     colunas_hist = [
         "Status_Baixa",
