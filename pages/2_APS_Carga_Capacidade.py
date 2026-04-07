@@ -1441,18 +1441,6 @@ if not ranking_colapso.empty:
 else:
     st.info("Sem dados suficientes para cálculo de colapso.")
 
-    topo_colapso = ranking_colapso.iloc[0]["Semáforo Colapso"]
-    processo_topo = ranking_colapso.iloc[0]["Processo"]
-
-    if "🔥" in topo_colapso or "🔴" in topo_colapso:
-        st.error(f"Risco elevado detectado no processo: {processo_topo}")
-    elif "🟡" in topo_colapso:
-        st.warning(f"Atenção para pressão crescente no processo: {processo_topo}")
-    else:
-        st.success("Nenhum gargalo em risco de colapso no momento.")
-else:
-    st.info("Sem dados suficientes para cálculo de colapso.")
-
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
 # ===============================
