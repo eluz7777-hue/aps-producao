@@ -1650,87 +1650,112 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig_cliente, use_container_width=True)
 
-    st.subheader("🥧 Distribuição de Atraso")
+    # ===============================
+# DISTRIBUIÇÃO DE ATRASO (NOVA VISÃO EXECUTIVA)
+# ===============================
+st.subheader("📊 Distribuição de Atraso por Faixa")
 
-if not atrasos.empty:
-    atrasos_plot = atrasos.copy()
+df_atraso = atrasos.copy()
 
-    # Blindagem estrutural
-    if "Atraso (dias)" not in atrasos_plot.columns:
-        atrasos_plot["Atraso (dias)"] = 0
+# Blindagem
+if "Atraso (dias)" not in df_atraso.columns:
+    df_atraso["Atraso (dias)"] = 0
 
-    atrasos_plot["Atraso (dias)"] = (
-        pd.to_numeric(atrasos_plot["Atraso (dias)"], errors="coerce")
-        .fillna(0)
-        .clip(lower=0)
+df_atraso["Atraso (dias)"] = (
+    pd.to_numeric(df_atraso["Atraso (dias)"], errors="coerce")
+    .fillna(0)
+    .clip(lower=0)
+)
+
+# Considera apenas atrasos reais
+df_atraso = df_atraso[df_atraso["Atraso (dias)"] > 0].copy()
+
+if not df_atraso.empty:
+
+    max_atraso = int(df_atraso["Atraso (dias)"].max())
+
+    # Cria faixas de 2 em 2 dias dinamicamente
+    bins = list(range(0, max_atraso + 3, 2))
+
+    labels = []
+    for i in range(len(bins)-1):
+        inicio = bins[i] + 1
+        fim = bins[i+1]
+        labels.append(f"{inicio}-{fim}")
+
+    df_atraso["Faixa"] = pd.cut(
+        df_atraso["Atraso (dias)"],
+        bins=bins,
+        labels=labels,
+        include_lowest=True
     )
 
-    # Considera apenas atrasos reais
-    atrasos_plot = atrasos_plot[atrasos_plot["Atraso (dias)"] > 0].copy()
+    dist = (
+        df_atraso.groupby("Faixa", observed=False)["PV"]
+        .nunique()
+        .reset_index(name="Quantidade")
+    )
 
-    if not atrasos_plot.empty:
-        atrasos_plot["Faixa de Atraso"] = pd.cut(
-            atrasos_plot["Atraso (dias)"],
-            bins=[0, 3, 7, 15, 9999],
-            labels=["1 a 3 dias", "4 a 7 dias", "8 a 15 dias", "16+ dias"],
-            right=True,
-            include_lowest=True
-        )
+    dist = dist[dist["Quantidade"] > 0]
 
-        dist = (
-            atrasos_plot.groupby("Faixa de Atraso", as_index=False, observed=False)["PV"]
-            .nunique()
-            .rename(columns={"PV": "Quantidade"})
-        )
+    # Ordenação correta das faixas
+    dist["Ordem"] = dist["Faixa"].astype(str).str.extract(r"(\d+)").astype(int)
+    dist = dist.sort_values("Ordem")
 
-        dist = dist[dist["Quantidade"] > 0].copy()
+    # GRÁFICO DE COLUNAS
+    fig_bar = px.bar(
+        dist,
+        x="Faixa",
+        y="Quantidade",
+        text="Quantidade",
+        title="Escalonamento de Atraso (em dias)",
+    )
 
-        if not dist.empty:
-            fig_pizza = px.pie(
-                dist,
-                names="Faixa de Atraso",
-                values="Quantidade",
-                title="Distribuição Executiva dos Atrasos",
-                hole=0.35
-            )
+    fig_bar.update_traces(
+        textposition="outside"
+    )
 
-            fig_pizza.update_traces(textinfo="percent+label")
-            fig_pizza.update_layout(height=460)
+    fig_bar.update_layout(
+        xaxis_title="Faixa de Atraso (dias)",
+        yaxis_title="Quantidade de PVs",
+        height=450,
+        showlegend=False,
+        uniformtext_minsize=8,
+        uniformtext_mode='hide'
+    )
 
-            st.plotly_chart(fig_pizza, use_container_width=True)
+    st.plotly_chart(fig_bar, use_container_width=True)
 
-            faixa_select = st.selectbox(
-                "Selecionar faixa de atraso",
-                dist["Faixa de Atraso"].astype(str).tolist(),
-                key="faixa_atraso_select"
-            )
+    # KPI rápido abaixo do gráfico
+    col1, col2, col3 = st.columns(3)
 
-            detalhe = atrasos_plot[
-                atrasos_plot["Faixa de Atraso"].astype(str) == faixa_select
-            ].copy()
+    with col1:
+        st.metric("Maior atraso", f"{df_atraso['Atraso (dias)'].max():.0f} dias")
 
-            # Blindagem das colunas do detalhamento
-            for col in ["Horas", "Dias Necessários", "Dias Disponíveis", "Atraso (dias)"]:
-                if col not in detalhe.columns:
-                    detalhe[col] = 0
+    with col2:
+        st.metric("Média", f"{df_atraso['Atraso (dias)'].mean():.1f} dias")
 
-            detalhe["Horas"] = pd.to_numeric(detalhe["Horas"], errors="coerce").fillna(0).round(1)
-            detalhe["Dias Necessários"] = pd.to_numeric(detalhe["Dias Necessários"], errors="coerce").fillna(0).round(1)
-            detalhe["Dias Disponíveis"] = pd.to_numeric(detalhe["Dias Disponíveis"], errors="coerce").fillna(0).round(1)
-            detalhe["Atraso (dias)"] = pd.to_numeric(detalhe["Atraso (dias)"], errors="coerce").fillna(0).astype(int)
+    with col3:
+        st.metric("Total em atraso", f"{len(df_atraso)} PVs")
 
-            if "Data" in detalhe.columns:
-                detalhe["Data"] = pd.to_datetime(detalhe["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
+    # DETALHAMENTO
+    faixa_select = st.selectbox(
+        "Selecionar faixa para detalhamento",
+        dist["Faixa"].astype(str).tolist(),
+        key="faixa_bar_select"
+    )
 
-            st.subheader("📋 Detalhamento da Faixa")
-            st.dataframe(
-                detalhe.sort_values(["Atraso (dias)", "Horas"], ascending=[False, False]),
-                use_container_width=True
-            )
-        else:
-            st.success("Nenhum atraso relevante para exibir 🎉")
-    else:
-        st.success("Nenhum atraso 🎉")
+    detalhe = df_atraso[
+        df_atraso["Faixa"].astype(str) == faixa_select
+    ].copy()
+
+    st.subheader("📋 Detalhamento da Faixa")
+
+    st.dataframe(
+        detalhe.sort_values("Atraso (dias)", ascending=False),
+        use_container_width=True
+    )
+
 else:
     st.success("Nenhum atraso 🎉")
 
