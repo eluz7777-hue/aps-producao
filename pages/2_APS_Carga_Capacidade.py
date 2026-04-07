@@ -868,32 +868,6 @@ if not df_original.empty:
             dayfirst=True
         )
 
-# ===============================
-# CARGA DO HISTÓRICO DE BAIXAS OPERACIONAIS
-# ===============================
-df_baixas = carregar_baixas_operacionais(BASE_PATH)
-
-# Histórico completo (ativas + estornadas)
-df_baixas_historico = historico_baixas_completo(df_baixas)
-
-# Apenas baixas ainda válidas operacionalmente
-df_baixas_ativas = historico_baixas_ativas(df_baixas)
-
-# Blindagem de padronização
-for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
-    if not _df.empty:
-        for col in ["PV", "Processo", "CODIGO_PV"]:
-            if col in _df.columns:
-                _df[col] = _df[col].fillna("").astype(str).str.strip()
-
-# Chaves ativas que efetivamente removem itens da fila operacional
-if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
-    chaves_baixadas = set(
-        df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
-    )
-else:
-    chaves_baixadas = set()
-
 # ============================================================
 # BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
 # ============================================================
