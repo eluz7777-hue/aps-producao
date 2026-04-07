@@ -203,8 +203,8 @@ def capacidade_semana_por_processo(inicio, fim, processo):
 # CACHE DE LEITURA
 # ===============================
 @st.cache_data(ttl=0)
-def carregar_dados(base_path, file_mtime):
-    df = pd.read_excel(os.path.join(base_path, "PV.xlsx"))
+def carregar_dados(arquivo_pv, file_mtime):
+    df = pd.read_excel(arquivo_pv)
     return df
 
 # ===============================
@@ -267,6 +267,11 @@ def _padronizar_df_baixas(df_baixas):
     for col in colunas_texto:
         df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
+    # Padronização forte
+    df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip().str.upper()
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
+    df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
+
     df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
 
     df_baixas["Status_Baixa"] = (
@@ -281,10 +286,11 @@ def _padronizar_df_baixas(df_baixas):
     df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
     df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
 
+    # CHAVE OPERACIONAL OFICIAL
     df_baixas["CHAVE_OPERACAO"] = (
-        df_baixas["PV"].astype(str).str.strip() + "||" +
-        df_baixas["Processo"].astype(str).str.strip() + "||" +
-        df_baixas["CODIGO_PV"].astype(str).str.strip()
+        df_baixas["PV"].astype(str).str.strip().str.upper() + "||" +
+        df_baixas["Processo"].astype(str).str.strip().str.upper() + "||" +
+        df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
     )
 
     df_baixas = df_baixas.sort_values(
@@ -306,9 +312,6 @@ def carregar_baixas_operacionais(base_path):
         return _padronizar_df_baixas(df_baixas)
     except Exception as e:
         print("❌ ERRO AO LER BAIXAS:", e)
-        st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    except Exception as e:
         st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
@@ -349,14 +352,10 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
     # --------------------------------------------
     if not df_existente.empty:
-        pv_novo = str(novo_registro.iloc[0]["PV"]).strip()
-        processo_novo = str(novo_registro.iloc[0]["Processo"]).strip()
-        codigo_novo = str(novo_registro.iloc[0]["CODIGO_PV"]).strip()
+        chave_nova = str(novo_registro.iloc[0]["CHAVE_OPERACAO"]).strip().upper()
 
         duplicado = df_existente[
-            (df_existente["PV"].astype(str).str.strip() == pv_novo) &
-            (df_existente["Processo"].astype(str).str.strip() == processo_novo) &
-            (df_existente["CODIGO_PV"].astype(str).str.strip() == codigo_novo) &
+            (df_existente["CHAVE_OPERACAO"].astype(str).str.strip().str.upper() == chave_nova) &
             (
                 df_existente["Status_Baixa"]
                 .astype(str)
@@ -393,61 +392,6 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     return df_final
 
-    df_existente = _padronizar_df_baixas(df_existente)
-
-    novo_registro = pd.DataFrame([registro_baixa])
-
-    for col in COLUNAS_BAIXAS:
-        if col not in novo_registro.columns:
-            novo_registro[col] = None
-
-    if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
-        novo_registro["Data_Baixa"] = pd.Timestamp.now()
-
-    novo_registro = _padronizar_df_baixas(novo_registro)
-
-    # --------------------------------------------
-    # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
-    # --------------------------------------------
-    if not df_existente.empty:
-        pv_novo = str(novo_registro.iloc[0]["PV"]).strip()
-        processo_novo = str(novo_registro.iloc[0]["Processo"]).strip()
-        codigo_novo = str(novo_registro.iloc[0]["CODIGO_PV"]).strip()
-
-        duplicado = df_existente[
-            (df_existente["PV"].astype(str).str.strip() == pv_novo) &
-            (df_existente["Processo"].astype(str).str.strip() == processo_novo) &
-            (df_existente["CODIGO_PV"].astype(str).str.strip() == codigo_novo) &
-            (
-                df_existente["Status_Baixa"]
-                .astype(str)
-                .str.strip()
-                .str.upper()
-                .isin(["ATIVA", "TERCEIRIZADA"])
-            )
-        ]
-
-        if not duplicado.empty:
-            return df_existente
-
-    # --------------------------------------------
-    # CONCATENA E SALVA
-    # --------------------------------------------
-    df_final = pd.concat(
-        [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
-        ignore_index=True
-    )
-
-    df_final = _padronizar_df_baixas(df_final)
-
-    # Persistência física garantida
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_final.to_excel(writer, index=False)
-
-    st.cache_data.clear()
-
-    return df_final
-
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
     """
     Estorna a última baixa ATIVA ou TERCEIRIZADA daquela operação sem apagar histórico.
@@ -464,14 +408,14 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if df_baixas.empty:
         return False, "Nenhuma baixa operacional encontrada."
 
-    pv = str(pv).strip()
-    processo = str(processo).strip()
-    codigo_pv = str(codigo_pv).strip()
+    pv = str(pv).strip().upper()
+    processo = str(processo).strip().upper()
+    codigo_pv = str(codigo_pv).strip().upper()
 
     filtro = (
-        (df_baixas["PV"].astype(str).str.strip() == pv) &
-        (df_baixas["Processo"].astype(str).str.strip() == processo) &
-        (df_baixas["CODIGO_PV"].astype(str).str.strip() == codigo_pv) &
+        (df_baixas["PV"].astype(str).str.strip().str.upper() == pv) &
+        (df_baixas["Processo"].astype(str).str.strip().str.upper() == processo) &
+        (df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper() == codigo_pv) &
         (
             df_baixas["Status_Baixa"]
             .astype(str)
@@ -533,13 +477,13 @@ if "BASE_PATH" in globals():
 
     for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
         if not _df.empty:
-            for col in ["PV", "Processo", "CODIGO_PV"]:
+            for col in ["PV", "Processo", "CODIGO_PV", "CHAVE_OPERACAO"]:
                 if col in _df.columns:
-                    _df[col] = _df[col].fillna("").astype(str).str.strip()
+                    _df[col] = _df[col].fillna("").astype(str).str.strip().str.upper()
 
     if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
         chaves_baixadas = set(
-            df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
+            df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().str.upper().unique()
         )
     else:
         chaves_baixadas = set()
@@ -567,6 +511,7 @@ if not df_baixas_historico.empty:
     if "Status_Baixa" in hist_exib.columns:
         hist_exib["Status_Baixa"] = hist_exib["Status_Baixa"].replace({
             "ATIVA": "🟢 ATIVA",
+            "TERCEIRIZADA": "🟣 TERCEIRIZADA",
             "ESTORNADA": "🔴 ESTORNADA"
         })
 
@@ -575,7 +520,7 @@ if not df_baixas_historico.empty:
     with col_hist1:
         filtro_status_hist = st.selectbox(
             "Filtrar histórico por status",
-            ["Todos", "🟢 ATIVA", "🔴 ESTORNADA"],
+            ["Todos", "🟢 ATIVA", "🟣 TERCEIRIZADA", "🔴 ESTORNADA"],
             key="filtro_status_historico_baixas"
         )
 
@@ -716,10 +661,7 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 PAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(PAGE_DIR)
 
-# Caminho oficial do PV.xlsx (na raiz do projeto)
 arquivo_pv = os.path.join(ROOT_DIR, "PV.xlsx")
-
-# Caminho oficial das baixas operacionais
 BASE_PATH = ROOT_DIR
 
 st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
@@ -730,7 +672,7 @@ if not os.path.exists(arquivo_pv):
 
 file_mtime = os.path.getmtime(arquivo_pv)
 
-df_pv = carregar_dados(BASE_PATH, file_mtime)
+df_pv = carregar_dados(arquivo_pv, file_mtime)
 
 # ===============================
 # NORMALIZAÇÃO FORTE DE CABEÇALHOS
