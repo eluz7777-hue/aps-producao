@@ -2711,130 +2711,207 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         # --------------------------------------------------------
-        # BAIXA OPERACIONAL (usa CHAVE_OPERACAO REAL da linha)
-        # --------------------------------------------------------
-        st.markdown("### ✅ Dar Baixa em Operação Concluída")
+# BAIXA OPERACIONAL (usa CHAVE_OPERACAO REAL da linha)
+# --------------------------------------------------------
+st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
-        if fila_gargalo_pendente.empty:
-            st.info("Nenhuma PV pendente disponível para baixa neste gargalo.")
-        else:
-            # rótulo único por linha para evitar ambiguidade entre operações da mesma PV
-            fila_gargalo_pendente["ROTULO_BAIXA"] = (
-                "PV " + fila_gargalo_pendente["PV"].astype(str).str.strip() +
-                " | " + fila_gargalo_pendente["Processo"].astype(str).str.strip() +
-                " | " + fila_gargalo_pendente["CODIGO_PV"].astype(str).str.strip() +
-                " | " + fila_gargalo_pendente["Horas"].astype(str)
-            )
+if fila_gargalo_pendente.empty:
+    st.info("Nenhuma PV pendente disponível para baixa neste gargalo.")
+else:
+    base_baixa = fila_gargalo_pendente.copy()
 
-            opcoes_baixa = fila_gargalo_pendente["ROTULO_BAIXA"].dropna().astype(str).tolist()
+    # blindagem estrutural
+    for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Horas", "CHAVE_OPERACAO"]:
+        if col not in base_baixa.columns:
+            base_baixa[col] = ""
 
-            col_bx1, col_bx2 = st.columns([2, 2])
+    base_baixa["PV"] = base_baixa["PV"].fillna("").astype(str).str.strip().str.upper()
+    base_baixa["Cliente"] = base_baixa["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
+    base_baixa["CODIGO_PV"] = base_baixa["CODIGO_PV"].fillna("").astype(str).str.strip().str.upper()
+    base_baixa["Processo"] = base_baixa["Processo"].fillna("").astype(str).str.strip().str.upper()
+    base_baixa["Horas"] = pd.to_numeric(base_baixa["Horas"], errors="coerce").fillna(0)
 
-            baixa_sel = col_bx1.selectbox(
-                "Selecione a operação concluída",
-                opcoes_baixa,
-                key="pv_baixa_top3_select"
-            )
+    # garante CHAVE_OPERACAO real e padronizada
+    base_baixa["CHAVE_OPERACAO"] = (
+        base_baixa["PV"].astype(str).str.strip().str.upper() + "||" +
+        base_baixa["Processo"].astype(str).str.strip().str.upper() + "||" +
+        base_baixa["CODIGO_PV"].astype(str).str.strip().str.upper()
+    )
 
-            observacao_baixa = col_bx2.text_input(
-                "Observação da baixa (opcional)",
-                key="obs_baixa_top3_input"
-            )
+    # remove duplicidade visual da mesma operação
+    base_baixa = base_baixa.drop_duplicates(subset=["CHAVE_OPERACAO"]).copy()
 
-            registro_baixa_df = fila_gargalo_pendente[
-                fila_gargalo_pendente["ROTULO_BAIXA"] == baixa_sel
-            ].copy()
+    # rótulo único e estável
+    base_baixa["ROTULO_BAIXA"] = (
+        "PV " + base_baixa["PV"] +
+        " | " + base_baixa["Processo"] +
+        " | " + base_baixa["CODIGO_PV"] +
+        " | " + base_baixa["Horas"].round(1).astype(str) + " h"
+    )
 
-            if not registro_baixa_df.empty:
-                linha_baixa = registro_baixa_df.iloc[0]
+    opcoes_baixa = base_baixa["ROTULO_BAIXA"].dropna().astype(str).tolist()
 
-                chave_selecionada = str(linha_baixa["CHAVE_OPERACAO"]).strip().upper()
+    col_bx1, col_bx2 = st.columns([2, 2])
 
+    baixa_sel = col_bx1.selectbox(
+        "Selecione a operação concluída",
+        opcoes_baixa,
+        key="pv_baixa_top3_select"
+    )
+
+    observacao_baixa = col_bx2.text_input(
+        "Observação da baixa (opcional)",
+        key="obs_baixa_top3_input"
+    )
+
+    registro_baixa_df = base_baixa[
+        base_baixa["ROTULO_BAIXA"] == baixa_sel
+    ].copy()
+
+    if not registro_baixa_df.empty:
+        linha_baixa = registro_baixa_df.iloc[0]
+
+        chave_selecionada = str(linha_baixa["CHAVE_OPERACAO"]).strip().upper()
+
+        st.info(
+            f"Você está prestes a registrar a operação **{linha_baixa['Processo']}** "
+            f"da PV **{linha_baixa['PV']}** "
+            f"({fmt_br_num(linha_baixa['Horas'], 1)} h)."
+        )
+
+        st.caption(f"🔑 CHAVE_OPERACAO: {chave_selecionada}")
+
+        col_btn1, col_btn2 = st.columns(2)
+
+        # --------------------------------------------
+        # BOTÃO BAIXA NORMAL
+        # --------------------------------------------
+        if col_btn1.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
+
+            registro_baixa = {
+                "PV": str(linha_baixa["PV"]).strip().upper(),
+                "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
+                "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip().upper(),
+                "Processo": str(linha_baixa["Processo"]).strip().upper(),
+                "Horas": float(linha_baixa["Horas"]),
+                "Data_Baixa": pd.Timestamp.now(),
+                "Usuario": "APS",
+                "Observacao": observacao_baixa.strip() if observacao_baixa else "",
+                "Status_Baixa": "ATIVA",
+                "Data_Estorno": pd.NaT,
+                "Motivo_Estorno": ""
+            }
+
+            try:
+                df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
+                st.cache_data.clear()
+
+                st.success("✅ Baixa operacional registrada com sucesso.")
                 st.info(
-                    f"Você está prestes a registrar a operação **{linha_baixa['Processo']}** "
-                    f"da PV **{linha_baixa['PV']}** "
-                    f"({fmt_br_num(linha_baixa['Horas'], 1)} h)."
+                    f"Registro salvo: PV {registro_baixa['PV']} | "
+                    f"{registro_baixa['Processo']} | "
+                    f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
                 )
 
-                col_btn1, col_btn2 = st.columns(2)
+                if df_baixas_salvo is not None and not df_baixas_salvo.empty:
+                    st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
 
-                # --------------------------------------------
-                # BOTÃO BAIXA NORMAL
-                # --------------------------------------------
-                if col_btn1.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
+                    # auditoria rápida pós-gravação
+                    df_baixas_teste = df_baixas_salvo.copy()
 
-                    registro_baixa = {
-                        "PV": str(linha_baixa["PV"]).strip(),
-                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
-                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip(),
-                        "Processo": str(linha_baixa["Processo"]).strip(),
-                        "Horas": float(linha_baixa["Horas"]),
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "APS",
-                        "Observacao": observacao_baixa.strip() if observacao_baixa else "",
-                        "Status_Baixa": "ATIVA",
-                        "Data_Estorno": pd.NaT,
-                        "Motivo_Estorno": ""
-                    }
+                    for col in ["PV", "Processo", "CODIGO_PV"]:
+                        if col not in df_baixas_teste.columns:
+                            df_baixas_teste[col] = ""
 
-                    try:
-                        df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
-                        st.cache_data.clear()
-
-                        st.success("✅ Baixa operacional registrada com sucesso.")
-                        st.info(
-                            f"Registro salvo: PV {registro_baixa['PV']} | "
-                            f"{registro_baixa['Processo']} | "
-                            f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
+                        df_baixas_teste[col] = (
+                            df_baixas_teste[col]
+                            .fillna("")
+                            .astype(str)
+                            .str.strip()
+                            .str.upper()
                         )
 
-                        if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                            st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
+                    df_baixas_teste["CHAVE_OPERACAO"] = (
+                        df_baixas_teste["PV"].astype(str).str.strip().str.upper() + "||" +
+                        df_baixas_teste["Processo"].astype(str).str.strip().str.upper() + "||" +
+                        df_baixas_teste["CODIGO_PV"].astype(str).str.strip().str.upper()
+                    )
 
-                        st.rerun()
+                    if chave_selecionada in df_baixas_teste["CHAVE_OPERACAO"].tolist():
+                        st.success("🧠 Validação: a operação foi localizada corretamente no histórico.")
+                    else:
+                        st.error("❌ Validação falhou: a operação não foi localizada no histórico após salvar.")
 
-                    except Exception as e:
-                        st.error(f"Erro ao salvar baixa operacional: {e}")
+                st.rerun()
 
-                # --------------------------------------------
-                # BOTÃO TERCEIRIZADA
-                # --------------------------------------------
-                if col_btn2.button("🟣 Marcar como Terceirizada", key="btn_terceirizada_top3"):
+            except Exception as e:
+                st.error(f"Erro ao salvar baixa operacional: {e}")
 
-                    registro_baixa = {
-                        "PV": str(linha_baixa["PV"]).strip(),
-                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
-                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip(),
-                        "Processo": str(linha_baixa["Processo"]).strip(),
-                        "Horas": float(linha_baixa["Horas"]),
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "APS",
-                        "Observacao": f"TERCEIRIZADA | {observacao_baixa.strip()}" if observacao_baixa else "TERCEIRIZADA",
-                        "Status_Baixa": "TERCEIRIZADA",
-                        "Data_Estorno": pd.NaT,
-                        "Motivo_Estorno": ""
-                    }
+        # --------------------------------------------
+        # BOTÃO TERCEIRIZADA
+        # --------------------------------------------
+        if col_btn2.button("🟣 Marcar como Terceirizada", key="btn_terceirizada_top3"):
 
-                    try:
-                        df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
-                        st.cache_data.clear()
+            registro_baixa = {
+                "PV": str(linha_baixa["PV"]).strip().upper(),
+                "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
+                "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip().upper(),
+                "Processo": str(linha_baixa["Processo"]).strip().upper(),
+                "Horas": float(linha_baixa["Horas"]),
+                "Data_Baixa": pd.Timestamp.now(),
+                "Usuario": "APS",
+                "Observacao": f"TERCEIRIZADA | {observacao_baixa.strip()}" if observacao_baixa else "TERCEIRIZADA",
+                "Status_Baixa": "TERCEIRIZADA",
+                "Data_Estorno": pd.NaT,
+                "Motivo_Estorno": ""
+            }
 
-                        st.success("🟣 Operação marcada como terceirizada.")
-                        st.info(
-                            f"Registro salvo: PV {registro_baixa['PV']} | "
-                            f"{registro_baixa['Processo']} | "
-                            f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
+            try:
+                df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
+                st.cache_data.clear()
+
+                st.success("🟣 Operação marcada como terceirizada.")
+                st.info(
+                    f"Registro salvo: PV {registro_baixa['PV']} | "
+                    f"{registro_baixa['Processo']} | "
+                    f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
+                )
+
+                if df_baixas_salvo is not None and not df_baixas_salvo.empty:
+                    st.caption(f"📁 Total de registros operacionais: {len(df_baixas_salvo)}")
+
+                    # auditoria rápida pós-gravação
+                    df_baixas_teste = df_baixas_salvo.copy()
+
+                    for col in ["PV", "Processo", "CODIGO_PV"]:
+                        if col not in df_baixas_teste.columns:
+                            df_baixas_teste[col] = ""
+
+                        df_baixas_teste[col] = (
+                            df_baixas_teste[col]
+                            .fillna("")
+                            .astype(str)
+                            .str.strip()
+                            .str.upper()
                         )
 
-                        if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                            st.caption(f"📁 Total de registros operacionais: {len(df_baixas_salvo)}")
+                    df_baixas_teste["CHAVE_OPERACAO"] = (
+                        df_baixas_teste["PV"].astype(str).str.strip().str.upper() + "||" +
+                        df_baixas_teste["Processo"].astype(str).str.strip().str.upper() + "||" +
+                        df_baixas_teste["CODIGO_PV"].astype(str).str.strip().str.upper()
+                    )
 
-                        st.rerun()
+                    if chave_selecionada in df_baixas_teste["CHAVE_OPERACAO"].tolist():
+                        st.success("🧠 Validação: a operação terceirizada foi localizada corretamente no histórico.")
+                    else:
+                        st.error("❌ Validação falhou: a operação terceirizada não foi localizada no histórico após salvar.")
 
-                    except Exception as e:
-                        st.error(f"Erro ao registrar terceirização: {e}")
+                st.rerun()
 
-        st.divider()
+            except Exception as e:
+                st.error(f"Erro ao registrar terceirização: {e}")
+
+st.divider()
 
         # --------------------------------------------------------
         # DESFAZER BAIXA OPERACIONAL
