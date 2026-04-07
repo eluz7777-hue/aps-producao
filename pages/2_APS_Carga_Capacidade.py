@@ -230,6 +230,70 @@ COLUNAS_BAIXAS = [
 def caminho_arquivo_baixas(base_path):
     return os.path.join(base_path, ARQUIVO_BAIXAS)
 
+def _padronizar_df_baixas(df_baixas):
+    """
+    Padroniza a estrutura e os tipos do histórico de baixas operacionais.
+    Mantém histórico completo (ativas + estornadas) sem sobrescrever dias anteriores.
+    """
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    df_baixas = df_baixas.copy()
+
+    for col in COLUNAS_BAIXAS:
+        if col not in df_baixas.columns:
+            df_baixas[col] = None
+
+    df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
+
+    # Padronização textual forte
+    colunas_texto = [
+        "PV", "Cliente", "CODIGO_PV", "Processo",
+        "Usuario", "Observacao", "Status_Baixa",
+        "Data_Estorno", "Motivo_Estorno"
+    ]
+
+    for col in colunas_texto:
+        df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
+
+    df_baixas["Status_Baixa"] = (
+        df_baixas["Status_Baixa"]
+        .replace("", "ATIVA")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+
+    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
+
+    # Data_Estorno fica texto para estabilidade no Excel
+    df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
+
+    # Chave operacional
+    df_baixas["CHAVE_OPERACAO"] = (
+        df_baixas["PV"].astype(str).str.strip() + "||" +
+        df_baixas["Processo"].astype(str).str.strip() + "||" +
+        df_baixas["CODIGO_PV"].astype(str).str.strip()
+    )
+
+    # Remove apenas duplicidade exata da mesma ocorrência
+    df_baixas = df_baixas.drop_duplicates(
+        subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
+        keep="first"
+    ).reset_index(drop=True)
+
+    # Ordena do mais recente para o mais antigo
+    df_baixas = df_baixas.sort_values(
+        by=["Data_Baixa", "PV", "Processo"],
+        ascending=[False, True, True]
+    ).reset_index(drop=True)
+
+    return df_baixas
+
 @st.cache_data(ttl=0)
 def carregar_baixas_operacionais(base_path):
     caminho = caminho_arquivo_baixas(base_path)
@@ -238,67 +302,28 @@ def carregar_baixas_operacionais(base_path):
         return pd.DataFrame(columns=COLUNAS_BAIXAS)
 
     try:
-        df_baixas = pd.read_excel(caminho)
-
-        for col in COLUNAS_BAIXAS:
-            if col not in df_baixas.columns:
-                df_baixas[col] = None
-
-        df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
-
-        # Padronização forte
-        for col in [
-            "PV", "Cliente", "CODIGO_PV", "Processo",
-            "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
-        ]:
-            if col in df_baixas.columns:
-                df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
-
-        if "Cliente" in df_baixas.columns:
-            df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
-
-        if "Status_Baixa" in df_baixas.columns:
-            df_baixas["Status_Baixa"] = (
-                df_baixas["Status_Baixa"]
-                .replace("", "ATIVA")
-                .astype(str)
-                .str.strip()
-                .str.upper()
-            )
-
-        if "Horas" in df_baixas.columns:
-            df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-
-        if "Data_Baixa" in df_baixas.columns:
-            df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-
-        # Remove duplicidades exatas de mesma baixa ativa/estornada com mesmo timestamp
-        df_baixas = df_baixas.drop_duplicates(
-            subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
-            keep="first"
-        ).reset_index(drop=True)
-
+        df_baixas = pd.read_excel(caminho, dtype=str)
+        df_baixas = _padronizar_df_baixas(df_baixas)
         return df_baixas
-
     except Exception as e:
         st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS)
 
-
 def salvar_baixa_operacional(base_path, registro_baixa):
+    """
+    Salva uma nova baixa operacional SEM apagar histórico anterior.
+    """
     caminho = caminho_arquivo_baixas(base_path)
 
     if os.path.exists(caminho):
         try:
-            df_existente = pd.read_excel(caminho)
+            df_existente = pd.read_excel(caminho, dtype=str)
         except Exception:
             df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
     else:
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
-    for col in COLUNAS_BAIXAS:
-        if col not in df_existente.columns:
-            df_existente[col] = None
+    df_existente = _padronizar_df_baixas(df_existente)
 
     novo_registro = pd.DataFrame([registro_baixa])
 
@@ -306,121 +331,44 @@ def salvar_baixa_operacional(base_path, registro_baixa):
         if col not in novo_registro.columns:
             novo_registro[col] = None
 
-    # Padronização forte
-    for col in [
-        "PV", "Cliente", "CODIGO_PV", "Processo",
-        "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
-    ]:
-        if col in df_existente.columns:
-            df_existente[col] = df_existente[col].fillna("").astype(str).str.strip()
+    # Se vier sem data, grava agora
+    if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
+        novo_registro["Data_Baixa"] = pd.Timestamp.now()
 
-        if col in novo_registro.columns:
-            novo_registro[col] = novo_registro[col].fillna("").astype(str).str.strip()
-
-    if "Cliente" in df_existente.columns:
-        df_existente["Cliente"] = df_existente["Cliente"].replace("", "SEM CLIENTE")
-
-    if "Cliente" in novo_registro.columns:
-        novo_registro["Cliente"] = novo_registro["Cliente"].replace("", "SEM CLIENTE")
-
-    if "Status_Baixa" in df_existente.columns:
-        df_existente["Status_Baixa"] = (
-            df_existente["Status_Baixa"]
-            .replace("", "ATIVA")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    if "Status_Baixa" in novo_registro.columns:
-        novo_registro["Status_Baixa"] = (
-            novo_registro["Status_Baixa"]
-            .replace("", "ATIVA")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    if "Horas" in df_existente.columns:
-        df_existente["Horas"] = pd.to_numeric(df_existente["Horas"], errors="coerce").fillna(0)
-
-    if "Horas" in novo_registro.columns:
-        novo_registro["Horas"] = pd.to_numeric(novo_registro["Horas"], errors="coerce").fillna(0)
-
-    if "Data_Baixa" in df_existente.columns:
-        df_existente["Data_Baixa"] = pd.to_datetime(df_existente["Data_Baixa"], errors="coerce")
-
-    if "Data_Baixa" in novo_registro.columns:
-        novo_registro["Data_Baixa"] = pd.to_datetime(novo_registro["Data_Baixa"], errors="coerce")
-
-    # Data_Estorno como texto para estabilidade no Excel
-    if "Data_Estorno" in df_existente.columns:
-        df_existente["Data_Estorno"] = df_existente["Data_Estorno"].fillna("").astype(str).str.strip()
-
-    if "Data_Estorno" in novo_registro.columns:
-        novo_registro["Data_Estorno"] = novo_registro["Data_Estorno"].fillna("").astype(str).str.strip()
+    novo_registro = _padronizar_df_baixas(novo_registro)
 
     df_final = pd.concat(
         [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
         ignore_index=True
-    ).copy()
+    )
 
-    # Blindagem contra duplicidade exata da MESMA BAIXA
-    df_final = df_final.drop_duplicates(
-        subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
-        keep="first"
-    ).reset_index(drop=True)
+    df_final = _padronizar_df_baixas(df_final)
 
+    # Persistência blindada
     df_final.to_excel(caminho, index=False)
 
     st.cache_data.clear()
 
     return df_final
 
-
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
+    """
+    Estorna a última baixa ATIVA daquela operação sem apagar histórico.
+    """
     caminho = caminho_arquivo_baixas(base_path)
 
     if not os.path.exists(caminho):
         return False, "Arquivo de baixas operacionais não encontrado."
 
     try:
-        df_baixas = pd.read_excel(caminho)
+        df_baixas = pd.read_excel(caminho, dtype=str)
     except Exception as e:
         return False, f"Erro ao ler arquivo de baixas: {e}"
 
+    df_baixas = _padronizar_df_baixas(df_baixas)
+
     if df_baixas.empty:
         return False, "Nenhuma baixa operacional encontrada."
-
-    for col in COLUNAS_BAIXAS:
-        if col not in df_baixas.columns:
-            df_baixas[col] = None
-
-    # Padronização forte
-    for col in [
-        "PV", "Cliente", "CODIGO_PV", "Processo",
-        "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
-    ]:
-        if col in df_baixas.columns:
-            df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
-
-    if "Cliente" in df_baixas.columns:
-        df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
-
-    if "Status_Baixa" in df_baixas.columns:
-        df_baixas["Status_Baixa"] = (
-            df_baixas["Status_Baixa"]
-            .replace("", "ATIVA")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    if "Horas" in df_baixas.columns:
-        df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-
-    if "Data_Baixa" in df_baixas.columns:
-        df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
 
     pv = str(pv).strip()
     processo = str(processo).strip()
@@ -436,32 +384,38 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if not filtro.any():
         return False, "Nenhuma baixa ativa encontrada para estorno."
 
-    idx_estorno = df_baixas.loc[filtro].index[-1]
+    # Estorna a mais recente
+    idx_estorno = df_baixas.loc[filtro].sort_values("Data_Baixa", ascending=False).index[0]
 
-    # ESTORNO = altera a própria linha da baixa ativa
     df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
     df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M:%S")
     df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
 
-    # Repadronização antes de salvar
-    for col in [
-        "PV", "Cliente", "CODIGO_PV", "Processo",
-        "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
-    ]:
-        if col in df_baixas.columns:
-            df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
-
-    if "Horas" in df_baixas.columns:
-        df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-
-    if "Data_Baixa" in df_baixas.columns:
-        df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
+    df_baixas = _padronizar_df_baixas(df_baixas)
 
     df_baixas.to_excel(caminho, index=False)
 
     st.cache_data.clear()
 
     return True, "Baixa operacional estornada com sucesso."
+
+def historico_baixas_ativas(df_baixas):
+    """
+    Retorna apenas as baixas ativas (usadas para remover da fila operacional).
+    """
+    if df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    return df_baixas[df_baixas["Status_Baixa"] == "ATIVA"].copy()
+
+def historico_baixas_completo(df_baixas):
+    """
+    Retorna o histórico completo consolidado (ativas + estornadas).
+    """
+    if df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    return df_baixas.copy()
 
 # ===============================
 # CSS VISUAL PREMIUM APS
@@ -1390,36 +1344,21 @@ def semaforo_entrega(dias):
         return "🟢 Normal"
 
 # ===============================
-# COLAPSO DO GARGALO (BASE EXECUTIVA)
+# BASE EXECUTIVA DE COLAPSO (REAPROVEITA A BASE JÁ CALCULADA)
 # ===============================
-fila_resumo = (
-    df.groupby("Processo", as_index=False)
-    .agg({
-        "Fila Acumulada (h)": "max",
-        "Fila (dias)": "max"
-    })
-    .rename(columns={
-        "Fila Acumulada (h)": "Fila Acumulada Max (h)",
-        "Fila (dias)": "Fila Max (dias)"
-    })
-)
+# Blindagem para garantir que a coluna exista sempre
+if "Semáforo Colapso" not in ranking_colapso.columns:
+    ranking_colapso["Semáforo Colapso"] = "🟢 Sob Controle"
 
-dem_colapso = dem.groupby("Processo", as_index=False).agg({
-    "Horas": "sum",
-    "Capacidade": "sum",
-    "Ocupacao": "max",
-    "Saldo (h)": "sum"
-})
+# Blindagem para garantir colunas numéricas
+for col in ["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)", "Saldo (h)"]:
+    if col not in ranking_colapso.columns:
+        ranking_colapso[col] = 0
 
-dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
-
-dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
-dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
-
-ranking_colapso = dem_colapso.sort_values(
-    by=["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)"],
-    ascending=[False, False, False]
-).reset_index(drop=True)
+ranking_colapso["Ocupacao"] = pd.to_numeric(ranking_colapso["Ocupacao"], errors="coerce").fillna(0)
+ranking_colapso["Fila Max (dias)"] = pd.to_numeric(ranking_colapso["Fila Max (dias)"], errors="coerce").fillna(0)
+ranking_colapso["Fila Acumulada Max (h)"] = pd.to_numeric(ranking_colapso["Fila Acumulada Max (h)"], errors="coerce").fillna(0)
+ranking_colapso["Saldo (h)"] = pd.to_numeric(ranking_colapso["Saldo (h)"], errors="coerce").fillna(0)
 
 # ===============================
 # STATUS EXECUTIVO
@@ -1450,17 +1389,45 @@ st.subheader("🚨 Semáforo de Colapso dos Gargalos")
 if not ranking_colapso.empty:
     colapso_exib = ranking_colapso.copy()
 
+    # Blindagem estrutural
+    if "Semáforo Colapso" not in colapso_exib.columns:
+        colapso_exib["Semáforo Colapso"] = "🟢 Sob Controle"
+    if "Processo" not in colapso_exib.columns:
+        colapso_exib["Processo"] = "N/D"
+    if "Ocupacao" not in colapso_exib.columns:
+        colapso_exib["Ocupacao"] = 0
+    if "Fila Acumulada Max (h)" not in colapso_exib.columns:
+        colapso_exib["Fila Acumulada Max (h)"] = 0
+    if "Fila Max (dias)" not in colapso_exib.columns:
+        colapso_exib["Fila Max (dias)"] = 0
+    if "Saldo (h)" not in colapso_exib.columns:
+        colapso_exib["Saldo (h)"] = 0
+
     colapso_exib["Ocupação (%)"] = colapso_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
     colapso_exib["Fila Acumulada (h)"] = colapso_exib["Fila Acumulada Max (h)"].apply(lambda x: fmt_br_num(x, 1))
     colapso_exib["Fila (dias)"] = colapso_exib["Fila Max (dias)"].apply(lambda x: fmt_br_num(x, 1))
-    colapso_exib["Saldo (h)"] = colapso_exib["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Saldo Exibição (h)"] = colapso_exib["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
 
     st.dataframe(
         colapso_exib[
-            ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo (h)"]
-        ],
+            ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo Exibição (h)"]
+        ].rename(columns={
+            "Saldo Exibição (h)": "Saldo (h)"
+        }),
         use_container_width=True
     )
+
+    topo_colapso = str(colapso_exib.iloc[0]["Semáforo Colapso"])
+    processo_topo = str(colapso_exib.iloc[0]["Processo"])
+
+    if "🔥" in topo_colapso or "🔴" in topo_colapso:
+        st.error(f"Risco elevado detectado no processo: {processo_topo}")
+    elif "🟡" in topo_colapso:
+        st.warning(f"Atenção para pressão crescente no processo: {processo_topo}")
+    else:
+        st.success("Nenhum gargalo em risco de colapso no momento.")
+else:
+    st.info("Sem dados suficientes para cálculo de colapso.")
 
     topo_colapso = ranking_colapso.iloc[0]["Semáforo Colapso"]
     processo_topo = ranking_colapso.iloc[0]["Processo"]
