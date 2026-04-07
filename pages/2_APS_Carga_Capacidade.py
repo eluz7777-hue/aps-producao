@@ -1416,15 +1416,6 @@ dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
 dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
 dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
 
-dem_colapso["Semáforo Colapso"] = dem_colapso.apply(
-    lambda r: classificar_colapso_gargalo(
-        r["Ocupacao"],
-        r["Fila Max (dias)"],
-        r["Saldo (h)"]
-    ),
-    axis=1
-)
-
 ranking_colapso = dem_colapso.sort_values(
     by=["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)"],
     ascending=[False, False, False]
