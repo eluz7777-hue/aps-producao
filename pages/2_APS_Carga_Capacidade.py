@@ -200,7 +200,6 @@ def capacidade_semana_por_processo(inicio, fim, processo):
     return horas_uteis_semana(inicio, fim) * recursos * EFICIENCIA
 
 # ===============================
-# ===============================
 # CACHE DE LEITURA
 # ===============================
 @st.cache_data(ttl=0)
@@ -416,6 +415,105 @@ def historico_baixas_completo(df_baixas):
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
     return df_baixas.copy()
+
+# ===============================
+# CARGA DO HISTÓRICO DE BAIXAS OPERACIONAIS
+# ===============================
+df_baixas = carregar_baixas_operacionais(BASE_PATH)
+
+# Histórico completo (ativas + estornadas)
+df_baixas_historico = historico_baixas_completo(df_baixas)
+
+# Apenas baixas ainda válidas operacionalmente
+df_baixas_ativas = historico_baixas_ativas(df_baixas)
+
+# Blindagem de padronização
+for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
+    if not _df.empty:
+        for col in ["PV", "Processo", "CODIGO_PV"]:
+            if col in _df.columns:
+                _df[col] = _df[col].fillna("").astype(str).str.strip()
+
+# Chaves ativas que efetivamente removem itens da fila operacional
+if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
+    chaves_baixadas = set(
+        df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
+    )
+else:
+    chaves_baixadas = set()
+
+# ===============================
+# HISTÓRICO COMPLETO DE BAIXAS OPERACIONAIS
+# ===============================
+st.subheader("📜 Histórico de Baixas Operacionais")
+
+if not df_baixas_historico.empty:
+    hist_exib = df_baixas_historico.copy()
+
+    # Formatação visual
+    if "Data_Baixa" in hist_exib.columns:
+        hist_exib["Data_Baixa"] = pd.to_datetime(hist_exib["Data_Baixa"], errors="coerce")
+        hist_exib["Data_Baixa"] = hist_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+
+    if "Horas" in hist_exib.columns:
+        hist_exib["Horas"] = pd.to_numeric(hist_exib["Horas"], errors="coerce").fillna(0).round(1)
+
+    if "Status_Baixa" in hist_exib.columns:
+        hist_exib["Status_Baixa"] = hist_exib["Status_Baixa"].replace({
+            "ATIVA": "🟢 ATIVA",
+            "ESTORNADA": "🔴 ESTORNADA"
+        })
+
+    # Filtros rápidos do histórico
+    col_hist1, col_hist2 = st.columns(2)
+
+    with col_hist1:
+        filtro_status_hist = st.selectbox(
+            "Filtrar histórico por status",
+            ["Todos", "🟢 ATIVA", "🔴 ESTORNADA"],
+            key="filtro_status_historico_baixas"
+        )
+
+    with col_hist2:
+        filtro_pv_hist = st.text_input(
+            "Buscar PV no histórico",
+            key="buscar_pv_historico_baixas"
+        ).strip()
+
+    if filtro_status_hist != "Todos":
+        hist_exib = hist_exib[hist_exib["Status_Baixa"] == filtro_status_hist].copy()
+
+    if filtro_pv_hist:
+        hist_exib = hist_exib[
+            hist_exib["PV"].astype(str).str.contains(filtro_pv_hist, case=False, na=False)
+        ].copy()
+
+    hist_exib = hist_exib.sort_values("Data_Baixa", ascending=False)
+
+    colunas_hist = [
+        "Status_Baixa",
+        "Data_Baixa",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Usuario",
+        "Observacao",
+        "Data_Estorno",
+        "Motivo_Estorno"
+    ]
+
+    colunas_hist = [c for c in colunas_hist if c in hist_exib.columns]
+
+    st.dataframe(
+        hist_exib[colunas_hist],
+        use_container_width=True
+    )
+
+    st.caption(f"Total de registros no histórico: {len(hist_exib)}")
+else:
+    st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ===============================
 # CSS VISUAL PREMIUM APS
@@ -808,52 +906,29 @@ if not df_original.empty:
         )
 
 # ===============================
-# BAIXAS OPERACIONAIS APLICADAS
+# CARGA DO HISTÓRICO DE BAIXAS OPERACIONAIS
 # ===============================
 df_baixas = carregar_baixas_operacionais(BASE_PATH)
 
-if not df_baixas.empty:
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col in df_baixas.columns:
-            df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+# Histórico completo (ativas + estornadas)
+df_baixas_historico = historico_baixas_completo(df_baixas)
 
-# Chave única da operação
-if not df_original.empty:
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col not in df_original.columns:
-            df_original[col] = ""
+# Apenas baixas ainda válidas operacionalmente
+df_baixas_ativas = historico_baixas_ativas(df_baixas)
 
-    df_original["PV"] = df_original["PV"].fillna("").astype(str).str.strip()
-    df_original["Processo"] = df_original["Processo"].fillna("").astype(str).str.strip()
-    df_original["CODIGO_PV"] = df_original["CODIGO_PV"].fillna("").astype(str).str.strip()
+# Blindagem de padronização
+for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
+    if not _df.empty:
+        for col in ["PV", "Processo", "CODIGO_PV"]:
+            if col in _df.columns:
+                _df[col] = _df[col].fillna("").astype(str).str.strip()
 
-    df_original["CHAVE_OPERACAO"] = (
-        df_original["PV"] + "||" +
-        df_original["Processo"] + "||" +
-        df_original["CODIGO_PV"]
-    )
-
-if not df_baixas.empty:
-    if "Status_Baixa" not in df_baixas.columns:
-        df_baixas["Status_Baixa"] = "ATIVA"
-
-    df_baixas["Status_Baixa"] = df_baixas["Status_Baixa"].fillna("ATIVA").astype(str).str.strip().str.upper()
-
-    df_baixas["CHAVE_OPERACAO"] = (
-        df_baixas["PV"].astype(str).str.strip() + "||" +
-        df_baixas["Processo"].astype(str).str.strip() + "||" +
-        df_baixas["CODIGO_PV"].astype(str).str.strip()
-    )
-
-    df_baixas_ativas = df_baixas[
-        df_baixas["Status_Baixa"] == "ATIVA"
-    ].copy()
-
+# Chaves ativas que efetivamente removem itens da fila operacional
+if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
     chaves_baixadas = set(
         df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().unique()
     )
 else:
-    df_baixas_ativas = pd.DataFrame(columns=COLUNAS_BAIXAS)
     chaves_baixadas = set()
 
 # ============================================================
