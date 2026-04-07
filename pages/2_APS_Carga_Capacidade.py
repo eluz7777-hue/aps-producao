@@ -233,6 +233,7 @@ def garantir_arquivo_baixas(base_path):
     """
     Garante que o arquivo físico de baixas exista com a estrutura correta.
     """
+    os.makedirs(base_path, exist_ok=True)
     caminho = caminho_arquivo_baixas(base_path)
 
     if not os.path.exists(caminho):
@@ -244,7 +245,7 @@ def garantir_arquivo_baixas(base_path):
 def _padronizar_df_baixas(df_baixas):
     """
     Padroniza a estrutura e os tipos do histórico de baixas operacionais.
-    Mantém histórico completo (ativas + estornadas) sem sobrescrever dias anteriores.
+    Mantém histórico completo (ativas + terceirizadas + estornadas).
     """
     if df_baixas is None or df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
@@ -286,11 +287,6 @@ def _padronizar_df_baixas(df_baixas):
         df_baixas["CODIGO_PV"].astype(str).str.strip()
     )
 
-    df_baixas = df_baixas.drop_duplicates(
-        subset=["PV", "CODIGO_PV", "Processo", "Data_Baixa", "Status_Baixa"],
-        keep="first"
-    ).reset_index(drop=True)
-
     df_baixas = df_baixas.sort_values(
         by=["Data_Baixa", "PV", "Processo"],
         ascending=[False, True, True]
@@ -312,6 +308,7 @@ def carregar_baixas_operacionais(base_path):
 def salvar_baixa_operacional(base_path, registro_baixa):
     """
     Salva uma nova baixa operacional SEM apagar histórico anterior.
+    Também evita duplicidade ativa/terceirizada da mesma operação.
     """
     caminho = garantir_arquivo_baixas(base_path)
 
@@ -333,6 +330,33 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     novo_registro = _padronizar_df_baixas(novo_registro)
 
+    # --------------------------------------------
+    # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
+    # --------------------------------------------
+    if not df_existente.empty:
+        pv_novo = str(novo_registro.iloc[0]["PV"]).strip()
+        processo_novo = str(novo_registro.iloc[0]["Processo"]).strip()
+        codigo_novo = str(novo_registro.iloc[0]["CODIGO_PV"]).strip()
+
+        duplicado = df_existente[
+            (df_existente["PV"].astype(str).str.strip() == pv_novo) &
+            (df_existente["Processo"].astype(str).str.strip() == processo_novo) &
+            (df_existente["CODIGO_PV"].astype(str).str.strip() == codigo_novo) &
+            (
+                df_existente["Status_Baixa"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .isin(["ATIVA", "TERCEIRIZADA"])
+            )
+        ]
+
+        if not duplicado.empty:
+            return df_existente
+
+    # --------------------------------------------
+    # CONCATENA E SALVA
+    # --------------------------------------------
     df_final = pd.concat(
         [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
         ignore_index=True
@@ -341,7 +365,8 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     df_final = _padronizar_df_baixas(df_final)
 
     # Persistência física garantida
-    df_final.to_excel(caminho, index=False)
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_final.to_excel(writer, index=False)
 
     st.cache_data.clear()
 
@@ -349,7 +374,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
     """
-    Estorna a última baixa ATIVA daquela operação sem apagar histórico.
+    Estorna a última baixa ATIVA ou TERCEIRIZADA daquela operação sem apagar histórico.
     """
     caminho = garantir_arquivo_baixas(base_path)
 
@@ -368,10 +393,16 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     codigo_pv = str(codigo_pv).strip()
 
     filtro = (
-        (df_baixas["PV"] == pv) &
-        (df_baixas["Processo"] == processo) &
-        (df_baixas["CODIGO_PV"] == codigo_pv) &
-        (df_baixas["Status_Baixa"] == "ATIVA")
+        (df_baixas["PV"].astype(str).str.strip() == pv) &
+        (df_baixas["Processo"].astype(str).str.strip() == processo) &
+        (df_baixas["CODIGO_PV"].astype(str).str.strip() == codigo_pv) &
+        (
+            df_baixas["Status_Baixa"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .isin(["ATIVA", "TERCEIRIZADA"])
+        )
     )
 
     if not filtro.any():
@@ -386,7 +417,8 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     df_baixas = _padronizar_df_baixas(df_baixas)
 
     # Persistência física garantida
-    df_baixas.to_excel(caminho, index=False)
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_baixas.to_excel(writer, index=False)
 
     st.cache_data.clear()
 
@@ -394,21 +426,26 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
 
 def historico_baixas_ativas(df_baixas):
     """
-    Retorna apenas as baixas ativas (usadas para remover da fila operacional).
+    Retorna apenas as operações que devem sair da fila operacional:
+    ATIVA + TERCEIRIZADA
     """
     if df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
-    return df_baixas[df_baixas["Status_Baixa"] == "ATIVA"].copy()
+    df_baixas = _padronizar_df_baixas(df_baixas)
+
+    return df_baixas[
+        df_baixas["Status_Baixa"].astype(str).str.strip().str.upper().isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
 
 def historico_baixas_completo(df_baixas):
     """
-    Retorna o histórico completo consolidado (ativas + estornadas).
+    Retorna o histórico completo consolidado (ativas + terceirizadas + estornadas).
     """
     if df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
-    return df_baixas.copy()
+    return _padronizar_df_baixas(df_baixas.copy())
 
 # ===============================
 # INTEGRAÇÃO DO HISTÓRICO DE BAIXAS OPERACIONAIS
