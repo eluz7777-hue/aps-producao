@@ -229,6 +229,18 @@ COLUNAS_BAIXAS = [
 def caminho_arquivo_baixas(base_path):
     return os.path.join(base_path, ARQUIVO_BAIXAS)
 
+def garantir_arquivo_baixas(base_path):
+    """
+    Garante que o arquivo físico de baixas exista com a estrutura correta.
+    """
+    caminho = caminho_arquivo_baixas(base_path)
+
+    if not os.path.exists(caminho):
+        df_vazio = pd.DataFrame(columns=COLUNAS_BAIXAS)
+        df_vazio.to_excel(caminho, index=False)
+
+    return caminho
+
 def _padronizar_df_baixas(df_baixas):
     """
     Padroniza a estrutura e os tipos do histórico de baixas operacionais.
@@ -288,10 +300,7 @@ def _padronizar_df_baixas(df_baixas):
 
 @st.cache_data(ttl=0)
 def carregar_baixas_operacionais(base_path):
-    caminho = caminho_arquivo_baixas(base_path)
-
-    if not os.path.exists(caminho):
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+    caminho = garantir_arquivo_baixas(base_path)
 
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
@@ -301,14 +310,14 @@ def carregar_baixas_operacionais(base_path):
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 def salvar_baixa_operacional(base_path, registro_baixa):
-    caminho = caminho_arquivo_baixas(base_path)
+    """
+    Salva uma nova baixa operacional SEM apagar histórico anterior.
+    """
+    caminho = garantir_arquivo_baixas(base_path)
 
-    if os.path.exists(caminho):
-        try:
-            df_existente = pd.read_excel(caminho, dtype=str)
-        except Exception:
-            df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
-    else:
+    try:
+        df_existente = pd.read_excel(caminho, dtype=str)
+    except Exception:
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
     df_existente = _padronizar_df_baixas(df_existente)
@@ -330,16 +339,19 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     )
 
     df_final = _padronizar_df_baixas(df_final)
+
+    # Persistência física garantida
     df_final.to_excel(caminho, index=False)
 
     st.cache_data.clear()
+
     return df_final
 
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
-    caminho = caminho_arquivo_baixas(base_path)
-
-    if not os.path.exists(caminho):
-        return False, "Arquivo de baixas operacionais não encontrado."
+    """
+    Estorna a última baixa ATIVA daquela operação sem apagar histórico.
+    """
+    caminho = garantir_arquivo_baixas(base_path)
 
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
@@ -372,19 +384,30 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
 
     df_baixas = _padronizar_df_baixas(df_baixas)
+
+    # Persistência física garantida
     df_baixas.to_excel(caminho, index=False)
 
     st.cache_data.clear()
+
     return True, "Baixa operacional estornada com sucesso."
 
 def historico_baixas_ativas(df_baixas):
+    """
+    Retorna apenas as baixas ativas (usadas para remover da fila operacional).
+    """
     if df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
     return df_baixas[df_baixas["Status_Baixa"] == "ATIVA"].copy()
 
 def historico_baixas_completo(df_baixas):
+    """
+    Retorna o histórico completo consolidado (ativas + estornadas).
+    """
     if df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
     return df_baixas.copy()
 
 # ===============================
