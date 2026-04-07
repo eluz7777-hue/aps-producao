@@ -1184,13 +1184,19 @@ dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
 dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
 dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
 
-dem_colapso["Semáforo Colapso"] = dem_colapso.apply(
-    lambda r: classificar_colapso_gargalo(
-        r["Ocupacao"],
-        r["Fila Max (dias)"],
-        r["Saldo (h)"]
-    ),
-    axis=1
+# Classificação inline (blindada contra NameError)
+dem_colapso["Semáforo Colapso"] = np.select(
+    [
+        (dem_colapso["Ocupacao"] >= 120) | (dem_colapso["Fila Max (dias)"] >= 10) | (dem_colapso["Saldo (h)"] < -40),
+        (dem_colapso["Ocupacao"] >= 100) | (dem_colapso["Fila Max (dias)"] >= 6) | (dem_colapso["Saldo (h)"] < 0),
+        (dem_colapso["Ocupacao"] >= 85) | (dem_colapso["Fila Max (dias)"] >= 3)
+    ],
+    [
+        "🔥 Colapso Severo",
+        "🔴 Colapso",
+        "🟡 Atenção"
+    ],
+    default="🟢 Sob Controle"
 )
 
 ranking_colapso = dem_colapso.sort_values(
@@ -1382,27 +1388,6 @@ def semaforo_entrega(dias):
         return "🟡 Atenção"
     else:
         return "🟢 Normal"
-
-# ===============================
-# FUNÇÃO AUXILIAR - COLAPSO DO GARGALO
-# ===============================
-def classificar_colapso_gargalo(ocupacao, fila_dias, saldo_horas):
-    """
-    Classifica risco de colapso operacional do processo.
-    Critérios combinam ocupação, fila e saldo de capacidade.
-    """
-    ocupacao = float(ocupacao) if pd.notna(ocupacao) else 0
-    fila_dias = float(fila_dias) if pd.notna(fila_dias) else 0
-    saldo_horas = float(saldo_horas) if pd.notna(saldo_horas) else 0
-
-    if ocupacao >= 120 or fila_dias >= 10 or saldo_horas < -40:
-        return "🔥 Colapso Severo"
-    elif ocupacao >= 100 or fila_dias >= 6 or saldo_horas < 0:
-        return "🔴 Colapso"
-    elif ocupacao >= 85 or fila_dias >= 3:
-        return "🟡 Atenção"
-    else:
-        return "🟢 Sob Controle"
 
 # ===============================
 # COLAPSO DO GARGALO (BASE EXECUTIVA)
