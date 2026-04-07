@@ -924,20 +924,17 @@ def classificar_status_operacional(chave):
     return "⏳ Pendente"
 
 if not df_operacional.empty:
-    # Blindagem estrutural
     for col in ["PV", "Processo", "CODIGO_PV"]:
         if col not in df_operacional.columns:
             df_operacional[col] = ""
         df_operacional[col] = df_operacional[col].fillna("").astype(str).str.strip()
 
-    # Garante a chave operacional no visual
     df_operacional["CHAVE_OPERACAO"] = (
         df_operacional["PV"].astype(str).str.strip() + "||" +
         df_operacional["Processo"].astype(str).str.strip() + "||" +
         df_operacional["CODIGO_PV"].astype(str).str.strip()
     )
 
-    # Status visual final
     df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
         classificar_status_operacional
     )
@@ -1001,15 +998,17 @@ for pv_faltante in pvs_nao_auditadas:
             "Motivo": "PV não auditada por falha de processamento"
         })
 
-# Recria os dataframes finais após blindagem
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
-# Blindagem final dos auxiliares
 for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
     if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
-        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(_df_aux["DATA_ENTREGA_APS"], errors="coerce", dayfirst=True)
+        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
+            _df_aux["DATA_ENTREGA_APS"],
+            errors="coerce",
+            dayfirst=True
+        )
 
 if df.empty:
     st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
@@ -1028,7 +1027,7 @@ if df.empty:
     st.markdown("### 📋 Prévia da base lida")
     st.dataframe(df_pv.head(20), use_container_width=True)
 
-    st.stop()   
+    st.stop()
  
 # ===============================
 # FILTRO POR CLIENTE
@@ -2600,7 +2599,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.divider()
 
-        # --------------------------------------------------------
+# --------------------------------------------------------
 # BAIXA OPERACIONAL
 # --------------------------------------------------------
 st.markdown("### ✅ Dar Baixa em Operação Concluída")
@@ -2645,9 +2644,9 @@ else:
 
         col_btn1, col_btn2 = st.columns(2)
 
-        # ===============================
+        # --------------------------------------------
         # BOTÃO BAIXA NORMAL
-        # ===============================
+        # --------------------------------------------
         if col_btn1.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
 
             registro_baixa = {
@@ -2664,14 +2663,49 @@ else:
                 "Motivo_Estorno": ""
             }
 
-            salvar_baixa_operacional(BASE_PATH, registro_baixa)
+            baixa_duplicada = False
 
-            st.success("Baixa operacional registrada com sucesso.")
-            st.rerun()
+            if "df_baixas" in locals() and df_baixas is not None and not df_baixas.empty:
+                base_validacao = df_baixas.copy()
 
-        # ===============================
+                for col in ["PV", "Processo", "CODIGO_PV"]:
+                    if col in base_validacao.columns:
+                        base_validacao[col] = base_validacao[col].fillna("").astype(str).str.strip()
+
+                baixa_existente = base_validacao[
+                    (base_validacao["PV"] == registro_baixa["PV"]) &
+                    (base_validacao["Processo"] == registro_baixa["Processo"]) &
+                    (base_validacao["CODIGO_PV"] == registro_baixa["CODIGO_PV"]) &
+                    (base_validacao["Status_Baixa"].astype(str).str.upper().isin(["ATIVA", "TERCEIRIZADA"]))
+                ]
+
+                if not baixa_existente.empty:
+                    baixa_duplicada = True
+
+            if baixa_duplicada:
+                st.warning("⚠️ Esta operação já foi baixada anteriormente.")
+            else:
+                try:
+                    df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
+
+                    st.success("✅ Baixa operacional registrada com sucesso.")
+                    st.info(
+                        f"Registro salvo: PV {registro_baixa['PV']} | "
+                        f"{registro_baixa['Processo']} | "
+                        f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
+                    )
+
+                    if df_baixas_salvo is not None and not df_baixas_salvo.empty:
+                        st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
+
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Erro ao salvar baixa operacional: {e}")
+
+        # --------------------------------------------
         # BOTÃO TERCEIRIZADA
-        # ===============================
+        # --------------------------------------------
         if col_btn2.button("🟣 Marcar como Terceirizada", key="btn_terceirizada_top3"):
 
             registro_baixa = {
@@ -2688,52 +2722,45 @@ else:
                 "Motivo_Estorno": ""
             }
 
-            salvar_baixa_operacional(BASE_PATH, registro_baixa)
+            baixa_duplicada = False
 
-            st.success("Operação marcada como terceirizada.")
-            st.rerun()
+            if "df_baixas" in locals() and df_baixas is not None and not df_baixas.empty:
+                base_validacao = df_baixas.copy()
 
-                    # --------------------------------------------
-                    # BLOQUEIO DE BAIXA DUPLICADA
-                    # --------------------------------------------
-                    baixa_duplicada = False
+                for col in ["PV", "Processo", "CODIGO_PV"]:
+                    if col in base_validacao.columns:
+                        base_validacao[col] = base_validacao[col].fillna("").astype(str).str.strip()
 
-                    if "df_baixas" in locals() and df_baixas is not None and not df_baixas.empty:
-                        base_validacao = df_baixas.copy()
+                baixa_existente = base_validacao[
+                    (base_validacao["PV"] == registro_baixa["PV"]) &
+                    (base_validacao["Processo"] == registro_baixa["Processo"]) &
+                    (base_validacao["CODIGO_PV"] == registro_baixa["CODIGO_PV"]) &
+                    (base_validacao["Status_Baixa"].astype(str).str.upper().isin(["ATIVA", "TERCEIRIZADA"]))
+                ]
 
-                        for col in ["PV", "Processo", "CODIGO_PV"]:
-                            if col in base_validacao.columns:
-                                base_validacao[col] = base_validacao[col].fillna("").astype(str).str.strip()
+                if not baixa_existente.empty:
+                    baixa_duplicada = True
 
-                        baixa_existente = base_validacao[
-                            (base_validacao["PV"] == registro_baixa["PV"]) &
-                            (base_validacao["Processo"] == registro_baixa["Processo"]) &
-                            (base_validacao["CODIGO_PV"] == registro_baixa["CODIGO_PV"])
-                        ]
+            if baixa_duplicada:
+                st.warning("⚠️ Esta operação já foi registrada anteriormente.")
+            else:
+                try:
+                    df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
 
-                        if not baixa_existente.empty:
-                            baixa_duplicada = True
+                    st.success("🟣 Operação marcada como terceirizada.")
+                    st.info(
+                        f"Registro salvo: PV {registro_baixa['PV']} | "
+                        f"{registro_baixa['Processo']} | "
+                        f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
+                    )
 
-                    if baixa_duplicada:
-                        st.warning("⚠️ Esta operação já foi baixada anteriormente.")
-                    else:
-                        try:
-                            df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
+                    if df_baixas_salvo is not None and not df_baixas_salvo.empty:
+                        st.caption(f"📁 Total de registros operacionais: {len(df_baixas_salvo)}")
 
-                            st.success("✅ Baixa operacional registrada com sucesso.")
-                            st.info(
-                                f"Registro salvo: PV {registro_baixa['PV']} | "
-                                f"{registro_baixa['Processo']} | "
-                                f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
-                            )
+                    st.rerun()
 
-                            if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                                st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
-
-                            st.rerun()
-
-                        except Exception as e:
-                            st.error(f"Erro ao salvar baixa operacional: {e}")
+                except Exception as e:
+                    st.error(f"Erro ao registrar terceirização: {e}")
 
         st.divider()
 
