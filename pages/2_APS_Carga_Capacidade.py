@@ -1158,6 +1158,47 @@ dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
 
 # ===============================
+# COLAPSO DO GARGALO (BASE EXECUTIVA)
+# ===============================
+fila_resumo = (
+    df.groupby("Processo", as_index=False)
+    .agg({
+        "Fila Acumulada (h)": "max",
+        "Fila (dias)": "max"
+    })
+    .rename(columns={
+        "Fila Acumulada (h)": "Fila Acumulada Max (h)",
+        "Fila (dias)": "Fila Max (dias)"
+    })
+)
+
+dem_colapso = dem.groupby("Processo", as_index=False).agg({
+    "Horas": "sum",
+    "Capacidade": "sum",
+    "Ocupacao": "max",
+    "Saldo (h)": "sum"
+})
+
+dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
+
+dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
+dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
+
+dem_colapso["Semáforo Colapso"] = dem_colapso.apply(
+    lambda r: classificar_colapso_gargalo(
+        r["Ocupacao"],
+        r["Fila Max (dias)"],
+        r["Saldo (h)"]
+    ),
+    axis=1
+)
+
+ranking_colapso = dem_colapso.sort_values(
+    by=["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)"],
+    ascending=[False, False, False]
+).reset_index(drop=True)
+
+# ===============================
 # CAPACIDADE POR PROCESSO
 # ===============================
 if tipo == "Mensal":
@@ -1349,6 +1390,38 @@ d2.metric("🏗️ Processo Mais Carregado", processo_mais_carga if processo_mai
 d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
 
 # ===============================
+# ALERTA DE COLAPSO DO GARGALO
+# ===============================
+st.subheader("🚨 Semáforo de Colapso dos Gargalos")
+
+if not ranking_colapso.empty:
+    colapso_exib = ranking_colapso.copy()
+
+    colapso_exib["Ocupação (%)"] = colapso_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    colapso_exib["Fila Acumulada (h)"] = colapso_exib["Fila Acumulada Max (h)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Fila (dias)"] = colapso_exib["Fila Max (dias)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Saldo (h)"] = colapso_exib["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
+
+    st.dataframe(
+        colapso_exib[
+            ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo (h)"]
+        ],
+        use_container_width=True
+    )
+
+    topo_colapso = ranking_colapso.iloc[0]["Semáforo Colapso"]
+    processo_topo = ranking_colapso.iloc[0]["Processo"]
+
+    if "🔥" in topo_colapso or "🔴" in topo_colapso:
+        st.error(f"Risco elevado detectado no processo: {processo_topo}")
+    elif "🟡" in topo_colapso:
+        st.warning(f"Atenção para pressão crescente no processo: {processo_topo}")
+    else:
+        st.success("Nenhum gargalo em risco de colapso no momento.")
+else:
+    st.info("Sem dados suficientes para cálculo de colapso.")
+
+# ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
 # ===============================
 st.subheader("⚠️ Capacidade Crítica")
@@ -1393,6 +1466,27 @@ def semaforo_entrega(dias):
         return "🟡 Atenção"
     else:
         return "🟢 Normal"
+
+# ===============================
+# FUNÇÃO AUXILIAR - COLAPSO DO GARGALO
+# ===============================
+def classificar_colapso_gargalo(ocupacao, fila_dias, saldo_horas):
+    """
+    Classifica risco de colapso operacional do processo.
+    Critérios combinam ocupação, fila e saldo de capacidade.
+    """
+    ocupacao = float(ocupacao) if pd.notna(ocupacao) else 0
+    fila_dias = float(fila_dias) if pd.notna(fila_dias) else 0
+    saldo_horas = float(saldo_horas) if pd.notna(saldo_horas) else 0
+
+    if ocupacao >= 120 or fila_dias >= 10 or saldo_horas < -40:
+        return "🔥 Colapso Severo"
+    elif ocupacao >= 100 or fila_dias >= 6 or saldo_horas < 0:
+        return "🔴 Colapso"
+    elif ocupacao >= 85 or fila_dias >= 3:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Sob Controle"
 
 # ============================================================
 # ======================= GRÁFICOS ============================
@@ -1526,23 +1620,57 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.subheader("🥧 Distribuição de Atraso")
 
-    if not atrasos.empty:
-        dist = atrasos.groupby("Atraso (dias)", as_index=False)["PV"].count()
+if not atrasos.empty:
+    atrasos_plot = atrasos.copy()
 
-        fig_pizza = px.pie(dist, names="Atraso (dias)", values="PV")
-        st.plotly_chart(fig_pizza, use_container_width=True)
+    # Faixas executivas de atraso
+    atrasos_plot["Faixa de Atraso"] = pd.cut(
+        atrasos_plot["Atraso (dias)"],
+        bins=[0, 3, 7, 15, 9999],
+        labels=["1 a 3 dias", "4 a 7 dias", "8 a 15 dias", "16+ dias"],
+        right=True,
+        include_lowest=False
+    )
 
-        atraso_select = st.selectbox(
-            "Selecionar atraso",
-            sorted(atrasos["Atraso (dias)"].unique())
-        )
+    # Conta PVs únicas por faixa
+    dist = (
+        atrasos_plot.groupby("Faixa de Atraso", as_index=False)["PV"]
+        .nunique()
+        .rename(columns={"PV": "Quantidade"})
+    )
 
-        detalhe = atrasos[atrasos["Atraso (dias)"] == atraso_select].copy()
-        detalhe["Horas"] = detalhe["Horas"].round(1)
-        detalhe["Dias Necessários"] = detalhe["Dias Necessários"].round(1)
+    dist = dist[dist["Quantidade"] > 0].copy()
 
-        st.subheader("📋 Detalhamento")
-        st.dataframe(detalhe, use_container_width=True)
+    fig_pizza = px.pie(
+        dist,
+        names="Faixa de Atraso",
+        values="Quantidade",
+        title="Distribuição Executiva dos Atrasos"
+    )
+    st.plotly_chart(fig_pizza, use_container_width=True)
+
+    faixa_select = st.selectbox(
+        "Selecionar faixa de atraso",
+        dist["Faixa de Atraso"].astype(str).tolist()
+    )
+
+    detalhe = atrasos_plot[
+        atrasos_plot["Faixa de Atraso"].astype(str) == faixa_select
+    ].copy()
+
+    detalhe["Horas"] = detalhe["Horas"].round(1)
+    detalhe["Dias Necessários"] = detalhe["Dias Necessários"].round(1)
+    detalhe["Dias Disponíveis"] = detalhe["Dias Disponíveis"].round(1)
+    detalhe["Atraso (dias)"] = detalhe["Atraso (dias)"].astype(int)
+
+    if "Data" in detalhe.columns:
+        detalhe["Data"] = pd.to_datetime(detalhe["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
+
+    st.subheader("📋 Detalhamento da Faixa")
+    st.dataframe(
+        detalhe.sort_values(["Atraso (dias)", "Horas"], ascending=[False, False]),
+        use_container_width=True
+    )
     else:
         st.success("Nenhum atraso 🎉")
 
