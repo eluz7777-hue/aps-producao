@@ -713,12 +713,22 @@ st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
 # ===============================
 # LEITURA
 # ===============================
-BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+PAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(PAGE_DIR)
 
-arquivo_pv = os.path.join(BASE_PATH, "PV.xlsx")
-file_mtime = os.path.getmtime(arquivo_pv)
+# Caminho oficial do PV.xlsx (na raiz do projeto)
+arquivo_pv = os.path.join(ROOT_DIR, "PV.xlsx")
+
+# Caminho oficial das baixas operacionais
+BASE_PATH = ROOT_DIR
 
 st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
+
+if not os.path.exists(arquivo_pv):
+    st.error(f"Arquivo PV.xlsx não encontrado em: {arquivo_pv}")
+    st.stop()
+
+file_mtime = os.path.getmtime(arquivo_pv)
 
 df_pv = carregar_dados(BASE_PATH, file_mtime)
 
