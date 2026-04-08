@@ -2340,12 +2340,15 @@ st.dataframe(
 st.markdown("### ⚡ Baixa Rápida de Corte")
 
 fila_corte = fila.copy()
+
+proc_upper = fila_corte["Processo"].astype(str).str.strip().str.upper()
+
 fila_corte = fila_corte[
-    fila_corte["Processo"].astype(str).str.strip().str.upper().isin([
-        "CORTE - SERRA",
-        "CORTE - LASER",
-        "CORTE - PLASMA"
-    ])
+    (
+        proc_upper.str.contains("SERRA", na=False) |
+        proc_upper.str.contains("LASER", na=False) |
+        proc_upper.str.contains("PLASMA", na=False)
+    )
 ].copy()
 
 if not fila_corte.empty:
