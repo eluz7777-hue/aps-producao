@@ -2454,26 +2454,27 @@ if busca_pv or busca_cliente:
 
 st.subheader("📥 Exportar dados filtrados")
 
-    @st.cache_data
-    def converter_excel(df_export):
-        from io import BytesIO
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df_export.to_excel(writer, index=False)
-        return buffer.getvalue()
+@st.cache_data
+def converter_excel(df_export):
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_export.to_excel(writer, index=False)
+    return buffer.getvalue()
 
-    if not busca_df.empty:
-        excel_bytes = converter_excel(busca_df)
+if not busca_df.empty:
+    excel_bytes = converter_excel(busca_df)
 
-        st.download_button(
-            label="📥 Baixar Excel",
-            data=excel_bytes,
-            file_name="consulta_pvs.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    st.download_button(
+        label="📥 Baixar Excel",
+        data=excel_bytes,
+        file_name="consulta_pvs.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-        st.divider()
-    st.subheader("🧪 Auditoria de PV")
+st.divider()
+
+st.subheader("🧪 Auditoria de PV")
 
     if not df_auditoria_pv.empty:
 
