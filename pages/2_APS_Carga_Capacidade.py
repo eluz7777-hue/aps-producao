@@ -2335,9 +2335,9 @@ st.dataframe(
 )
 
 # ---------------------------------------
-# BAIXA RÁPIDA DE CORTE
+# BAIXA RÁPIDA / LOTE / ESTORNO DE CORTE
 # ---------------------------------------
-st.markdown("### ⚡ Baixa Rápida de Corte")
+st.markdown("### ⚡ Módulo de Corte — Baixa Rápida, Lote e Estorno")
 
 fila_corte = fila.copy()
 
@@ -2361,6 +2361,11 @@ if not fila_corte.empty:
         " | " + fila_corte["Horas"].astype(str) + " h"
     )
 
+    # =========================================================
+    # BAIXA UNITÁRIA
+    # =========================================================
+    st.markdown("#### 🪚 Baixa Unitária de Corte")
+
     opcoes_corte = fila_corte["LABEL_BAIXA_CORTE"].tolist()
 
     col_bc1, col_bc2 = st.columns([3, 2])
@@ -2372,7 +2377,7 @@ if not fila_corte.empty:
     )
 
     obs_baixa_corte = col_bc2.text_input(
-        "Observação da baixa (opcional)",
+        "Observação da baixa unitária (opcional)",
         key="obs_baixa_rapida_corte"
     )
 
@@ -2386,7 +2391,7 @@ if not fila_corte.empty:
         f"({linha_baixa_corte['Horas']} h)."
     )
 
-    if st.button("🪚 Confirmar Baixa de Corte", key="btn_confirmar_baixa_rapida_corte"):
+    if st.button("🪚 Confirmar Baixa Unitária", key="btn_confirmar_baixa_rapida_corte"):
         registro_baixa_corte = {
             "PV": str(linha_baixa_corte.get("PV", "")).strip(),
             "Cliente": str(linha_baixa_corte.get("Cliente", "")).strip(),
@@ -2394,7 +2399,7 @@ if not fila_corte.empty:
             "Processo": str(linha_baixa_corte.get("Processo", "")).strip(),
             "Horas": pd.to_numeric(linha_baixa_corte.get("Horas", 0), errors="coerce"),
             "Data_Baixa": pd.Timestamp.now(),
-            "Usuario": "APS - BAIXA RÁPIDA CORTE",
+            "Usuario": "APS - BAIXA UNITÁRIA CORTE",
             "Observacao": str(obs_baixa_corte).strip(),
             "Status_Baixa": "ATIVA",
             "Data_Estorno": "",
@@ -2417,7 +2422,7 @@ if not fila_corte.empty:
             existe = False
 
         if existe:
-            st.success("Baixa rápida de corte registrada com sucesso.")
+            st.success("Baixa unitária de corte registrada com sucesso.")
             st.caption(
                 f"Registro salvo: PV {registro_baixa_corte['PV']} | "
                 f"{registro_baixa_corte['Processo']} | "
@@ -2426,9 +2431,186 @@ if not fila_corte.empty:
             st.cache_data.clear()
             st.rerun()
         else:
-            st.error("A baixa rápida de corte não foi localizada no histórico após salvar.")
+            st.error("A baixa unitária de corte não foi localizada no histórico após salvar.")
+
+    st.divider()
+
+    # =========================================================
+    # BAIXA EM LOTE
+    # =========================================================
+    st.markdown("#### 📦 Baixa em Lote de Corte")
+
+    selecao_lote = st.multiselect(
+        "Selecione uma ou mais operações de corte concluídas",
+        options=opcoes_corte,
+        key="multiselect_baixa_lote_corte"
+    )
+
+    obs_lote = st.text_input(
+        "Observação do lote (opcional)",
+        key="obs_baixa_lote_corte"
+    )
+
+    if selecao_lote:
+        st.caption(f"Total selecionado para baixa em lote: {len(selecao_lote)} operação(ões).")
+
+        if st.button("📦 Confirmar Baixa em Lote", key="btn_confirmar_baixa_lote_corte"):
+            sucessos = 0
+            falhas = []
+
+            for label_sel in selecao_lote:
+                linha_lote = fila_corte[
+                    fila_corte["LABEL_BAIXA_CORTE"] == label_sel
+                ].iloc[0]
+
+                registro_lote = {
+                    "PV": str(linha_lote.get("PV", "")).strip(),
+                    "Cliente": str(linha_lote.get("Cliente", "")).strip(),
+                    "CODIGO_PV": str(linha_lote.get("CODIGO_PV", "")).strip(),
+                    "Processo": str(linha_lote.get("Processo", "")).strip(),
+                    "Horas": pd.to_numeric(linha_lote.get("Horas", 0), errors="coerce"),
+                    "Data_Baixa": pd.Timestamp.now(),
+                    "Usuario": "APS - BAIXA EM LOTE CORTE",
+                    "Observacao": str(obs_lote).strip(),
+                    "Status_Baixa": "ATIVA",
+                    "Data_Estorno": "",
+                    "Motivo_Estorno": ""
+                }
+
+                try:
+                    df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_lote)
+
+                    chave_teste = (
+                        str(registro_lote["PV"]).strip().upper() + "||" +
+                        str(registro_lote["Processo"]).strip().upper() + "||" +
+                        str(registro_lote["CODIGO_PV"]).strip().upper()
+                    )
+
+                    df_validacao = historico_baixas_completo(df_baixas_result)
+
+                    if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
+                        existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
+                    else:
+                        existe = False
+
+                    if existe:
+                        sucessos += 1
+                    else:
+                        falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']}")
+
+                except Exception as e:
+                    falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']} ({e})")
+
+            if sucessos > 0:
+                st.success(f"Baixa em lote concluída com sucesso para {sucessos} operação(ões).")
+
+            if falhas:
+                st.warning("Algumas operações não puderam ser validadas após a baixa:")
+                for f in falhas:
+                    st.caption(f"• {f}")
+
+            if sucessos > 0:
+                st.cache_data.clear()
+                st.rerun()
+
+    else:
+        st.info("Selecione uma ou mais operações para habilitar a baixa em lote.")
+
 else:
-    st.info("Nenhuma operação de corte disponível para baixa rápida no filtro atual.")
+    st.info("Nenhuma operação de corte disponível para baixa rápida ou em lote no filtro atual.")
+
+# =========================================================
+# ESTORNO DE BAIXA DE CORTE
+# =========================================================
+st.divider()
+st.markdown("### 🔄 Estorno de Baixa de Corte")
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+    hist_corte = df_baixas_historico.copy()
+
+    hist_corte["PROC_UPPER"] = hist_corte["Processo"].astype(str).str.strip().str.upper()
+    hist_corte["STATUS_UPPER"] = hist_corte["Status_Baixa"].astype(str).str.strip().str.upper()
+
+    hist_corte = hist_corte[
+        (
+            hist_corte["PROC_UPPER"].str.contains("SERRA", na=False) |
+            hist_corte["PROC_UPPER"].str.contains("LASER", na=False) |
+            hist_corte["PROC_UPPER"].str.contains("PLASMA", na=False)
+        ) &
+        (hist_corte["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"]))
+    ].copy()
+
+    if not hist_corte.empty:
+        hist_corte["Horas"] = pd.to_numeric(hist_corte["Horas"], errors="coerce").fillna(0).round(1)
+
+        hist_corte["LABEL_ESTORNO_CORTE"] = (
+            "PV " + hist_corte["PV"].astype(str).str.strip() +
+            " | " + hist_corte["Processo"].astype(str).str.strip() +
+            " | " + hist_corte["CODIGO_PV"].astype(str).str.strip() +
+            " | " + hist_corte["Horas"].astype(str) + " h"
+        )
+
+        opcoes_estorno = hist_corte["LABEL_ESTORNO_CORTE"].tolist()
+
+        col_est1, col_est2 = st.columns([3, 2])
+
+        estorno_sel = col_est1.selectbox(
+            "Selecione a baixa de corte para estornar",
+            opcoes_estorno,
+            key="select_estorno_corte"
+        )
+
+        motivo_estorno_corte = col_est2.text_input(
+            "Motivo do estorno",
+            key="motivo_estorno_corte"
+        )
+
+        linha_estorno = hist_corte[
+            hist_corte["LABEL_ESTORNO_CORTE"] == estorno_sel
+        ].iloc[0]
+
+        st.warning(
+            f"Você está prestes a estornar a operação "
+            f"**{linha_estorno['Processo']}** da PV **{linha_estorno['PV']}**."
+        )
+
+        if st.button("🔄 Confirmar Estorno de Corte", key="btn_estorno_corte"):
+            if not str(motivo_estorno_corte).strip():
+                st.error("Informe o motivo do estorno antes de continuar.")
+            else:
+                chave_estorno = str(linha_estorno.get("CHAVE_OPERACAO", "")).strip()
+
+                caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+                df_baixas_raw = pd.read_excel(caminho_baixas, dtype=str)
+                df_baixas_raw = _padronizar_df_baixas(df_baixas_raw)
+
+                if "CHAVE_OPERACAO" in df_baixas_raw.columns:
+                    mask_estorno = (
+                        df_baixas_raw["CHAVE_OPERACAO"].astype(str).str.strip().str.upper() ==
+                        chave_estorno.upper()
+                    ) & (
+                        df_baixas_raw["Status_Baixa"].astype(str).str.strip().str.upper().isin(["ATIVA", "TERCEIRIZADA"])
+                    )
+
+                    if mask_estorno.any():
+                        df_baixas_raw.loc[mask_estorno, "Status_Baixa"] = "ESTORNADA"
+                        df_baixas_raw.loc[mask_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+                        df_baixas_raw.loc[mask_estorno, "Motivo_Estorno"] = str(motivo_estorno_corte).strip()
+
+                        colunas_salvar = [c for c in COLUNAS_BAIXAS if c in df_baixas_raw.columns]
+                        df_baixas_raw[colunas_salvar].to_excel(caminho_baixas, index=False)
+
+                        st.success("Estorno de corte registrado com sucesso.")
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error("Não foi encontrada uma baixa ativa/terceirizada válida para estorno.")
+                else:
+                    st.error("CHAVE_OPERACAO não encontrada no histórico físico de baixas.")
+    else:
+        st.info("Nenhuma baixa de corte ativa disponível para estorno.")
+else:
+    st.info("Ainda não há histórico de baixas de corte para estorno.")
 
 st.divider()
 
