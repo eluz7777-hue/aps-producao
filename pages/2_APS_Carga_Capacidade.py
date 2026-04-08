@@ -627,13 +627,17 @@ else:
     chaves_baixadas = set()
 
 # ===============================
-# HISTÓRICO COMPLETO DE BAIXAS OPERACIONAIS
+# HISTÓRICO PREMIUM DE BAIXAS OPERACIONAIS
 # ===============================
-st.subheader("📜 Histórico de Baixas Operacionais")
+st.subheader("🧾 Histórico Premium de Baixas Operacionais")
 
-if not df_baixas_historico.empty:
+if df_baixas_historico is not None and not df_baixas_historico.empty:
+
     hist_exib = df_baixas_historico.copy()
 
+    # ----------------------------
+    # FORMATAÇÕES
+    # ----------------------------
     if "Data_Baixa" in hist_exib.columns:
         hist_exib["Data_Baixa"] = pd.to_datetime(hist_exib["Data_Baixa"], errors="coerce")
         hist_exib = hist_exib.sort_values("Data_Baixa", ascending=False)
@@ -655,30 +659,36 @@ if not df_baixas_historico.empty:
             })
         )
 
-    col_hist1, col_hist2 = st.columns(2)
+    # ----------------------------
+    # FILTROS
+    # ----------------------------
+    col1, col2 = st.columns(2)
 
-    with col_hist1:
-        filtro_status_hist = st.selectbox(
-            "Filtrar histórico por status",
+    with col1:
+        filtro_status = st.selectbox(
+            "Filtrar por status",
             ["Todos", "🟢 ATIVA", "🟣 TERCEIRIZADA", "🔴 ESTORNADA"],
-            key="filtro_status_historico_baixas"
+            key="filtro_status_historico_premium"
         )
 
-    with col_hist2:
-        filtro_pv_hist = st.text_input(
-            "Buscar PV no histórico",
-            key="buscar_pv_historico_baixas"
+    with col2:
+        filtro_pv = st.text_input(
+            "Buscar PV",
+            key="buscar_pv_historico_premium"
         ).strip()
 
-    if filtro_status_hist != "Todos":
-        hist_exib = hist_exib[hist_exib["Status_Baixa"] == filtro_status_hist].copy()
+    if filtro_status != "Todos":
+        hist_exib = hist_exib[hist_exib["Status_Baixa"] == filtro_status]
 
-    if filtro_pv_hist:
+    if filtro_pv:
         hist_exib = hist_exib[
-            hist_exib["PV"].astype(str).str.contains(filtro_pv_hist, case=False, na=False)
-        ].copy()
+            hist_exib["PV"].astype(str).str.contains(filtro_pv, case=False, na=False)
+        ]
 
-    colunas_hist = [
+    # ----------------------------
+    # EXIBIÇÃO
+    # ----------------------------
+    colunas = [
         "Status_Baixa",
         "Data_Baixa",
         "PV",
@@ -687,19 +697,15 @@ if not df_baixas_historico.empty:
         "Processo",
         "Horas",
         "Usuario",
-        "Observacao",
-        "Data_Estorno",
-        "Motivo_Estorno"
+        "Observacao"
     ]
 
-    colunas_hist = [c for c in colunas_hist if c in hist_exib.columns]
+    colunas = [c for c in colunas if c in hist_exib.columns]
 
-    st.dataframe(
-        hist_exib[colunas_hist],
-        use_container_width=True
-    )
+    st.dataframe(hist_exib[colunas], use_container_width=True)
 
-    st.caption(f"Total de registros no histórico: {len(hist_exib)}")
+    st.caption(f"Total de registros: {len(hist_exib)}")
+
 else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
 
