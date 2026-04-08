@@ -2226,6 +2226,9 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
     st.divider()
 
+# ============================================================
+# ===================== FILA POR PROCESSO ====================
+# ============================================================
 st.subheader("📌 Fila por Processo")
 
 fila = df.copy()
@@ -2276,13 +2279,10 @@ fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
 
 if tipo_corte_sel == "Apenas Corte":
     fila = fila[fila["Processo"].str.contains("CORTE", na=False)].copy()
-
 elif tipo_corte_sel == "Apenas Serra":
     fila = fila[fila["Processo"] == "CORTE - SERRA"].copy()
-
 elif tipo_corte_sel == "Apenas Laser":
     fila = fila[fila["Processo"] == "CORTE - LASER"].copy()
-
 elif tipo_corte_sel == "Apenas Plasma":
     fila = fila[fila["Processo"] == "CORTE - PLASMA"].copy()
 
@@ -2418,7 +2418,7 @@ if not fila_corte.empty:
             st.caption(
                 f"Registro salvo: PV {registro_baixa_corte['PV']} | "
                 f"{registro_baixa_corte['Processo']} | "
-                f"{registro_baixa_corte['Horas']:.1f} h"
+                f"{float(registro_baixa_corte['Horas']):.1f} h"
             )
             st.cache_data.clear()
             st.rerun()
