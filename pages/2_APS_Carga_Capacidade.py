@@ -2431,28 +2431,28 @@ st.divider()
 
 st.subheader("🔎 Busca rápida de PV / Cliente")
 
-    col_b1, col_b2 = st.columns(2)
+col_b1, col_b2 = st.columns(2)
 
-    busca_pv = col_b1.text_input("Buscar por PV")
-    busca_cliente = col_b2.text_input("Buscar por Cliente")
+busca_pv = col_b1.text_input("Buscar por PV")
+busca_cliente = col_b2.text_input("Buscar por Cliente")
 
-    busca_df = base_op.copy()
+busca_df = base_op.copy()
 
-    if busca_pv:
-        busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
+if busca_pv:
+    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
 
-    if busca_cliente:
-        busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
+if busca_cliente:
+    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
 
-    if busca_pv or busca_cliente:
-        busca_df["Horas"] = busca_df["Horas"].round(1)
+if busca_pv or busca_cliente:
+    busca_df["Horas"] = busca_df["Horas"].round(1)
 
-        if "ENTREGA" in busca_df.columns:
-            busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
+    if "ENTREGA" in busca_df.columns:
+        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-        st.dataframe(busca_df, use_container_width=True)
+    st.dataframe(busca_df, use_container_width=True)
 
-    st.subheader("📥 Exportar dados filtrados")
+st.subheader("📥 Exportar dados filtrados")
 
     @st.cache_data
     def converter_excel(df_export):
