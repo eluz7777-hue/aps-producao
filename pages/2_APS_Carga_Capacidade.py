@@ -2225,86 +2225,209 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     st.dataframe(dem_proc, use_container_width=True)
 
     st.divider()
-    st.subheader("📌 Fila por Processo")
 
-    fila = df.copy()
+st.subheader("📌 Fila por Processo")
 
-    if "ENTREGA" in fila.columns:
-        fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
-        fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
-    else:
-        fila["Dias para Entrega"] = None
+fila = df.copy()
 
-    fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
+if "ENTREGA" in fila.columns:
+    fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
+    fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
+else:
+    fila["Dias para Entrega"] = None
 
-    col_f1, col_f2 = st.columns(2)
+fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
 
-    processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
-    processo_fila_sel = col_f1.selectbox(
-        "Filtrar por Processo",
-        ["Todos"] + processos_fila,
-        key="filtro_fila_processo_unico"
+# ---------------------------------------
+# FILTROS
+# ---------------------------------------
+col_f1, col_f2, col_f3 = st.columns(3)
+
+processos_fila = sorted(fila["Processo"].dropna().astype(str).str.strip().unique().tolist())
+processo_fila_sel = col_f1.selectbox(
+    "Filtrar por Processo",
+    ["Todos"] + processos_fila,
+    key="filtro_fila_processo_unico"
+)
+
+pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
+pv_fila_sel = col_f2.selectbox(
+    "Filtrar por PV específica",
+    ["Todas"] + pvs_fila,
+    key="filtro_fila_pv_unico"
+)
+
+tipo_corte_sel = col_f3.selectbox(
+    "Filtrar por Tipo de Corte",
+    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"],
+    key="filtro_fila_tipo_corte"
+)
+
+if processo_fila_sel != "Todos":
+    fila = fila[fila["Processo"].astype(str).str.strip() == processo_fila_sel].copy()
+
+if pv_fila_sel != "Todas":
+    fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
+
+# ---------------------------------------
+# FILTRO INTELIGENTE DE CORTE
+# ---------------------------------------
+fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
+
+if tipo_corte_sel == "Apenas Corte":
+    fila = fila[fila["Processo"].str.contains("CORTE", na=False)].copy()
+
+elif tipo_corte_sel == "Apenas Serra":
+    fila = fila[fila["Processo"] == "CORTE - SERRA"].copy()
+
+elif tipo_corte_sel == "Apenas Laser":
+    fila = fila[fila["Processo"] == "CORTE - LASER"].copy()
+
+elif tipo_corte_sel == "Apenas Plasma":
+    fila = fila[fila["Processo"] == "CORTE - PLASMA"].copy()
+
+# ---------------------------------------
+# KPIs
+# ---------------------------------------
+col_k1, col_k2, col_k3 = st.columns(3)
+col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
+col_k2.metric("Processos na Fila", fila["Processo"].nunique())
+col_k3.metric("Horas na Fila", f"{pd.to_numeric(fila['Horas'], errors='coerce').fillna(0).sum():.1f} h")
+
+st.markdown("### 📋 PVs na Fila")
+
+fila_detalhe = fila.copy()
+fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
+
+if "ENTREGA" in fila_detalhe.columns:
+    fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
+    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+colunas_fila = [
+    "Semáforo",
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Dias para Entrega",
+    "ENTREGA"
+]
+colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+
+ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
+asc_fila = [True, True, False][:len(ordenacao_fila)]
+
+fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
+
+if ordenacao_fila:
+    fila_detalhe_exib = fila_detalhe_exib.sort_values(
+        ordenacao_fila,
+        ascending=asc_fila
     )
 
-    pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
-    pv_fila_sel = col_f2.selectbox(
-        "Filtrar por PV específica",
-        ["Todas"] + pvs_fila,
-        key="filtro_fila_pv_unico"
+fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
+
+st.dataframe(
+    fila_detalhe_exib,
+    use_container_width=True,
+    hide_index=True
+)
+
+# ---------------------------------------
+# BAIXA RÁPIDA DE CORTE
+# ---------------------------------------
+st.markdown("### ⚡ Baixa Rápida de Corte")
+
+fila_corte = fila.copy()
+fila_corte = fila_corte[
+    fila_corte["Processo"].astype(str).str.strip().str.upper().isin([
+        "CORTE - SERRA",
+        "CORTE - LASER",
+        "CORTE - PLASMA"
+    ])
+].copy()
+
+if not fila_corte.empty:
+    fila_corte["Horas"] = pd.to_numeric(fila_corte["Horas"], errors="coerce").fillna(0).round(1)
+
+    fila_corte["LABEL_BAIXA_CORTE"] = (
+        "PV " + fila_corte["PV"].astype(str).str.strip() +
+        " | " + fila_corte["Processo"].astype(str).str.strip() +
+        " | " + fila_corte["CODIGO_PV"].astype(str).str.strip() +
+        " | " + fila_corte["Horas"].astype(str) + " h"
     )
 
-    if processo_fila_sel != "Todos":
-        fila = fila[fila["Processo"] == processo_fila_sel].copy()
+    opcoes_corte = fila_corte["LABEL_BAIXA_CORTE"].tolist()
 
-    if pv_fila_sel != "Todas":
-        fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
+    col_bc1, col_bc2 = st.columns([3, 2])
 
-    col_k1, col_k2, col_k3 = st.columns(3)
-    col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
-    col_k2.metric("Processos na Fila", fila["Processo"].nunique())
-    col_k3.metric("Horas na Fila", f"{fila['Horas'].sum():.1f} h")
+    operacao_corte_sel = col_bc1.selectbox(
+        "Selecione a operação de corte concluída",
+        opcoes_corte,
+        key="select_baixa_rapida_corte"
+    )
 
-    st.markdown("### 📋 PVs na Fila")
+    obs_baixa_corte = col_bc2.text_input(
+        "Observação da baixa (opcional)",
+        key="obs_baixa_rapida_corte"
+    )
 
-    fila_detalhe = fila.copy()
-    fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
+    linha_baixa_corte = fila_corte[
+        fila_corte["LABEL_BAIXA_CORTE"] == operacao_corte_sel
+    ].iloc[0]
 
-    if "ENTREGA" in fila_detalhe.columns:
-        fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
-        fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
+    st.info(
+        f"Você está prestes a registrar a operação "
+        f"**{linha_baixa_corte['Processo']}** da PV **{linha_baixa_corte['PV']}** "
+        f"({linha_baixa_corte['Horas']} h)."
+    )
 
-    colunas_fila = [
-        "Semáforo",
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Dias para Entrega",
-        "ENTREGA"
-    ]
-    colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+    if st.button("🪚 Confirmar Baixa de Corte", key="btn_confirmar_baixa_rapida_corte"):
+        registro_baixa_corte = {
+            "PV": str(linha_baixa_corte.get("PV", "")).strip(),
+            "Cliente": str(linha_baixa_corte.get("Cliente", "")).strip(),
+            "CODIGO_PV": str(linha_baixa_corte.get("CODIGO_PV", "")).strip(),
+            "Processo": str(linha_baixa_corte.get("Processo", "")).strip(),
+            "Horas": pd.to_numeric(linha_baixa_corte.get("Horas", 0), errors="coerce"),
+            "Data_Baixa": pd.Timestamp.now(),
+            "Usuario": "APS - BAIXA RÁPIDA CORTE",
+            "Observacao": str(obs_baixa_corte).strip(),
+            "Status_Baixa": "ATIVA",
+            "Data_Estorno": "",
+            "Motivo_Estorno": ""
+        }
 
-    ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
-    asc_fila = [True, True, False][:len(ordenacao_fila)]
+        df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_baixa_corte)
 
-    fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
-
-    if ordenacao_fila:
-        fila_detalhe_exib = fila_detalhe_exib.sort_values(
-            ordenacao_fila,
-            ascending=asc_fila
+        chave_teste = (
+            str(registro_baixa_corte["PV"]).strip().upper() + "||" +
+            str(registro_baixa_corte["Processo"]).strip().upper() + "||" +
+            str(registro_baixa_corte["CODIGO_PV"]).strip().upper()
         )
 
-    fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
+        df_validacao = historico_baixas_completo(df_baixas_result)
 
-    st.dataframe(
-        fila_detalhe_exib,
-        use_container_width=True,
-        hide_index=True
-    )
+        if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
+            existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
+        else:
+            existe = False
 
-    st.divider()
+        if existe:
+            st.success("Baixa rápida de corte registrada com sucesso.")
+            st.caption(
+                f"Registro salvo: PV {registro_baixa_corte['PV']} | "
+                f"{registro_baixa_corte['Processo']} | "
+                f"{registro_baixa_corte['Horas']:.1f} h"
+            )
+            st.cache_data.clear()
+            st.rerun()
+        else:
+            st.error("A baixa rápida de corte não foi localizada no histórico após salvar.")
+else:
+    st.info("Nenhuma operação de corte disponível para baixa rápida no filtro atual.")
+
+st.divider()
 
     st.subheader("🔎 Busca rápida de PV / Cliente")
 
