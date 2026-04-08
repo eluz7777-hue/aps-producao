@@ -2429,7 +2429,7 @@ else:
 
 st.divider()
 
-    st.subheader("🔎 Busca rápida de PV / Cliente")
+st.subheader("🔎 Busca rápida de PV / Cliente")
 
     col_b1, col_b2 = st.columns(2)
 
