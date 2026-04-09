@@ -1391,20 +1391,6 @@ def status(x):
     else:
         return "🟢"
 
-if "Ocupacao" not in auditoria.columns:
-    auditoria["Ocupacao"] = 0
-
-auditoria["Ocupacao"] = pd.to_numeric(
-    auditoria["Ocupacao"],
-    errors="coerce"
-).fillna(0)
-
-auditoria["Semáforo"] = auditoria["Ocupacao"].apply(
-    lambda x: "🔴" if pd.to_numeric(x, errors="coerce") >= 100
-    else "🟠" if pd.to_numeric(x, errors="coerce") >= 90
-    else "🟡" if pd.to_numeric(x, errors="coerce") >= 75
-    else "🟢"
-)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # Coluna apenas para exibição visual
