@@ -2816,128 +2816,167 @@ else:
     st.success("Capacidade sob controle.")
 
 # --------------------------------------------------------
-        # HISTÓRICO PREMIUM DE BAIXAS
-        # --------------------------------------------------------
-        st.markdown("### 🧾 Histórico Premium de Baixas Operacionais")
+# HISTÓRICO PREMIUM DE BAIXA
+# --------------------------------------------------------
+st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
+st.caption("Rastreabilidade completa das baixas operacionais, terceirizações e estornos.")
 
-        if "df_baixas_historico" not in locals() or df_baixas_historico is None:
-            df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
-        else:
-            df_baixas_exib = df_baixas_historico.copy()
+if "df_baixas_historico" not in locals() or df_baixas_historico is None:
+    df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
+else:
+    df_baixas_exib = df_baixas_historico.copy()
 
-        if not df_baixas_exib.empty:
-            for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"]:
-                if col in df_baixas_exib.columns:
-                    df_baixas_exib[col] = df_baixas_exib[col].fillna("").astype(str).str.strip()
-
-            if "Status_Baixa" in df_baixas_exib.columns:
-                df_baixas_exib["Status_Baixa"] = (
-                    df_baixas_exib["Status_Baixa"]
-                    .replace("", "ATIVA")
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                )
-            else:
-                df_baixas_exib["Status_Baixa"] = "ATIVA"
-
-            if "Data_Baixa" in df_baixas_exib.columns:
-                df_baixas_exib["Data_Baixa"] = pd.to_datetime(
-                    df_baixas_exib["Data_Baixa"],
-                    errors="coerce"
-                )
-
-            col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
-
-            status_hist_sel = col_hist1.selectbox(
-                "Filtrar por status",
-                ["Todos", "ATIVA", "TERCEIRIZADA", "ESTORNADA"],
-                key="filtro_status_historico_baixas"
+if not df_baixas_exib.empty:
+    for col in [
+        "PV", "Cliente", "CODIGO_PV", "Processo", "Usuario",
+        "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+    ]:
+        if col in df_baixas_exib.columns:
+            df_baixas_exib[col] = (
+                df_baixas_exib[col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
             )
 
-            processo_hist_sel = col_hist2.selectbox(
-                "Filtrar por processo",
-                ["Todos"] + sorted(df_baixas_exib["Processo"].dropna().astype(str).str.strip().unique().tolist()),
-                key="filtro_processo_historico_baixas"
-            )
+    if "Status_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Status_Baixa"] = (
+            df_baixas_exib["Status_Baixa"]
+            .replace("", "ATIVA")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+    else:
+        df_baixas_exib["Status_Baixa"] = "ATIVA"
 
-            cliente_hist_sel = col_hist3.selectbox(
-                "Filtrar por cliente",
-                ["Todos"] + sorted(df_baixas_exib["Cliente"].dropna().astype(str).str.strip().unique().tolist()),
-                key="filtro_cliente_historico_baixas"
-            )
+    if "Data_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Baixa"] = pd.to_datetime(
+            df_baixas_exib["Data_Baixa"],
+            errors="coerce"
+        )
 
-            if status_hist_sel != "Todos":
-                df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Status_Baixa"] == status_hist_sel
-                ].copy()
+    if "Data_Estorno" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Estorno"] = pd.to_datetime(
+            df_baixas_exib["Data_Estorno"],
+            errors="coerce"
+        )
 
-            if processo_hist_sel != "Todos":
-                df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
-                ].copy()
+    col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
 
-            if cliente_hist_sel != "Todos":
-                df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
-                ].copy()
+    status_hist_sel = col_hist1.selectbox(
+        "Filtrar por status",
+        ["Todos", "ATIVA", "TERCEIRIZADA", "ESTORNADA"],
+        key="filtro_status_historico_baixas"
+    )
 
-            col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
-            col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
-            col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
-            col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
-            col_hk4.metric("Horas Registradas", fmt_br_num(pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(), 1) + " h")
+    processo_hist_sel = col_hist2.selectbox(
+        "Filtrar por processo",
+        ["Todos"] + sorted(
+            df_baixas_exib["Processo"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        ),
+        key="filtro_processo_historico_baixas"
+    )
 
-            if "Data_Baixa" in df_baixas_exib.columns:
-                df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+    cliente_hist_sel = col_hist3.selectbox(
+        "Filtrar por cliente",
+        ["Todos"] + sorted(
+            df_baixas_exib["Cliente"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        ),
+        key="filtro_cliente_historico_baixas"
+    )
 
-            def status_historico_label(x):
-                x = str(x).strip().upper()
-                if x == "ATIVA":
-                    return "✅ Baixada"
-                elif x == "TERCEIRIZADA":
-                    return "🟣 Terceirizada"
-                elif x == "ESTORNADA":
-                    return "🔁 Estornada"
-                return "⚪ Indefinido"
+    if status_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Status_Baixa"] == status_hist_sel
+        ].copy()
 
-            df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
+    if processo_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
+        ].copy()
 
-            df_baixas_exib = df_baixas_exib.sort_values(
-                by=["Data_Baixa"],
-                ascending=False,
-                na_position="last"
-            ).copy()
+    if cliente_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
+        ].copy()
 
-            st.dataframe(
-                df_baixas_exib[
-                    [
-                        "Status Exibição",
-                        "PV",
-                        "Cliente",
-                        "CODIGO_PV",
-                        "Processo",
-                        "Horas",
-                        "Data_Baixa",
-                        "Usuario",
-                        "Observacao",
-                        "Data_Estorno",
-                        "Motivo_Estorno"
-                    ]
-                ].rename(columns={
-                    "Status Exibição": "Status",
-                    "Data_Baixa": "Data da Baixa",
-                    "Usuario": "Usuário",
-                    "Observacao": "Observação",
-                    "Data_Estorno": "Data do Estorno",
-                    "Motivo_Estorno": "Motivo do Estorno"
-                }),
-                use_container_width=True,
-                hide_index=True,
-                height=340
-            )
-        else:
-            st.info("Nenhuma baixa operacional registrada até o momento.")
+    col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
+    col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
+    col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
+    col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
+    col_hk4.metric(
+        "Horas Registradas",
+        fmt_br_num(
+            pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(),
+            1
+        ) + " h"
+    )
+
+    def status_historico_label(x):
+        x = str(x).strip().upper()
+        if x == "ATIVA":
+            return "✅ Baixada"
+        elif x == "TERCEIRIZADA":
+            return "🟣 Terceirizada"
+        elif x == "ESTORNADA":
+            return "🔁 Estornada"
+        return "⚪ Indefinido"
+
+    df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
+
+    if "Data_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+
+    if "Data_Estorno" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Estorno"] = df_baixas_exib["Data_Estorno"].dt.strftime("%d/%m/%Y %H:%M")
+
+    df_baixas_exib = df_baixas_exib.sort_values(
+        by=["Data_Baixa"],
+        ascending=False,
+        na_position="last"
+    ).copy()
+
+    colunas_exibir = [
+        "Status Exibição",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Data_Baixa",
+        "Usuario",
+        "Observacao",
+        "Data_Estorno",
+        "Motivo_Estorno"
+    ]
+    colunas_exibir = [c for c in colunas_exibir if c in df_baixas_exib.columns]
+
+    st.dataframe(
+        df_baixas_exib[colunas_exibir].rename(columns={
+            "Status Exibição": "Status",
+            "Data_Baixa": "Data da Baixa",
+            "Usuario": "Usuário",
+            "Observacao": "Observação",
+            "Data_Estorno": "Data do Estorno",
+            "Motivo_Estorno": "Motivo do Estorno"
+        }),
+        use_container_width=True,
+        hide_index=True,
+        height=340
+    )
+else:
+    st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ============================================================
 # ===================== VISÃO OPERACIONAL ====================
