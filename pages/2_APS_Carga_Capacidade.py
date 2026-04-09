@@ -2775,16 +2775,25 @@ else:
 st.divider()
 
 # ---------------------------------------
-# EVOLUÇÃO DIÁRIA DO CORTE
+# EVOLUÇÃO DIÁRIA DO CORTE (POR TIPO)
 # ---------------------------------------
 st.markdown("### 📈 Evolução Diária do Corte")
 
 if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+
     evolucao = df_baixas_historico.copy()
 
-    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.strip().str.upper()
-    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.strip().str.upper()
+    # -----------------------------------
+    # PADRONIZAÇÃO
+    # -----------------------------------
+    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
+    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
 
+    # -----------------------------------
+    # FILTRO: SOMENTE CORTE VÁLIDO
+    # -----------------------------------
     evolucao = evolucao[
         (
             evolucao["Processo"].str.contains("SERRA", na=False) |
@@ -2796,49 +2805,94 @@ if "df_baixas_historico" in globals() and df_baixas_historico is not None and no
         )
     ].copy()
 
-    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
-    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
-
     evolucao = evolucao.dropna(subset=["Data_Baixa"]).copy()
 
     if not evolucao.empty:
-        evolucao["Dia"] = evolucao["Data_Baixa"].dt.normalize()
 
+        # -----------------------------------
+        # CLASSIFICA TIPO DE CORTE
+        # -----------------------------------
+        def classificar_corte(proc):
+            proc = str(proc).upper().strip()
+            if "SERRA" in proc:
+                return "SERRA"
+            elif "LASER" in proc:
+                return "LASER"
+            elif "PLASMA" in proc:
+                return "PLASMA"
+            return "OUTROS"
+
+        evolucao["Tipo_Corte"] = evolucao["Processo"].apply(classificar_corte)
+        evolucao["Dia"] = evolucao["Data_Baixa"].dt.strftime("%d/%m/%Y")
+
+        # -----------------------------------
+        # RESUMO ANALÍTICO
+        # -----------------------------------
         evolucao_resumo = (
-            evolucao.groupby("Dia", as_index=False)
+            evolucao.groupby(["Dia", "Tipo_Corte"], as_index=False)
             .agg(
-                Operacoes=("CHAVE_OPERACAO", "count"),
-                Horas=("Horas", "sum")
+                Horas_Baixadas=("Horas", "sum"),
+                Operacoes_Baixadas=("CHAVE_OPERACAO", "count")
             )
-            .sort_values("Dia")
         )
 
-        evolucao_resumo["Horas"] = evolucao_resumo["Horas"].round(1)
+        evolucao_resumo["Horas_Baixadas"] = evolucao_resumo["Horas_Baixadas"].round(1)
 
-        if not evolucao_resumo.empty:
-            st.line_chart(
-                evolucao_resumo.set_index("Dia")[["Horas", "Operacoes"]],
-                use_container_width=True
-            )
+        # ordena por data real
+        evolucao_resumo["Dia_Ordenacao"] = pd.to_datetime(evolucao_resumo["Dia"], format="%d/%m/%Y", errors="coerce")
+        evolucao_resumo = evolucao_resumo.sort_values(["Dia_Ordenacao", "Tipo_Corte"]).reset_index(drop=True)
 
-            exib_evolucao = evolucao_resumo.copy()
-            exib_evolucao["Dia"] = exib_evolucao["Dia"].dt.strftime("%d/%m/%Y")
+        # -----------------------------------
+        # GRÁFICO - HORAS POR DIA / TIPO
+        # -----------------------------------
+        grafico_horas = evolucao_resumo.pivot_table(
+            index="Dia",
+            columns="Tipo_Corte",
+            values="Horas_Baixadas",
+            aggfunc="sum",
+            fill_value=0
+        )
 
-            st.dataframe(
-                exib_evolucao.rename(columns={
-                    "Dia": "Data",
-                    "Operacoes": "Operações Baixadas",
-                    "Horas": "Horas Baixadas"
-                }),
-                use_container_width=True,
-                hide_index=True
-            )
+        # ordena corretamente o eixo X
+        ordem_datas = (
+            evolucao_resumo[["Dia", "Dia_Ordenacao"]]
+            .drop_duplicates()
+            .sort_values("Dia_Ordenacao")["Dia"]
+            .tolist()
+        )
+
+        grafico_horas = grafico_horas.reindex(ordem_datas)
+
+        if not grafico_horas.empty:
+            st.line_chart(grafico_horas, use_container_width=True)
+
+            st.caption("Horas baixadas por dia, separadas por tipo de corte.")
         else:
-            st.info("Ainda não há histórico diário suficiente para exibir evolução.")
+            st.info("Não há dados suficientes para gerar o gráfico de evolução.")
+
+        # -----------------------------------
+        # TABELA DE APOIO
+        # -----------------------------------
+        st.markdown("#### 📋 Detalhamento da Evolução do Corte")
+
+        st.dataframe(
+            evolucao_resumo[
+                ["Dia", "Tipo_Corte", "Horas_Baixadas", "Operacoes_Baixadas"]
+            ].rename(columns={
+                "Dia": "Data",
+                "Tipo_Corte": "Tipo de Corte",
+                "Horas_Baixadas": "Horas Baixadas",
+                "Operacoes_Baixadas": "Operações Baixadas"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
     else:
         st.info("Ainda não há baixas válidas de corte para alimentar a evolução diária.")
+
 else:
-    st.info("Ainda não há histórico de corte para exibir evolução diária.")
+    st.info("Histórico de baixas não disponível para gerar a evolução diária.")
 
 # ---------------------------------------
 # FILA ATUAL DE CORTE
