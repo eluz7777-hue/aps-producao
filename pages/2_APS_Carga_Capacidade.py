@@ -1391,7 +1391,20 @@ def status(x):
     else:
         return "🟢"
 
-dem["Status"] = dem["Ocupacao"].apply(status)
+if "Ocupacao" not in auditoria.columns:
+    auditoria["Ocupacao"] = 0
+
+auditoria["Ocupacao"] = pd.to_numeric(
+    auditoria["Ocupacao"],
+    errors="coerce"
+).fillna(0)
+
+auditoria["Semáforo"] = auditoria["Ocupacao"].apply(
+    lambda x: "🔴" if pd.to_numeric(x, errors="coerce") >= 100
+    else "🟠" if pd.to_numeric(x, errors="coerce") >= 90
+    else "🟡" if pd.to_numeric(x, errors="coerce") >= 75
+    else "🟢"
+)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # Coluna apenas para exibição visual
@@ -3583,14 +3596,44 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     st.subheader("📌 Auditoria de Capacidade")
 
     auditoria = dem.copy()
-    auditoria["Semáforo"] = auditoria["Ocupacao"].apply(status)
+
+    # ------------------------------
+    # SANEAMENTO NUMÉRICO ROBUSTO
+    # ------------------------------
+    for col in ["Ocupacao", "Horas", "Capacidade", "Saldo (h)"]:
+        if col not in auditoria.columns:
+            auditoria[col] = 0
+
+        auditoria[col] = pd.to_numeric(
+            auditoria[col],
+            errors="coerce"
+        ).fillna(0)
+
+    # ------------------------------
+    # SEMÁFORO (INLINE - SEGURO)
+    # ------------------------------
+    auditoria["Semáforo"] = auditoria["Ocupacao"].apply(
+        lambda x: "🔴" if x >= 100
+        else "🟠" if x >= 90
+        else "🟡" if x >= 75
+        else "🟢"
+    )
+
+    # ------------------------------
+    # FORMATAÇÃO VISUAL
+    # ------------------------------
     auditoria["Ocupação (%)"] = auditoria["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
     auditoria["Horas"] = auditoria["Horas"].apply(lambda x: fmt_br_num(x, 1))
     auditoria["Capacidade"] = auditoria["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
     auditoria["Saldo (h)"] = auditoria["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
 
+    # ------------------------------
+    # EXIBIÇÃO
+    # ------------------------------
     st.dataframe(
-        auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
+        auditoria[
+            ["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]
+        ],
         use_container_width=True
     )
 
