@@ -1630,6 +1630,21 @@ def semaforo_entrega(dias):
     else:
         return "🟢 Normal"
 
+def status(x):
+    try:
+        x = float(x)
+    except:
+        return "⚪"
+
+    if x >= 100:
+        return "🔴"
+    elif x >= 90:
+        return "🟠"
+    elif x >= 75:
+        return "🟡"
+    else:
+        return "🟢"
+
 # ===============================
 # STATUS EXECUTIVO
 # ===============================
