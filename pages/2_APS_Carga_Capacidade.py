@@ -1985,141 +1985,100 @@ else:
 # ============================================================
 # ======================= GRÁFICOS ============================
 # ============================================================
-with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
-
-    st.subheader("📌 Ocupação por Processo (%)")
-
-    dem_plot = dem.copy()
-    dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-
-    fig = px.bar(
-        dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
-        x="Periodo",
-        y="Ocupacao",
-        color="Processo",
-        barmode="group",
-        text="Label",
-        custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
-    )
-
-    fig.add_hline(y=100, line_dash="dash")
-
-    fig.update_traces(
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Processo: %{customdata[0]}<br>"
-            "Ocupação: %{customdata[1]}<br>"
-            "Carga: %{customdata[2]} h<br>"
-            "Capacidade: %{customdata[3]} h"
-            "<extra></extra>"
-        )
-    )
-
-    fig.update_layout(
-        yaxis_title="Ocupação (%)",
-        xaxis_title="Período"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("📊 Utilização por Processo (%)")
-
-    fig_proc = px.bar(
-        dem_proc.sort_values("Utilização (%)", ascending=False),
-        x="Processo",
-        y="Utilização (%)",
-        text="Utilização (%)",
-        color="Faixa",
-        color_discrete_map={
-            "OK": "green",
-            "Atenção": "gold",
-            "Crítico": "red"
-        }
-    )
-
-    fig_proc.add_hline(y=100, line_dash="dash")
-    fig_proc.update_traces(texttemplate="%{text}")
-    fig_proc.update_yaxes(title="Utilização (%)")
-
-    st.plotly_chart(fig_proc, use_container_width=True)
-
-    st.subheader("🥧 Distribuição de Status dos Processos")
-
-    status_proc = dem_proc.groupby("Faixa", as_index=False)["Processo"].count()
-    status_proc = status_proc.rename(columns={"Processo": "Quantidade"})
-
-    fig_status = px.pie(
-        status_proc,
-        names="Faixa",
-        values="Quantidade",
-        color="Faixa",
-        color_discrete_map={
-            "OK": "green",
-            "Atenção": "gold",
-            "Crítico": "red"
-        },
-        title="Status dos Processos"
-    )
-
-    st.plotly_chart(fig_status, use_container_width=True)
-
-    st.subheader("📈 Evolução da Carga")
-
-    carga = df.groupby("Data", as_index=False)["Horas"].sum().sort_values("Data")
-    carga["Carga Acumulada (h)"] = carga["Horas"].cumsum()
-
-    fig_carga = px.line(
-        carga,
-        x="Data",
-        y="Carga Acumulada (h)",
-        title="Carga Acumulada no Tempo",
-        markers=True
-    )
-
-    st.plotly_chart(fig_carga, use_container_width=True)
-
-    st.subheader("📌 PV por Cliente")
-
-    pv_cliente_base = df_auditoria_pv.copy()
-
-    if cliente_sel != "Todos":
-        pv_cliente_base = pv_cliente_base[pv_cliente_base["Cliente"] == cliente_sel].copy()
-
-    pv_cliente = pv_cliente_base.groupby("Cliente", as_index=False)["PV"].nunique()
-    total = pv_cliente["PV"].sum()
-
-    pv_cliente = pd.concat(
-        [pv_cliente, pd.DataFrame([{"Cliente": "TOTAL", "PV": total}])],
-        ignore_index=True
-    )
-
-    fig_cliente = px.bar(
-        pv_cliente.sort_values("PV", ascending=False),
-        x="Cliente",
-        y="PV",
-        text="PV"
-    )
-
-    fig_cliente.update_traces(textposition="outside")
-    fig_cliente.update_layout(
-        xaxis_title="Cliente",
-        yaxis_title="Quantidade de PVs"
-    )
-
-    st.plotly_chart(fig_cliente, use_container_width=True)
+st.markdown("## 📈 Indicadores Visuais")
+st.caption("Leitura gráfica da ocupação, carga, atraso e distribuição da produção.")
 
 # ===============================
-# DISTRIBUIÇÃO DE ATRASO (NOVA VISÃO EXECUTIVA)
+# 1) OCUPAÇÃO POR PROCESSO
+# ===============================
+st.subheader("📌 Ocupação por Processo (%)")
+
+dem_plot = dem.copy()
+dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
+dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+
+fig = px.bar(
+    dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
+    x="Periodo",
+    y="Ocupacao",
+    color="Processo",
+    barmode="group",
+    text="Label",
+    custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
+)
+
+fig.add_hline(y=100, line_dash="dash")
+
+fig.update_traces(
+    textposition="outside",
+    hovertemplate=(
+        "<b>%{x}</b><br>"
+        "Processo: %{customdata[0]}<br>"
+        "Ocupação: %{customdata[1]}<br>"
+        "Carga: %{customdata[2]} h<br>"
+        "Capacidade: %{customdata[3]} h"
+        "<extra></extra>"
+    )
+)
+
+fig.update_layout(
+    yaxis_title="Ocupação (%)",
+    xaxis_title="Período"
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ===============================
+# 2) UTILIZAÇÃO POR PROCESSO
+# ===============================
+st.subheader("📊 Utilização por Processo (%)")
+
+fig_proc = px.bar(
+    dem_proc.sort_values("Utilização (%)", ascending=False),
+    x="Processo",
+    y="Utilização (%)",
+    text="Utilização (%)",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    }
+)
+
+fig_proc.add_hline(y=100, line_dash="dash")
+fig_proc.update_traces(texttemplate="%{text}")
+fig_proc.update_yaxes(title="Utilização (%)")
+
+st.plotly_chart(fig_proc, use_container_width=True)
+
+# ===============================
+# 3) EVOLUÇÃO DA CARGA
+# ===============================
+st.subheader("📈 Evolução da Carga")
+
+carga = df.groupby("Data", as_index=False)["Horas"].sum().sort_values("Data")
+carga["Carga Acumulada (h)"] = carga["Horas"].cumsum()
+
+fig_carga = px.line(
+    carga,
+    x="Data",
+    y="Carga Acumulada (h)",
+    title="Carga Acumulada no Tempo",
+    markers=True
+)
+
+st.plotly_chart(fig_carga, use_container_width=True)
+
+# ===============================
+# 4) DISTRIBUIÇÃO DE ATRASO
 # ===============================
 st.subheader("📊 Distribuição de Atraso por Faixa")
 
 df_atraso = atrasos.copy()
 
-# Blindagem
 if "Atraso (dias)" not in df_atraso.columns:
     df_atraso["Atraso (dias)"] = 0
 
@@ -2129,14 +2088,11 @@ df_atraso["Atraso (dias)"] = (
     .clip(lower=0)
 )
 
-# Considera apenas atrasos reais
 df_atraso = df_atraso[df_atraso["Atraso (dias)"] > 0].copy()
 
 if not df_atraso.empty:
 
     max_atraso = int(df_atraso["Atraso (dias)"].max())
-
-    # Cria faixas de 2 em 2 dias dinamicamente
     bins = list(range(0, max_atraso + 3, 2))
 
     labels = []
@@ -2160,11 +2116,9 @@ if not df_atraso.empty:
 
     dist = dist[dist["Quantidade"] > 0]
 
-    # Ordenação correta das faixas
     dist["Ordem"] = dist["Faixa"].astype(str).str.extract(r"(\d+)").astype(int)
     dist = dist.sort_values("Ordem")
 
-    # GRÁFICO DE COLUNAS
     fig_bar = px.bar(
         dist,
         x="Faixa",
@@ -2173,9 +2127,7 @@ if not df_atraso.empty:
         title="Escalonamento de Atraso (em dias)",
     )
 
-    fig_bar.update_traces(
-        textposition="outside"
-    )
+    fig_bar.update_traces(textposition="outside")
 
     fig_bar.update_layout(
         xaxis_title="Faixa de Atraso (dias)",
@@ -2188,7 +2140,6 @@ if not df_atraso.empty:
 
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    # KPI rápido abaixo do gráfico
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -2200,7 +2151,6 @@ if not df_atraso.empty:
     with col3:
         st.metric("Total em atraso", f"{len(df_atraso)} PVs")
 
-    # DETALHAMENTO
     faixa_select = st.selectbox(
         "Selecionar faixa para detalhamento",
         dist["Faixa"].astype(str).tolist(),
@@ -2221,7 +2171,61 @@ if not df_atraso.empty:
 else:
     st.success("Nenhum atraso 🎉")
 
+# ===============================
+# 5) PV POR CLIENTE
+# ===============================
+st.subheader("📌 PV por Cliente")
 
+pv_cliente_base = df_auditoria_pv.copy()
+
+if cliente_sel != "Todos":
+    pv_cliente_base = pv_cliente_base[pv_cliente_base["Cliente"] == cliente_sel].copy()
+
+pv_cliente = pv_cliente_base.groupby("Cliente", as_index=False)["PV"].nunique()
+total = pv_cliente["PV"].sum()
+
+pv_cliente = pd.concat(
+    [pv_cliente, pd.DataFrame([{"Cliente": "TOTAL", "PV": total}])],
+    ignore_index=True
+)
+
+fig_cliente = px.bar(
+    pv_cliente.sort_values("PV", ascending=False),
+    x="Cliente",
+    y="PV",
+    text="PV"
+)
+
+fig_cliente.update_traces(textposition="outside")
+fig_cliente.update_layout(
+    xaxis_title="Cliente",
+    yaxis_title="Quantidade de PVs"
+)
+
+st.plotly_chart(fig_cliente, use_container_width=True)
+
+# ===============================
+# 6) DISTRIBUIÇÃO DE STATUS (OPCIONAL)
+# ===============================
+st.subheader("🥧 Distribuição de Status dos Processos")
+
+status_proc = dem_proc.groupby("Faixa", as_index=False)["Processo"].count()
+status_proc = status_proc.rename(columns={"Processo": "Quantidade"})
+
+fig_status = px.pie(
+    status_proc,
+    names="Faixa",
+    values="Quantidade",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    },
+    title="Status dos Processos"
+)
+
+st.plotly_chart(fig_status, use_container_width=True)
 
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
