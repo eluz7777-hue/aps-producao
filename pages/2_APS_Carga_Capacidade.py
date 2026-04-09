@@ -2425,62 +2425,6 @@ else:
     st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
 
 # ============================================================
-# ===================== VISÃO OPERACIONAL ====================
-# ============================================================
-st.markdown("## ⚙️ Visão Operacional")
-st.caption("Consulta detalhada, filtros, fila de produção e auditorias.")
-
-with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
-
-    st.subheader("📌 Auditoria de Capacidade")
-
-    auditoria = dem.copy()
-    auditoria["Semáforo"] = auditoria["Ocupacao"].apply(status)
-    auditoria["Ocupação (%)"] = auditoria["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    auditoria["Horas"] = auditoria["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    auditoria["Capacidade"] = auditoria["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-    auditoria["Saldo (h)"] = auditoria["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
-
-    st.dataframe(
-        auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
-        use_container_width=True
-    )
-
-    st.subheader("⏱️ Previsão de Atraso por PV")
-
-    pv_carga_exibicao = pv_carga.copy()
-    pv_carga_exibicao["Horas"] = pv_carga_exibicao["Horas"].round(1)
-    pv_carga_exibicao["Dias Necessários"] = pv_carga_exibicao["Dias Necessários"].round(1)
-    pv_carga_exibicao["Dias Disponíveis"] = pv_carga_exibicao["Dias Disponíveis"].round(1)
-    pv_carga_exibicao["Atraso (dias)"] = pv_carga_exibicao["Atraso (dias)"].astype(int)
-
-    if "Data" in pv_carga_exibicao.columns:
-        pv_carga_exibicao["Data"] = pd.to_datetime(pv_carga_exibicao["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
-
-    st.dataframe(pv_carga_exibicao, use_container_width=True)
-
-    st.subheader("⚠️ PVs em Risco")
-
-    risco_exibicao = risco.copy()
-    if not risco_exibicao.empty:
-        risco_exibicao["Horas"] = risco_exibicao["Horas"].round(1)
-        risco_exibicao["Dias Necessários"] = risco_exibicao["Dias Necessários"].round(1)
-        risco_exibicao["Dias Disponíveis"] = risco_exibicao["Dias Disponíveis"].round(1)
-
-        if "Data" in risco_exibicao.columns:
-            risco_exibicao["Data"] = pd.to_datetime(risco_exibicao["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
-
-    st.dataframe(risco_exibicao, use_container_width=True)
-
-    st.subheader("📅 Calendário Industrial")
-    st.dataframe(cal, use_container_width=True)
-
-    st.subheader("🏭 Capacidade x Carga por Processo")
-    st.dataframe(dem_proc, use_container_width=True)
-
-    st.divider()
-
-# ============================================================
 # ===================== FILA POR PROCESSO ====================
 # ============================================================
 st.subheader("📌 Fila por Processo")
@@ -2867,6 +2811,63 @@ else:
     st.info("Ainda não há histórico de baixas de corte para estorno.")
 
 st.divider()
+
+# ============================================================
+# ===================== VISÃO OPERACIONAL ====================
+# ============================================================
+st.markdown("## ⚙️ Visão Operacional")
+st.caption("Consulta detalhada, filtros, fila de produção e auditorias.")
+
+with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
+
+    st.subheader("📌 Auditoria de Capacidade")
+
+    auditoria = dem.copy()
+    auditoria["Semáforo"] = auditoria["Ocupacao"].apply(status)
+    auditoria["Ocupação (%)"] = auditoria["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    auditoria["Horas"] = auditoria["Horas"].apply(lambda x: fmt_br_num(x, 1))
+    auditoria["Capacidade"] = auditoria["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+    auditoria["Saldo (h)"] = auditoria["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
+
+    st.dataframe(
+        auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
+        use_container_width=True
+    )
+
+    st.subheader("⏱️ Previsão de Atraso por PV")
+
+    pv_carga_exibicao = pv_carga.copy()
+    pv_carga_exibicao["Horas"] = pv_carga_exibicao["Horas"].round(1)
+    pv_carga_exibicao["Dias Necessários"] = pv_carga_exibicao["Dias Necessários"].round(1)
+    pv_carga_exibicao["Dias Disponíveis"] = pv_carga_exibicao["Dias Disponíveis"].round(1)
+    pv_carga_exibicao["Atraso (dias)"] = pv_carga_exibicao["Atraso (dias)"].astype(int)
+
+    if "Data" in pv_carga_exibicao.columns:
+        pv_carga_exibicao["Data"] = pd.to_datetime(pv_carga_exibicao["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
+
+    st.dataframe(pv_carga_exibicao, use_container_width=True)
+
+    st.subheader("⚠️ PVs em Risco")
+
+    risco_exibicao = risco.copy()
+    if not risco_exibicao.empty:
+        risco_exibicao["Horas"] = risco_exibicao["Horas"].round(1)
+        risco_exibicao["Dias Necessários"] = risco_exibicao["Dias Necessários"].round(1)
+        risco_exibicao["Dias Disponíveis"] = risco_exibicao["Dias Disponíveis"].round(1)
+
+        if "Data" in risco_exibicao.columns:
+            risco_exibicao["Data"] = pd.to_datetime(risco_exibicao["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
+
+    st.dataframe(risco_exibicao, use_container_width=True)
+
+    st.subheader("📅 Calendário Industrial")
+    st.dataframe(cal, use_container_width=True)
+
+    st.subheader("🏭 Capacidade x Carga por Processo")
+    st.dataframe(dem_proc, use_container_width=True)
+
+    st.divider()
+
 
 # =========================================================
 # DASHBOARD DO CORTE
