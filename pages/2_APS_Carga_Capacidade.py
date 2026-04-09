@@ -3373,6 +3373,17 @@ if not critico.empty:
     st.error("Capacidade próxima ou acima do limite detectada.")
 
     critico_exib = critico.copy()
+
+    # saneamento forte das colunas numéricas
+    for col in ["Ocupacao", "Horas", "Capacidade"]:
+        if col not in critico_exib.columns:
+            critico_exib[col] = 0
+
+        critico_exib[col] = pd.to_numeric(
+            critico_exib[col],
+            errors="coerce"
+        ).fillna(0)
+
     critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
     critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
