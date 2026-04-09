@@ -613,9 +613,9 @@ def historico_baixas_completo(df_baixas):
     return _padronizar_df_baixas(df_baixas.copy())
 
 # ============================================================
-# MINI DASHBOARD POR GARGALO
+# MINI DASHBOARD POR GARGALO v2 (INTELIGENTE)
 # LOCAL: FUNÇÕES AUXILIARES / CÁLCULOS / DASHBOARDS
-# INSERIR ANTES DA PARTE VISUAL DA PÁGINA
+# SUBSTITUIR TODO O BLOCO ANTIGO DO MINI DASHBOARD
 # ============================================================
 
 def _normalizar_coluna_processo(df, coluna="Processo"):
@@ -632,21 +632,23 @@ def _normalizar_coluna_processo(df, coluna="Processo"):
 
 def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     """
-    Monta um resumo operacional por gargalo/processo com base na fila atual
-    e nas baixas operacionais ativas.
+    Monta um dashboard inteligente por gargalo/processo com score de criticidade.
     """
-    # ------------------------------------------------------------
-    # BASE DA FILA
-    # ------------------------------------------------------------
     if fila is None or fila.empty:
         return pd.DataFrame(columns=[
             "Processo",
             "Qtd_Fila",
             "Horas_Fila",
             "Qtd_Baixas_Ativas",
-            "Carga_Total"
+            "Carga_Total",
+            "Score",
+            "Status_Gargalo",
+            "Ranking"
         ])
 
+    # ------------------------------------------------------------
+    # BASE DA FILA
+    # ------------------------------------------------------------
     fila_tmp = fila.copy()
     fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
 
@@ -680,7 +682,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         )
 
     # ------------------------------------------------------------
-    # CONSOLIDAÇÃO FINAL
+    # CONSOLIDAÇÃO
     # ------------------------------------------------------------
     df_dash = resumo_fila.merge(
         resumo_baixas,
@@ -692,21 +694,50 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Qtd_Fila"] = df_dash["Qtd_Fila"].fillna(0).astype(int)
     df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
 
-    # carga simples = fila + itens já em baixa
+    # ------------------------------------------------------------
+    # CARGA TOTAL
+    # ------------------------------------------------------------
     df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
 
-    # ordenação dos gargalos mais carregados
+    # ------------------------------------------------------------
+    # SCORE INTELIGENTE DE GARGALO
+    # Peso maior para horas (carga real)
+    # ------------------------------------------------------------
+    df_dash["Score"] = (
+        (df_dash["Horas_Fila"] * 1.5) +
+        (df_dash["Qtd_Fila"] * 1.0) +
+        (df_dash["Qtd_Baixas_Ativas"] * 0.5)
+    )
+
+    # ------------------------------------------------------------
+    # CLASSIFICAÇÃO AUTOMÁTICA
+    # ------------------------------------------------------------
+    def classificar_gargalo(score):
+        if score >= 80:
+            return "CRITICO"
+        elif score >= 30:
+            return "ATENCAO"
+        else:
+            return "CONTROLADO"
+
+    df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar_gargalo)
+
+    # ------------------------------------------------------------
+    # ORDENAÇÃO E RANKING
+    # ------------------------------------------------------------
     df_dash = df_dash.sort_values(
-        by=["Carga_Total", "Horas_Fila", "Qtd_Fila"],
+        by=["Score", "Horas_Fila", "Qtd_Fila"],
         ascending=[False, False, False]
     ).reset_index(drop=True)
+
+    df_dash["Ranking"] = df_dash.index + 1
 
     return df_dash
 
 
 def resumo_cards_gargalos(df_dash):
     """
-    Gera indicadores compactos para cards do mini dashboard.
+    Gera indicadores compactos para os cards do mini dashboard.
     """
     if df_dash is None or df_dash.empty:
         return {
@@ -714,7 +745,10 @@ def resumo_cards_gargalos(df_dash):
             "total_itens_fila": 0,
             "total_horas_fila": 0.0,
             "total_baixas_ativas": 0,
-            "gargalo_critico": "-"
+            "gargalo_critico": "-",
+            "qtd_criticos": 0,
+            "qtd_atencao": 0,
+            "qtd_controlados": 0
         }
 
     gargalo_critico = df_dash.iloc[0]["Processo"] if not df_dash.empty else "-"
@@ -724,7 +758,10 @@ def resumo_cards_gargalos(df_dash):
         "total_itens_fila": int(df_dash["Qtd_Fila"].sum()),
         "total_horas_fila": float(df_dash["Horas_Fila"].sum()),
         "total_baixas_ativas": int(df_dash["Qtd_Baixas_Ativas"].sum()),
-        "gargalo_critico": gargalo_critico
+        "gargalo_critico": gargalo_critico,
+        "qtd_criticos": int((df_dash["Status_Gargalo"] == "CRITICO").sum()),
+        "qtd_atencao": int((df_dash["Status_Gargalo"] == "ATENCAO").sum()),
+        "qtd_controlados": int((df_dash["Status_Gargalo"] == "CONTROLADO").sum())
     }
 
 # ===============================
