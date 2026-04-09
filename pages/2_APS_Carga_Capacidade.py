@@ -1804,420 +1804,6 @@ def resumo_cards_gargalos(df_dash):
     }
 
 # ============================================================
-# MINI DASHBOARD POR GARGALO 
-# LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
-# SUBSTITUIR TODO O BLOCO VISUAL ANTIGO
-# ============================================================
-
-st.markdown("## 🔥 Mini Dashboard por Gargalo")
-
-df_mini_gargalos = montar_mini_dashboard_gargalos(
-    fila=fila,
-    df_baixas_ativas=df_baixas_ativas
-)
-
-cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
-
-if df_mini_gargalos.empty:
-    st.info("Nenhum dado disponível para análise de gargalos.")
-else:
-    # ------------------------------------------------------------
-    # CARDS GERAIS
-    # ------------------------------------------------------------
-    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
-
-    with col_g1:
-        st.metric("Processos", cards_gargalos["total_processos"])
-
-    with col_g2:
-        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
-
-    with col_g3:
-        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
-
-    with col_g4:
-        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
-
-    with col_g5:
-        st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
-
-    st.markdown("### 🚨 Classificação dos Gargalos")
-
-    col_s1, col_s2, col_s3 = st.columns(3)
-
-    with col_s1:
-        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
-
-    with col_s2:
-        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
-
-    with col_s3:
-        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
-
-    # ------------------------------------------------------------
-    # TOP 3 GARGALOS MAIS CRÍTICOS
-    # ------------------------------------------------------------
-    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
-
-    top3 = df_mini_gargalos.head(3)
-    top3_cols = st.columns(3)
-
-    for i in range(3):
-        with top3_cols[i]:
-            if i < len(top3):
-                row = top3.iloc[i]
-
-                status = row["Status_Gargalo"]
-
-                if status == "CRITICO":
-                    emoji = "🔴"
-                elif status == "ATENCAO":
-                    emoji = "🟡"
-                else:
-                    emoji = "🟢"
-
-                st.metric(
-                    label=f"{emoji} {row['Processo']}",
-                    value=f"{int(row['Qtd_Fila'])} itens",
-                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
-                )
-            else:
-                st.metric(label="-", value="-", delta="-")
-
-    # ------------------------------------------------------------
-    # TABELA FINAL DE RANKING
-    # ------------------------------------------------------------
-    st.markdown("### 📊 Ranking Inteligente de Gargalos")
-
-    df_exibicao_gargalos = df_mini_gargalos.copy()
-
-    colunas_exibicao = [
-        "Ranking",
-        "Processo",
-        "Status_Gargalo",
-        "Qtd_Fila",
-        "Horas_Fila",
-        "Qtd_Baixas_Ativas",
-        "Carga_Total",
-        "Score"
-    ]
-
-    for col in colunas_exibicao:
-        if col not in df_exibicao_gargalos.columns:
-            df_exibicao_gargalos[col] = None
-
-    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
-
-    df_exibicao_gargalos["Horas_Fila"] = (
-        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    df_exibicao_gargalos["Score"] = (
-        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    st.dataframe(
-        df_exibicao_gargalos,
-        use_container_width=True,
-        hide_index=True
-    )
-
-# ---------------------------------------
-# FILA ATUAL DE CORTE
-# ---------------------------------------
-st.markdown("### 🧾 Fila Atual de Corte")
-
-if not fila_corte_dash.empty:
-    fila_corte_exib = fila_corte_dash.copy()
-
-    if "ENTREGA" in fila_corte_exib.columns:
-        fila_corte_exib["ENTREGA"] = pd.to_datetime(fila_corte_exib["ENTREGA"], errors="coerce")
-        fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-    fila_corte_exib["Horas"] = fila_corte_exib["Horas"].round(1)
-
-    colunas_corte_fila = [
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Dias para Entrega",
-        "ENTREGA"
-    ]
-    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
-
-    st.dataframe(
-        fila_corte_exib[colunas_corte_fila]
-        .sort_values(["Processo", "Dias para Entrega"], ascending=[True, True])
-        .reset_index(drop=True),
-        use_container_width=True,
-        hide_index=True,
-        height=320
-    )
-else:
-    st.success("Nenhuma operação de corte pendente no momento. 🎯")
-
-st.divider()
-
-st.subheader("🔎 Busca rápida de PV / Cliente")
-
-col_b1, col_b2 = st.columns(2)
-
-busca_pv = col_b1.text_input("Buscar por PV")
-busca_cliente = col_b2.text_input("Buscar por Cliente")
-
-busca_df = base_op.copy()
-
-if busca_pv:
-    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
-
-if busca_cliente:
-    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
-
-if busca_pv or busca_cliente:
-    busca_df["Horas"] = busca_df["Horas"].round(1)
-
-    if "ENTREGA" in busca_df.columns:
-        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-    st.dataframe(busca_df, use_container_width=True)
-
-st.subheader("📥 Exportar dados filtrados")
-
-@st.cache_data
-def converter_excel(df_export):
-    from io import BytesIO
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_export.to_excel(writer, index=False)
-    return buffer.getvalue()
-
-if not busca_df.empty:
-    excel_bytes = converter_excel(busca_df)
-
-    st.download_button(
-        label="📥 Baixar Excel",
-        data=excel_bytes,
-        file_name="consulta_pvs.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-st.divider()
-
-st.subheader("🧪 Auditoria de PV")
-
-if not df_auditoria_pv.empty:
-
-    df_auditoria_pv["PV"] = df_auditoria_pv["PV"].astype(str).str.strip()
-
-    total_excel = pvs_totais_excel
-    total_aps = df_auditoria_pv["PV"].nunique()
-    total_auditadas = len(df_auditoria_pv)
-
-    resumo_auditoria = (
-        df_auditoria_pv["Status"]
-        .value_counts()
-        .reset_index()
-    )
-    resumo_auditoria.columns = ["Status", "Qtde"]
-
-    def semaforo_auditoria(x):
-        x = str(x).strip().upper()
-        if x == "OK":
-            return "🟢"
-        elif x == "DIVERGENTE":
-            return "🟡"
-        elif x == "FALTANDO":
-            return "🔴"
-        elif x == "SEM PROCESSO VÁLIDO":
-            return "🟠"
-        return "⚪"
-
-    df_auditoria_exibicao = df_auditoria_pv.copy()
-    df_auditoria_exibicao["Semáforo"] = df_auditoria_exibicao["Status"].apply(semaforo_auditoria)
-
-    qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
-    qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
-    qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
-    qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
-
-    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-    col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
-    col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
-    col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
-    col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
-    col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
-    col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
-    col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
-
-    st.markdown("### 📊 Resumo da Auditoria")
-    st.dataframe(
-        resumo_auditoria,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.markdown("### 🚨 PVs com inconsistência de processo")
-
-    problemas_processo = df_auditoria_pv[
-        df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
-    ].copy()
-
-    if not problemas_processo.empty:
-        if "DATA_ENTREGA_APS" in problemas_processo.columns:
-            problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
-                problemas_processo["DATA_ENTREGA_APS"],
-                errors="coerce"
-            ).dt.strftime("%d/%m/%Y")
-
-        colunas_problema = [
-            "PV",
-            "Cliente",
-            "CODIGO_PV",
-            "DATA_ENTREGA_APS",
-            "Qtd",
-            "Status",
-            "Motivo"
-        ]
-        colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
-
-        st.dataframe(
-            problemas_processo[colunas_problema]
-            .sort_values(["PV"])
-            .reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
-
-    st.markdown("### 📋 Detalhamento da Auditoria")
-    colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
-
-    st.dataframe(
-        df_auditoria_exibicao[colunas_auditoria]
-        .sort_values(["Status", "PV"])
-        .reset_index(drop=True),
-        use_container_width=True,
-        height=420
-    )
-
-else:
-    st.info("Nenhuma auditoria de PV disponível.")
-
-with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
-
-    base_roteiro = df_pv.copy()
-    base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
-
-    processos_ordenados = [
-        "CORTE - SERRA",
-        "CORTE-PLASMA",
-        "CORTE-LASER",
-        "CORTE-GUILHOTINA",
-        "TORNO CONVENCIONAL",
-        "TORNO CNC",
-        "CENTRO DE USINAGEM",
-        "FRESADORAS",
-        "FURADEIRA DE BANCADA",
-        "PRENSA (AMASSAMENTO)",
-        "CALANDRA",
-        "DOBRADEIRA",
-        "ROSQUEADEIRA",
-        "METALEIRA",
-        "SOLDAGEM",
-        "ACABAMENTO",
-        "JATEAMENTO",
-        "PINTURA",
-        "MONTAGEM",
-        "DIVERSOS"
-    ]
-
-    processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
-
-    if len(processos_validos) == 0:
-        st.warning("Nenhum processo válido encontrado na planilha.")
-    else:
-        roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
-
-        for proc in processos_validos:
-            roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
-
-        st.markdown("### 🔎 Consultar Roteiro por Código")
-
-        col_r1, col_r2, col_r3 = st.columns([2, 1, 1])
-
-        codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
-        codigo_sel = col_r1.selectbox("Selecione o código", codigos)
-
-        roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
-
-        roteiro_detalhado = roteiro_sel.melt(
-            id_vars=["CODIGO_KEY"],
-            value_vars=processos_validos,
-            var_name="Processo",
-            value_name="Tempo (min)"
-        )
-
-        roteiro_detalhado["Tempo (min)"] = pd.to_numeric(
-            roteiro_detalhado["Tempo (min)"], errors="coerce"
-        ).fillna(0)
-
-        roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0].copy()
-
-        ordem = {p: i for i, p in enumerate(processos_ordenados)}
-        roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
-        roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
-
-        roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
-        roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
-
-        tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
-        tempo_total_h = round(tempo_total_min / 60, 2)
-        qtd_processos = len(roteiro_exibicao)
-
-        col_r2.metric("🧩 Etapas", f"{qtd_processos:,.0f}")
-        col_r3.metric("⏱️ Tempo Total (h)", f"{tempo_total_h:,.2f}")
-
-        st.markdown(f"### 🛠️ Roteiro do Código: `{codigo_sel}`")
-
-        if not roteiro_exibicao.empty:
-            st.dataframe(
-                roteiro_exibicao.reset_index(drop=True),
-                use_container_width=True,
-                height=420,
-                hide_index=True
-            )
-        else:
-            st.warning("Este código não possui tempos válidos nos processos mapeados.")
-
-        with st.expander("📋 Base Completa de Roteiros", expanded=False):
-            st.dataframe(
-                roteiro,
-                use_container_width=True,
-                height=320,
-                hide_index=True
-            )
-
-        from io import BytesIO
-
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            roteiro.to_excel(writer, index=False)
-
-        st.download_button(
-            label="📥 Baixar Roteiros em Excel",
-            data=buffer.getvalue(),
-            file_name="roteiro_fabricacao.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-# ============================================================
 # ======================= GRÁFICOS ============================
 # ============================================================
 st.markdown("## 📈 Indicadores Visuais")
@@ -3277,6 +2863,420 @@ else:
     st.info("Ainda não há histórico de baixas de corte para estorno.")
 
 st.divider()
+
+# ============================================================
+# MINI DASHBOARD POR GARGALO 
+# LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
+# SUBSTITUIR TODO O BLOCO VISUAL ANTIGO
+# ============================================================
+
+st.markdown("## 🔥 Mini Dashboard por Gargalo")
+
+df_mini_gargalos = montar_mini_dashboard_gargalos(
+    fila=fila,
+    df_baixas_ativas=df_baixas_ativas
+)
+
+cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
+
+if df_mini_gargalos.empty:
+    st.info("Nenhum dado disponível para análise de gargalos.")
+else:
+    # ------------------------------------------------------------
+    # CARDS GERAIS
+    # ------------------------------------------------------------
+    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+
+    with col_g1:
+        st.metric("Processos", cards_gargalos["total_processos"])
+
+    with col_g2:
+        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
+
+    with col_g3:
+        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
+
+    with col_g4:
+        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
+
+    with col_g5:
+        st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
+
+    st.markdown("### 🚨 Classificação dos Gargalos")
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+
+    with col_s1:
+        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
+
+    with col_s2:
+        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
+
+    with col_s3:
+        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
+
+    # ------------------------------------------------------------
+    # TOP 3 GARGALOS MAIS CRÍTICOS
+    # ------------------------------------------------------------
+    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
+
+    top3 = df_mini_gargalos.head(3)
+    top3_cols = st.columns(3)
+
+    for i in range(3):
+        with top3_cols[i]:
+            if i < len(top3):
+                row = top3.iloc[i]
+
+                status = row["Status_Gargalo"]
+
+                if status == "CRITICO":
+                    emoji = "🔴"
+                elif status == "ATENCAO":
+                    emoji = "🟡"
+                else:
+                    emoji = "🟢"
+
+                st.metric(
+                    label=f"{emoji} {row['Processo']}",
+                    value=f"{int(row['Qtd_Fila'])} itens",
+                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
+                )
+            else:
+                st.metric(label="-", value="-", delta="-")
+
+    # ------------------------------------------------------------
+    # TABELA FINAL DE RANKING
+    # ------------------------------------------------------------
+    st.markdown("### 📊 Ranking Inteligente de Gargalos")
+
+    df_exibicao_gargalos = df_mini_gargalos.copy()
+
+    colunas_exibicao = [
+        "Ranking",
+        "Processo",
+        "Status_Gargalo",
+        "Qtd_Fila",
+        "Horas_Fila",
+        "Qtd_Baixas_Ativas",
+        "Carga_Total",
+        "Score"
+    ]
+
+    for col in colunas_exibicao:
+        if col not in df_exibicao_gargalos.columns:
+            df_exibicao_gargalos[col] = None
+
+    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
+
+    df_exibicao_gargalos["Horas_Fila"] = (
+        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    df_exibicao_gargalos["Score"] = (
+        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    st.dataframe(
+        df_exibicao_gargalos,
+        use_container_width=True,
+        hide_index=True
+    )
+
+# ---------------------------------------
+# FILA ATUAL DE CORTE
+# ---------------------------------------
+st.markdown("### 🧾 Fila Atual de Corte")
+
+if not fila_corte_dash.empty:
+    fila_corte_exib = fila_corte_dash.copy()
+
+    if "ENTREGA" in fila_corte_exib.columns:
+        fila_corte_exib["ENTREGA"] = pd.to_datetime(fila_corte_exib["ENTREGA"], errors="coerce")
+        fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    fila_corte_exib["Horas"] = fila_corte_exib["Horas"].round(1)
+
+    colunas_corte_fila = [
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Dias para Entrega",
+        "ENTREGA"
+    ]
+    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
+
+    st.dataframe(
+        fila_corte_exib[colunas_corte_fila]
+        .sort_values(["Processo", "Dias para Entrega"], ascending=[True, True])
+        .reset_index(drop=True),
+        use_container_width=True,
+        hide_index=True,
+        height=320
+    )
+else:
+    st.success("Nenhuma operação de corte pendente no momento. 🎯")
+
+st.divider()
+
+st.subheader("🔎 Busca rápida de PV / Cliente")
+
+col_b1, col_b2 = st.columns(2)
+
+busca_pv = col_b1.text_input("Buscar por PV")
+busca_cliente = col_b2.text_input("Buscar por Cliente")
+
+busca_df = base_op.copy()
+
+if busca_pv:
+    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
+
+if busca_cliente:
+    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
+
+if busca_pv or busca_cliente:
+    busca_df["Horas"] = busca_df["Horas"].round(1)
+
+    if "ENTREGA" in busca_df.columns:
+        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    st.dataframe(busca_df, use_container_width=True)
+
+st.subheader("📥 Exportar dados filtrados")
+
+@st.cache_data
+def converter_excel(df_export):
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_export.to_excel(writer, index=False)
+    return buffer.getvalue()
+
+if not busca_df.empty:
+    excel_bytes = converter_excel(busca_df)
+
+    st.download_button(
+        label="📥 Baixar Excel",
+        data=excel_bytes,
+        file_name="consulta_pvs.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+st.divider()
+
+st.subheader("🧪 Auditoria de PV")
+
+if not df_auditoria_pv.empty:
+
+    df_auditoria_pv["PV"] = df_auditoria_pv["PV"].astype(str).str.strip()
+
+    total_excel = pvs_totais_excel
+    total_aps = df_auditoria_pv["PV"].nunique()
+    total_auditadas = len(df_auditoria_pv)
+
+    resumo_auditoria = (
+        df_auditoria_pv["Status"]
+        .value_counts()
+        .reset_index()
+    )
+    resumo_auditoria.columns = ["Status", "Qtde"]
+
+    def semaforo_auditoria(x):
+        x = str(x).strip().upper()
+        if x == "OK":
+            return "🟢"
+        elif x == "DIVERGENTE":
+            return "🟡"
+        elif x == "FALTANDO":
+            return "🔴"
+        elif x == "SEM PROCESSO VÁLIDO":
+            return "🟠"
+        return "⚪"
+
+    df_auditoria_exibicao = df_auditoria_pv.copy()
+    df_auditoria_exibicao["Semáforo"] = df_auditoria_exibicao["Status"].apply(semaforo_auditoria)
+
+    qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
+    qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
+    qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
+    qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
+
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
+    col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
+    col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
+    col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
+    col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
+    col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
+    col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
+
+    st.markdown("### 📊 Resumo da Auditoria")
+    st.dataframe(
+        resumo_auditoria,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.markdown("### 🚨 PVs com inconsistência de processo")
+
+    problemas_processo = df_auditoria_pv[
+        df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
+    ].copy()
+
+    if not problemas_processo.empty:
+        if "DATA_ENTREGA_APS" in problemas_processo.columns:
+            problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
+                problemas_processo["DATA_ENTREGA_APS"],
+                errors="coerce"
+            ).dt.strftime("%d/%m/%Y")
+
+        colunas_problema = [
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "DATA_ENTREGA_APS",
+            "Qtd",
+            "Status",
+            "Motivo"
+        ]
+        colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
+
+        st.dataframe(
+            problemas_processo[colunas_problema]
+            .sort_values(["PV"])
+            .reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
+
+    st.markdown("### 📋 Detalhamento da Auditoria")
+    colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
+
+    st.dataframe(
+        df_auditoria_exibicao[colunas_auditoria]
+        .sort_values(["Status", "PV"])
+        .reset_index(drop=True),
+        use_container_width=True,
+        height=420
+    )
+
+else:
+    st.info("Nenhuma auditoria de PV disponível.")
+
+with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
+
+    base_roteiro = df_pv.copy()
+    base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
+
+    processos_ordenados = [
+        "CORTE - SERRA",
+        "CORTE-PLASMA",
+        "CORTE-LASER",
+        "CORTE-GUILHOTINA",
+        "TORNO CONVENCIONAL",
+        "TORNO CNC",
+        "CENTRO DE USINAGEM",
+        "FRESADORAS",
+        "FURADEIRA DE BANCADA",
+        "PRENSA (AMASSAMENTO)",
+        "CALANDRA",
+        "DOBRADEIRA",
+        "ROSQUEADEIRA",
+        "METALEIRA",
+        "SOLDAGEM",
+        "ACABAMENTO",
+        "JATEAMENTO",
+        "PINTURA",
+        "MONTAGEM",
+        "DIVERSOS"
+    ]
+
+    processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
+
+    if len(processos_validos) == 0:
+        st.warning("Nenhum processo válido encontrado na planilha.")
+    else:
+        roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
+
+        for proc in processos_validos:
+            roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
+
+        st.markdown("### 🔎 Consultar Roteiro por Código")
+
+        col_r1, col_r2, col_r3 = st.columns([2, 1, 1])
+
+        codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+        codigo_sel = col_r1.selectbox("Selecione o código", codigos)
+
+        roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
+
+        roteiro_detalhado = roteiro_sel.melt(
+            id_vars=["CODIGO_KEY"],
+            value_vars=processos_validos,
+            var_name="Processo",
+            value_name="Tempo (min)"
+        )
+
+        roteiro_detalhado["Tempo (min)"] = pd.to_numeric(
+            roteiro_detalhado["Tempo (min)"], errors="coerce"
+        ).fillna(0)
+
+        roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0].copy()
+
+        ordem = {p: i for i, p in enumerate(processos_ordenados)}
+        roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
+        roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
+
+        roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
+        roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
+
+        tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
+        tempo_total_h = round(tempo_total_min / 60, 2)
+        qtd_processos = len(roteiro_exibicao)
+
+        col_r2.metric("🧩 Etapas", f"{qtd_processos:,.0f}")
+        col_r3.metric("⏱️ Tempo Total (h)", f"{tempo_total_h:,.2f}")
+
+        st.markdown(f"### 🛠️ Roteiro do Código: `{codigo_sel}`")
+
+        if not roteiro_exibicao.empty:
+            st.dataframe(
+                roteiro_exibicao.reset_index(drop=True),
+                use_container_width=True,
+                height=420,
+                hide_index=True
+            )
+        else:
+            st.warning("Este código não possui tempos válidos nos processos mapeados.")
+
+        with st.expander("📋 Base Completa de Roteiros", expanded=False):
+            st.dataframe(
+                roteiro,
+                use_container_width=True,
+                height=320,
+                hide_index=True
+            )
+
+        from io import BytesIO
+
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            roteiro.to_excel(writer, index=False)
+
+        st.download_button(
+            label="📥 Baixar Roteiros em Excel",
+            data=buffer.getvalue(),
+            file_name="roteiro_fabricacao.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # ============================================================
 # ============ TABELAS ANALÍTICAS DE CAPACIDADE ==============
