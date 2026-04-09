@@ -612,6 +612,121 @@ def historico_baixas_completo(df_baixas):
 
     return _padronizar_df_baixas(df_baixas.copy())
 
+# ============================================================
+# MINI DASHBOARD POR GARGALO
+# LOCAL: FUNÇÕES AUXILIARES / CÁLCULOS / DASHBOARDS
+# INSERIR ANTES DA PARTE VISUAL DA PÁGINA
+# ============================================================
+
+def _normalizar_coluna_processo(df, coluna="Processo"):
+    """
+    Padroniza a coluna de processo para agrupamentos seguros.
+    """
+    if df is None or df.empty or coluna not in df.columns:
+        return df
+
+    df = df.copy()
+    df[coluna] = df[coluna].fillna("").astype(str).str.strip().str.upper()
+    return df
+
+
+def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
+    """
+    Monta um resumo operacional por gargalo/processo com base na fila atual
+    e nas baixas operacionais ativas.
+    """
+    # ------------------------------------------------------------
+    # BASE DA FILA
+    # ------------------------------------------------------------
+    if fila is None or fila.empty:
+        return pd.DataFrame(columns=[
+            "Processo",
+            "Qtd_Fila",
+            "Horas_Fila",
+            "Qtd_Baixas_Ativas",
+            "Carga_Total"
+        ])
+
+    fila_tmp = fila.copy()
+    fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
+
+    if "Horas" not in fila_tmp.columns:
+        fila_tmp["Horas"] = 0
+
+    fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
+
+    resumo_fila = (
+        fila_tmp.groupby("Processo", dropna=False)
+        .agg(
+            Qtd_Fila=("Processo", "size"),
+            Horas_Fila=("Horas", "sum")
+        )
+        .reset_index()
+    )
+
+    # ------------------------------------------------------------
+    # BASE DE BAIXAS ATIVAS
+    # ------------------------------------------------------------
+    if df_baixas_ativas is None or df_baixas_ativas.empty:
+        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
+    else:
+        baixas_tmp = df_baixas_ativas.copy()
+        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
+
+        resumo_baixas = (
+            baixas_tmp.groupby("Processo", dropna=False)
+            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
+            .reset_index()
+        )
+
+    # ------------------------------------------------------------
+    # CONSOLIDAÇÃO FINAL
+    # ------------------------------------------------------------
+    df_dash = resumo_fila.merge(
+        resumo_baixas,
+        on="Processo",
+        how="left"
+    )
+
+    df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0).astype(int)
+    df_dash["Qtd_Fila"] = df_dash["Qtd_Fila"].fillna(0).astype(int)
+    df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
+
+    # carga simples = fila + itens já em baixa
+    df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
+
+    # ordenação dos gargalos mais carregados
+    df_dash = df_dash.sort_values(
+        by=["Carga_Total", "Horas_Fila", "Qtd_Fila"],
+        ascending=[False, False, False]
+    ).reset_index(drop=True)
+
+    return df_dash
+
+
+def resumo_cards_gargalos(df_dash):
+    """
+    Gera indicadores compactos para cards do mini dashboard.
+    """
+    if df_dash is None or df_dash.empty:
+        return {
+            "total_processos": 0,
+            "total_itens_fila": 0,
+            "total_horas_fila": 0.0,
+            "total_baixas_ativas": 0,
+            "gargalo_critico": "-"
+        }
+
+    gargalo_critico = df_dash.iloc[0]["Processo"] if not df_dash.empty else "-"
+
+    return {
+        "total_processos": int(df_dash["Processo"].nunique()),
+        "total_itens_fila": int(df_dash["Qtd_Fila"].sum()),
+        "total_horas_fila": float(df_dash["Horas_Fila"].sum()),
+        "total_baixas_ativas": int(df_dash["Qtd_Baixas_Ativas"].sum()),
+        "gargalo_critico": gargalo_critico
+    }
+
 # ===============================
 # CSS VISUAL PREMIUM APS
 # ===============================
@@ -1960,7 +2075,7 @@ with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
 
     st.plotly_chart(fig_cliente, use_container_width=True)
 
-    # ===============================
+# ===============================
 # DISTRIBUIÇÃO DE ATRASO (NOVA VISÃO EXECUTIVA)
 # ===============================
 st.subheader("📊 Distribuição de Atraso por Faixa")
@@ -2068,6 +2183,8 @@ if not df_atraso.empty:
 
 else:
     st.success("Nenhum atraso 🎉")
+
+
 
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
@@ -2972,6 +3089,55 @@ if "df_baixas_historico" in globals() and df_baixas_historico is not None and no
 
 else:
     st.info("Histórico de baixas não disponível para gerar a evolução diária.")
+
+# ============================================================
+# MINI DASHBOARD POR GARGALO
+# LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
+# INSERIR ABAIXO DO DASHBOARD DO CORTE / INDICADORES OPERACIONAIS
+# ============================================================
+
+st.markdown("## 📊 Mini Dashboard por Gargalo")
+
+df_mini_gargalos = montar_mini_dashboard_gargalos(
+    fila=fila,
+    df_baixas_ativas=df_baixas_ativas
+)
+
+cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
+
+col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+
+with col_g1:
+    st.metric("Processos", cards_gargalos["total_processos"])
+
+with col_g2:
+    st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
+
+with col_g3:
+    st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
+
+with col_g4:
+    st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
+
+with col_g5:
+    st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
+
+if df_mini_gargalos.empty:
+    st.info("Nenhum dado disponível para o mini dashboard por gargalo.")
+else:
+    df_exibicao_gargalos = df_mini_gargalos.copy()
+
+    df_exibicao_gargalos["Horas_Fila"] = (
+        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    st.dataframe(
+        df_exibicao_gargalos,
+        use_container_width=True,
+        hide_index=True
+    )
 
 # ---------------------------------------
 # FILA ATUAL DE CORTE
