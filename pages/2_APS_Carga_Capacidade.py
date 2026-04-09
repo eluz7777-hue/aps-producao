@@ -3128,12 +3128,12 @@ else:
     st.info("Histórico de baixas não disponível para gerar a evolução diária.")
 
 # ============================================================
-# MINI DASHBOARD POR GARGALO
+# MINI DASHBOARD POR GARGALO v2
 # LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
-# INSERIR ABAIXO DO DASHBOARD DO CORTE / INDICADORES OPERACIONAIS
+# SUBSTITUIR TODO O BLOCO VISUAL ANTIGO
 # ============================================================
 
-st.markdown("## 📊 Mini Dashboard por Gargalo")
+st.markdown("## 🔥 Mini Dashboard por Gargalo v2")
 
 df_mini_gargalos = montar_mini_dashboard_gargalos(
     fila=fila,
@@ -3142,30 +3142,104 @@ df_mini_gargalos = montar_mini_dashboard_gargalos(
 
 cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
 
-col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
-
-with col_g1:
-    st.metric("Processos", cards_gargalos["total_processos"])
-
-with col_g2:
-    st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
-
-with col_g3:
-    st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
-
-with col_g4:
-    st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
-
-with col_g5:
-    st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
-
 if df_mini_gargalos.empty:
-    st.info("Nenhum dado disponível para o mini dashboard por gargalo.")
+    st.info("Nenhum dado disponível para análise de gargalos.")
 else:
+    # ------------------------------------------------------------
+    # CARDS GERAIS
+    # ------------------------------------------------------------
+    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+
+    with col_g1:
+        st.metric("Processos", cards_gargalos["total_processos"])
+
+    with col_g2:
+        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
+
+    with col_g3:
+        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
+
+    with col_g4:
+        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
+
+    with col_g5:
+        st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
+
+    st.markdown("### 🚨 Classificação dos Gargalos")
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+
+    with col_s1:
+        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
+
+    with col_s2:
+        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
+
+    with col_s3:
+        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
+
+    # ------------------------------------------------------------
+    # TOP 3 GARGALOS MAIS CRÍTICOS
+    # ------------------------------------------------------------
+    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
+
+    top3 = df_mini_gargalos.head(3)
+    top3_cols = st.columns(3)
+
+    for i in range(3):
+        with top3_cols[i]:
+            if i < len(top3):
+                row = top3.iloc[i]
+
+                status = row["Status_Gargalo"]
+
+                if status == "CRITICO":
+                    emoji = "🔴"
+                elif status == "ATENCAO":
+                    emoji = "🟡"
+                else:
+                    emoji = "🟢"
+
+                st.metric(
+                    label=f"{emoji} {row['Processo']}",
+                    value=f"{int(row['Qtd_Fila'])} itens",
+                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
+                )
+            else:
+                st.metric(label="-", value="-", delta="-")
+
+    # ------------------------------------------------------------
+    # TABELA FINAL DE RANKING
+    # ------------------------------------------------------------
+    st.markdown("### 📊 Ranking Inteligente de Gargalos")
+
     df_exibicao_gargalos = df_mini_gargalos.copy()
+
+    colunas_exibicao = [
+        "Ranking",
+        "Processo",
+        "Status_Gargalo",
+        "Qtd_Fila",
+        "Horas_Fila",
+        "Qtd_Baixas_Ativas",
+        "Carga_Total",
+        "Score"
+    ]
+
+    for col in colunas_exibicao:
+        if col not in df_exibicao_gargalos.columns:
+            df_exibicao_gargalos[col] = None
+
+    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
 
     df_exibicao_gargalos["Horas_Fila"] = (
         pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    df_exibicao_gargalos["Score"] = (
+        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
         .fillna(0)
         .round(1)
     )
