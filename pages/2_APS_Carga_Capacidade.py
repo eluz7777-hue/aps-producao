@@ -2227,74 +2227,30 @@ fig_status = px.pie(
 
 st.plotly_chart(fig_status, use_container_width=True)
 
+
+
 # ============================================================
+# ===================== PAINEL OPERACIONAL ===================
+# ============================================================
+st.markdown("## ⚡ Painel Operacional")
+st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
+
+st.subheader("📅 PVs que vencem HOJE")
+
+base_op = df.copy()
+
+if "DATA_ENTREGA_APS" in base_op.columns:
+    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(base_op["DATA_ENTREGA_APS"], errors="coerce")
+    base_op["Dias para Entrega"] = (# ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
 # ============================================================
-with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
+with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
 
-    st.subheader("🔥 Gargalos do Período")
+    st.caption("Visões complementares da carga operacional por processo e cliente.")
 
-    gargalos = dem.sort_values(
-        by=["Periodo", "Ocupacao", "Horas"],
-        ascending=[True, False, False]
-    ).copy()
-
-    top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
-    top_gargalos["Semáforo"] = top_gargalos["Ocupacao"].apply(status)
-    top_gargalos["Ocupação (%)"] = top_gargalos["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    top_gargalos["Horas"] = top_gargalos["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    top_gargalos["Capacidade"] = top_gargalos["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-    top_gargalos["Saldo (h)"] = top_gargalos["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
-
-    st.dataframe(
-        top_gargalos[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
-        use_container_width=True
-    )
-
-    st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
-
-    dem_proc_plot = dem_proc.copy()
-
-    fig_cap_proc = px.bar(
-        dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
-        x="Processo",
-        y=["Horas", "Capacidade Processo"],
-        barmode="group"
-    )
-
-    fig_cap_proc.update_traces(
-        selector=dict(name="Horas"),
-        name="Horas Aplicadas",
-        marker_color="#FF7A00",
-        texttemplate="%{y:.0f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
-    )
-
-    fig_cap_proc.update_traces(
-        selector=dict(name="Capacidade Processo"),
-        marker_color="#1f3b73",
-        texttemplate="%{y:.0f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
-    )
-
-    fig_cap_proc.update_layout(
-        yaxis_title="Horas",
-        xaxis_title="Processo",
-        legend_title_text="Tipo",
-        legend=dict(orientation="h", y=1.1),
-        uniformtext_minsize=8,
-        uniformtext_mode="show",
-        height=650
-    )
-
-    st.plotly_chart(
-        fig_cap_proc,
-        use_container_width=True,
-        key="grafico_capacidade_carga_processo"
-    )
-
+    # ===============================
+    # BACKLOG POR PROCESSO
+    # ===============================
     st.subheader("📊 Backlog por Processo")
 
     backlog = df.groupby("Processo", as_index=False).agg(
@@ -2326,6 +2282,9 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
     st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
 
+    # ===============================
+    # CARGA POR CLIENTE
+    # ===============================
     st.subheader("📊 Carga por Cliente")
 
     hoje = pd.Timestamp.today().normalize()
@@ -2361,21 +2320,7 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
     fig_cliente_carga.update_layout(height=500)
 
-    st.plotly_chart(fig_cliente_carga, use_container_width=True)
-
-# ============================================================
-# ===================== PAINEL OPERACIONAL ===================
-# ============================================================
-st.markdown("## ⚡ Painel Operacional")
-st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
-
-st.subheader("📅 PVs que vencem HOJE")
-
-base_op = df.copy()
-
-if "DATA_ENTREGA_APS" in base_op.columns:
-    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(base_op["DATA_ENTREGA_APS"], errors="coerce")
-    base_op["Dias para Entrega"] = (base_op["DATA_ENTREGA_APS"] - hoje).dt.days
+    st.plotly_chart(fig_cliente_carga, use_container_width=True)base_op["DATA_ENTREGA_APS"] - hoje).dt.days
     base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
 else:
     base_op["Dias para Entrega"] = None
