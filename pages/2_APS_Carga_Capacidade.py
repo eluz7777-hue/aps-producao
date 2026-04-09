@@ -20,6 +20,73 @@ import math
 
 st.set_page_config(layout="wide")
 
+# ============================================================
+# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO
+# LOCAL: TOPO DO ARQUIVO (APÓS IMPORTS)
+# ============================================================
+
+import os
+import shutil
+from datetime import datetime
+
+PASTA_BACKUP_BAIXAS = "backup_baixas"
+ARQUIVO_HISTORICO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
+
+
+def _garantir_pasta_backup():
+    os.makedirs(PASTA_BACKUP_BAIXAS, exist_ok=True)
+
+
+def _gerar_nome_backup():
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return f"APS_BAIXAS_OPERACIONAIS_{timestamp}.xlsx"
+
+
+def _criar_backup():
+    try:
+        if not os.path.exists(ARQUIVO_HISTORICO_BAIXAS):
+            return False, "Arquivo não existe ainda"
+
+        _garantir_pasta_backup()
+
+        destino = os.path.join(
+            PASTA_BACKUP_BAIXAS,
+            _gerar_nome_backup()
+        )
+
+        shutil.copy2(ARQUIVO_HISTORICO_BAIXAS, destino)
+
+        return True, destino
+
+    except Exception as e:
+        return False, str(e)
+
+
+def salvar_historico_baixas(df):
+    """
+    🔴 ÚNICO PONTO OFICIAL DE GRAVAÇÃO DO HISTÓRICO
+    """
+    try:
+        # SALVA PRINCIPAL
+        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
+
+        # BACKUP AUTOMÁTICO
+        ok, msg = _criar_backup()
+
+        return {
+            "ok": True,
+            "backup_ok": ok,
+            "backup_msg": msg
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "erro": str(e),
+            "backup_ok": False,
+            "backup_msg": None
+        }
+
 # ===============================
 # FORMATAÇÃO BR
 # ===============================
@@ -316,6 +383,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     """
     Salva uma nova baixa operacional SEM apagar histórico anterior.
     Também evita duplicidade ativa/terceirizada da mesma operação.
+    Agora com BACKUP AUTOMÁTICO do histórico após gravação bem-sucedida.
     """
     caminho = garantir_arquivo_baixas(base_path)
 
@@ -338,7 +406,6 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     novo_registro = _padronizar_df_baixas(novo_registro)
 
     chave_nova = novo_registro["CHAVE_OPERACAO"].iloc[0]
-    status_novo = novo_registro["Status_Baixa"].iloc[0]
 
     # impede duplicidade ativa/terceirizada da mesma operação
     duplicado_ativo = df_existente[
@@ -355,6 +422,12 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     # gravação blindada
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
         df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
+
+    # backup automático do histórico
+    try:
+        _criar_backup()
+    except Exception:
+        pass
 
     # releitura REAL do arquivo salvo (fonte da verdade)
     try:
@@ -379,6 +452,7 @@ def historico_baixas_ativas(df_baixas):
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
     """
     Marca a baixa como ESTORNADA sem apagar histórico.
+    Agora com BACKUP AUTOMÁTICO do histórico após gravação bem-sucedida.
     """
     caminho = garantir_arquivo_baixas(base_path)
 
@@ -412,8 +486,13 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
         df_baixas[COLUNAS_BAIXAS].to_excel(writer, index=False)
 
-    return True, "Baixa estornada com sucesso."
+    # backup automático do histórico
+    try:
+        _criar_backup()
+    except Exception:
+        pass
 
+    return True, "Baixa estornada com sucesso."
     # --------------------------------------------
     # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
     # --------------------------------------------
