@@ -3273,7 +3273,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         # --------------------------------------------------------
-        # BAIXA OPERACIONAL (usa CHAVE_OPERACAO REAL da linha)
+        # BAIXA OPERACIONAL / TERCEIRIZAÇÃO / LOTE
         # --------------------------------------------------------
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
@@ -3312,6 +3312,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             )
 
             opcoes_baixa = base_baixa["ROTULO_BAIXA"].dropna().astype(str).tolist()
+
+            # =========================================================
+            # BAIXA / TERCEIRIZAÇÃO UNITÁRIA
+            # =========================================================
+            st.markdown("#### 🔹 Ação Unitária")
 
             col_bx1, col_bx2 = st.columns([2, 2])
 
@@ -3378,32 +3383,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         if df_baixas_salvo is not None and not df_baixas_salvo.empty:
                             st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
 
-                            # auditoria rápida pós-gravação
-                            df_baixas_teste = df_baixas_salvo.copy()
-
-                            for col in ["PV", "Processo", "CODIGO_PV"]:
-                                if col not in df_baixas_teste.columns:
-                                    df_baixas_teste[col] = ""
-
-                                df_baixas_teste[col] = (
-                                    df_baixas_teste[col]
-                                    .fillna("")
-                                    .astype(str)
-                                    .str.strip()
-                                    .str.upper()
-                                )
-
-                            df_baixas_teste["CHAVE_OPERACAO"] = (
-                                df_baixas_teste["PV"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["Processo"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["CODIGO_PV"].astype(str).str.strip().str.upper()
-                            )
-
-                            if chave_selecionada in df_baixas_teste["CHAVE_OPERACAO"].tolist():
-                                st.success("🧠 Validação: a operação foi localizada corretamente no histórico.")
-                            else:
-                                st.error("❌ Validação falhou: a operação não foi localizada no histórico após salvar.")
-
                         st.rerun()
 
                     except Exception as e:
@@ -3442,36 +3421,159 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         if df_baixas_salvo is not None and not df_baixas_salvo.empty:
                             st.caption(f"📁 Total de registros operacionais: {len(df_baixas_salvo)}")
 
-                            # auditoria rápida pós-gravação
-                            df_baixas_teste = df_baixas_salvo.copy()
-
-                            for col in ["PV", "Processo", "CODIGO_PV"]:
-                                if col not in df_baixas_teste.columns:
-                                    df_baixas_teste[col] = ""
-
-                                df_baixas_teste[col] = (
-                                    df_baixas_teste[col]
-                                    .fillna("")
-                                    .astype(str)
-                                    .str.strip()
-                                    .str.upper()
-                                )
-
-                            df_baixas_teste["CHAVE_OPERACAO"] = (
-                                df_baixas_teste["PV"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["Processo"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["CODIGO_PV"].astype(str).str.strip().str.upper()
-                            )
-
-                            if chave_selecionada in df_baixas_teste["CHAVE_OPERACAO"].tolist():
-                                st.success("🧠 Validação: a operação terceirizada foi localizada corretamente no histórico.")
-                            else:
-                                st.error("❌ Validação falhou: a operação terceirizada não foi localizada no histórico após salvar.")
-
                         st.rerun()
 
                     except Exception as e:
                         st.error(f"Erro ao registrar terceirização: {e}")
+
+            st.divider()
+
+            # =========================================================
+            # BAIXA / TERCEIRIZAÇÃO EM LOTE
+            # =========================================================
+            st.markdown("#### 📦 Ação em Lote")
+
+            selecao_lote_gargalo = st.multiselect(
+                "Selecione uma ou mais operações pendentes deste gargalo",
+                options=opcoes_baixa,
+                key="multiselect_baixa_lote_top3"
+            )
+
+            obs_lote_gargalo = st.text_input(
+                "Observação do lote (opcional)",
+                key="obs_lote_top3"
+            )
+
+            if selecao_lote_gargalo:
+                st.caption(f"Total selecionado para ação em lote: {len(selecao_lote_gargalo)} operação(ões).")
+
+                col_lote1, col_lote2 = st.columns(2)
+
+                # --------------------------------------------
+                # BAIXA EM LOTE
+                # --------------------------------------------
+                if col_lote1.button("📦 Confirmar Baixa em Lote", key="btn_baixa_lote_top3"):
+                    sucessos = 0
+                    falhas = []
+
+                    for label_sel in selecao_lote_gargalo:
+                        linha_lote = base_baixa[
+                            base_baixa["ROTULO_BAIXA"] == label_sel
+                        ].iloc[0]
+
+                        registro_lote = {
+                            "PV": str(linha_lote["PV"]).strip().upper(),
+                            "Cliente": str(linha_lote.get("Cliente", "SEM CLIENTE")).strip(),
+                            "CODIGO_PV": str(linha_lote.get("CODIGO_PV", "")).strip().upper(),
+                            "Processo": str(linha_lote["Processo"]).strip().upper(),
+                            "Horas": float(linha_lote["Horas"]),
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "APS - LOTE",
+                            "Observacao": str(obs_lote_gargalo).strip(),
+                            "Status_Baixa": "ATIVA",
+                            "Data_Estorno": pd.NaT,
+                            "Motivo_Estorno": ""
+                        }
+
+                        try:
+                            df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_lote)
+
+                            chave_teste = (
+                                str(registro_lote["PV"]).strip().upper() + "||" +
+                                str(registro_lote["Processo"]).strip().upper() + "||" +
+                                str(registro_lote["CODIGO_PV"]).strip().upper()
+                            )
+
+                            df_validacao = historico_baixas_completo(df_baixas_result)
+
+                            if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
+                                existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
+                            else:
+                                existe = False
+
+                            if existe:
+                                sucessos += 1
+                            else:
+                                falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']}")
+
+                        except Exception as e:
+                            falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']} ({e})")
+
+                    if sucessos > 0:
+                        st.success(f"Baixa em lote concluída com sucesso para {sucessos} operação(ões).")
+
+                    if falhas:
+                        st.warning("Algumas operações não puderam ser validadas após a baixa:")
+                        for f in falhas:
+                            st.caption(f"• {f}")
+
+                    if sucessos > 0:
+                        st.cache_data.clear()
+                        st.rerun()
+
+                # --------------------------------------------
+                # TERCEIRIZAÇÃO EM LOTE
+                # --------------------------------------------
+                if col_lote2.button("🟣 Marcar Lote como Terceirizado", key="btn_terceirizada_lote_top3"):
+                    sucessos = 0
+                    falhas = []
+
+                    for label_sel in selecao_lote_gargalo:
+                        linha_lote = base_baixa[
+                            base_baixa["ROTULO_BAIXA"] == label_sel
+                        ].iloc[0]
+
+                        registro_lote = {
+                            "PV": str(linha_lote["PV"]).strip().upper(),
+                            "Cliente": str(linha_lote.get("Cliente", "SEM CLIENTE")).strip(),
+                            "CODIGO_PV": str(linha_lote.get("CODIGO_PV", "")).strip().upper(),
+                            "Processo": str(linha_lote["Processo"]).strip().upper(),
+                            "Horas": float(linha_lote["Horas"]),
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "APS - LOTE",
+                            "Observacao": f"TERCEIRIZADA | {str(obs_lote_gargalo).strip()}" if str(obs_lote_gargalo).strip() else "TERCEIRIZADA",
+                            "Status_Baixa": "TERCEIRIZADA",
+                            "Data_Estorno": pd.NaT,
+                            "Motivo_Estorno": ""
+                        }
+
+                        try:
+                            df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_lote)
+
+                            chave_teste = (
+                                str(registro_lote["PV"]).strip().upper() + "||" +
+                                str(registro_lote["Processo"]).strip().upper() + "||" +
+                                str(registro_lote["CODIGO_PV"]).strip().upper()
+                            )
+
+                            df_validacao = historico_baixas_completo(df_baixas_result)
+
+                            if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
+                                existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
+                            else:
+                                existe = False
+
+                            if existe:
+                                sucessos += 1
+                            else:
+                                falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']}")
+
+                        except Exception as e:
+                            falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']} ({e})")
+
+                    if sucessos > 0:
+                        st.success(f"Lote terceirizado com sucesso para {sucessos} operação(ões).")
+
+                    if falhas:
+                        st.warning("Algumas operações não puderam ser validadas após a terceirização:")
+                        for f in falhas:
+                            st.caption(f"• {f}")
+
+                    if sucessos > 0:
+                        st.cache_data.clear()
+                        st.rerun()
+            else:
+                st.info("Selecione uma ou mais operações para habilitar a ação em lote.")
 
         st.divider()
 
