@@ -3384,7 +3384,9 @@ if not critico.empty:
             errors="coerce"
         ).fillna(0)
 
-    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
+    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(
+    lambda x: "🔴" if x >= 100 else "🟠" if x >= 90 else "🟡" if x >= 75 else "🟢"
+    )
     critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
