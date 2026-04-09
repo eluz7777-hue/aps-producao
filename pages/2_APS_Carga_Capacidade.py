@@ -612,157 +612,6 @@ def historico_baixas_completo(df_baixas):
 
     return _padronizar_df_baixas(df_baixas.copy())
 
-# ============================================================
-# MINI DASHBOARD POR GARGALO v2 (INTELIGENTE)
-# LOCAL: FUNÇÕES AUXILIARES / CÁLCULOS / DASHBOARDS
-# SUBSTITUIR TODO O BLOCO ANTIGO DO MINI DASHBOARD
-# ============================================================
-
-def _normalizar_coluna_processo(df, coluna="Processo"):
-    """
-    Padroniza a coluna de processo para agrupamentos seguros.
-    """
-    if df is None or df.empty or coluna not in df.columns:
-        return df
-
-    df = df.copy()
-    df[coluna] = df[coluna].fillna("").astype(str).str.strip().str.upper()
-    return df
-
-
-def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
-    """
-    Monta um dashboard inteligente por gargalo/processo com score de criticidade.
-    """
-    if fila is None or fila.empty:
-        return pd.DataFrame(columns=[
-            "Processo",
-            "Qtd_Fila",
-            "Horas_Fila",
-            "Qtd_Baixas_Ativas",
-            "Carga_Total",
-            "Score",
-            "Status_Gargalo",
-            "Ranking"
-        ])
-
-    # ------------------------------------------------------------
-    # BASE DA FILA
-    # ------------------------------------------------------------
-    fila_tmp = fila.copy()
-    fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
-
-    if "Horas" not in fila_tmp.columns:
-        fila_tmp["Horas"] = 0
-
-    fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
-
-    resumo_fila = (
-        fila_tmp.groupby("Processo", dropna=False)
-        .agg(
-            Qtd_Fila=("Processo", "size"),
-            Horas_Fila=("Horas", "sum")
-        )
-        .reset_index()
-    )
-
-    # ------------------------------------------------------------
-    # BASE DE BAIXAS ATIVAS
-    # ------------------------------------------------------------
-    if df_baixas_ativas is None or df_baixas_ativas.empty:
-        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
-    else:
-        baixas_tmp = df_baixas_ativas.copy()
-        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
-
-        resumo_baixas = (
-            baixas_tmp.groupby("Processo", dropna=False)
-            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
-            .reset_index()
-        )
-
-    # ------------------------------------------------------------
-    # CONSOLIDAÇÃO
-    # ------------------------------------------------------------
-    df_dash = resumo_fila.merge(
-        resumo_baixas,
-        on="Processo",
-        how="left"
-    )
-
-    df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0).astype(int)
-    df_dash["Qtd_Fila"] = df_dash["Qtd_Fila"].fillna(0).astype(int)
-    df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
-
-    # ------------------------------------------------------------
-    # CARGA TOTAL
-    # ------------------------------------------------------------
-    df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
-
-    # ------------------------------------------------------------
-    # SCORE INTELIGENTE DE GARGALO
-    # Peso maior para horas (carga real)
-    # ------------------------------------------------------------
-    df_dash["Score"] = (
-        (df_dash["Horas_Fila"] * 1.5) +
-        (df_dash["Qtd_Fila"] * 1.0) +
-        (df_dash["Qtd_Baixas_Ativas"] * 0.5)
-    )
-
-    # ------------------------------------------------------------
-    # CLASSIFICAÇÃO AUTOMÁTICA
-    # ------------------------------------------------------------
-    def classificar_gargalo(score):
-        if score >= 80:
-            return "CRITICO"
-        elif score >= 30:
-            return "ATENCAO"
-        else:
-            return "CONTROLADO"
-
-    df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar_gargalo)
-
-    # ------------------------------------------------------------
-    # ORDENAÇÃO E RANKING
-    # ------------------------------------------------------------
-    df_dash = df_dash.sort_values(
-        by=["Score", "Horas_Fila", "Qtd_Fila"],
-        ascending=[False, False, False]
-    ).reset_index(drop=True)
-
-    df_dash["Ranking"] = df_dash.index + 1
-
-    return df_dash
-
-
-def resumo_cards_gargalos(df_dash):
-    """
-    Gera indicadores compactos para os cards do mini dashboard.
-    """
-    if df_dash is None or df_dash.empty:
-        return {
-            "total_processos": 0,
-            "total_itens_fila": 0,
-            "total_horas_fila": 0.0,
-            "total_baixas_ativas": 0,
-            "gargalo_critico": "-",
-            "qtd_criticos": 0,
-            "qtd_atencao": 0,
-            "qtd_controlados": 0
-        }
-
-    gargalo_critico = df_dash.iloc[0]["Processo"] if not df_dash.empty else "-"
-
-    return {
-        "total_processos": int(df_dash["Processo"].nunique()),
-        "total_itens_fila": int(df_dash["Qtd_Fila"].sum()),
-        "total_horas_fila": float(df_dash["Horas_Fila"].sum()),
-        "total_baixas_ativas": int(df_dash["Qtd_Baixas_Ativas"].sum()),
-        "gargalo_critico": gargalo_critico,
-        "qtd_criticos": int((df_dash["Status_Gargalo"] == "CRITICO").sum()),
-        "qtd_atencao": int((df_dash["Status_Gargalo"] == "ATENCAO").sum()),
-        "qtd_controlados": int((df_dash["Status_Gargalo"] == "CONTROLADO").sum())
-    }
 
 # ===============================
 # CSS VISUAL PREMIUM APS
@@ -1701,6 +1550,7 @@ risco = pv_carga[
 st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
 
+
 # ===============================
 # BASE EXECUTIVA
 # ===============================
@@ -1800,6 +1650,572 @@ d1, d2, d3 = st.columns(3)
 d1.metric("🔥 Gargalo Principal", gargalo_exec if gargalo_exec else "N/D")
 d2.metric("🏗️ Processo Mais Carregado", processo_mais_carga if processo_mais_carga else "N/D")
 d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
+
+# ============================================================
+# Mini Dashboard por Gargalo (INTELIGENTE)
+# LOCAL: FUNÇÕES AUXILIARES / CÁLCULOS / DASHBOARDS
+# SUBSTITUIR TODO O BLOCO ANTIGO DO MINI DASHBOARD
+# ============================================================
+
+def _normalizar_coluna_processo(df, coluna="Processo"):
+    """
+    Padroniza a coluna de processo para agrupamentos seguros.
+    """
+    if df is None or df.empty or coluna not in df.columns:
+        return df
+
+    df = df.copy()
+    df[coluna] = df[coluna].fillna("").astype(str).str.strip().str.upper()
+    return df
+
+
+def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
+    """
+    Monta um dashboard inteligente por gargalo/processo com score de criticidade.
+    """
+    if fila is None or fila.empty:
+        return pd.DataFrame(columns=[
+            "Processo",
+            "Qtd_Fila",
+            "Horas_Fila",
+            "Qtd_Baixas_Ativas",
+            "Carga_Total",
+            "Score",
+            "Status_Gargalo",
+            "Ranking"
+        ])
+
+    # ------------------------------------------------------------
+    # BASE DA FILA
+    # ------------------------------------------------------------
+    fila_tmp = fila.copy()
+    fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
+
+    if "Horas" not in fila_tmp.columns:
+        fila_tmp["Horas"] = 0
+
+    fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
+
+    resumo_fila = (
+        fila_tmp.groupby("Processo", dropna=False)
+        .agg(
+            Qtd_Fila=("Processo", "size"),
+            Horas_Fila=("Horas", "sum")
+        )
+        .reset_index()
+    )
+
+    # ------------------------------------------------------------
+    # BASE DE BAIXAS ATIVAS
+    # ------------------------------------------------------------
+    if df_baixas_ativas is None or df_baixas_ativas.empty:
+        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
+    else:
+        baixas_tmp = df_baixas_ativas.copy()
+        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
+
+        resumo_baixas = (
+            baixas_tmp.groupby("Processo", dropna=False)
+            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
+            .reset_index()
+        )
+
+    # ------------------------------------------------------------
+    # CONSOLIDAÇÃO
+    # ------------------------------------------------------------
+    df_dash = resumo_fila.merge(
+        resumo_baixas,
+        on="Processo",
+        how="left"
+    )
+
+    df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0).astype(int)
+    df_dash["Qtd_Fila"] = df_dash["Qtd_Fila"].fillna(0).astype(int)
+    df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
+
+    # ------------------------------------------------------------
+    # CARGA TOTAL
+    # ------------------------------------------------------------
+    df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
+
+    # ------------------------------------------------------------
+    # SCORE INTELIGENTE DE GARGALO
+    # Peso maior para horas (carga real)
+    # ------------------------------------------------------------
+    df_dash["Score"] = (
+        (df_dash["Horas_Fila"] * 1.5) +
+        (df_dash["Qtd_Fila"] * 1.0) +
+        (df_dash["Qtd_Baixas_Ativas"] * 0.5)
+    )
+
+    # ------------------------------------------------------------
+    # CLASSIFICAÇÃO AUTOMÁTICA
+    # ------------------------------------------------------------
+    def classificar_gargalo(score):
+        if score >= 80:
+            return "CRITICO"
+        elif score >= 30:
+            return "ATENCAO"
+        else:
+            return "CONTROLADO"
+
+    df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar_gargalo)
+
+    # ------------------------------------------------------------
+    # ORDENAÇÃO E RANKING
+    # ------------------------------------------------------------
+    df_dash = df_dash.sort_values(
+        by=["Score", "Horas_Fila", "Qtd_Fila"],
+        ascending=[False, False, False]
+    ).reset_index(drop=True)
+
+    df_dash["Ranking"] = df_dash.index + 1
+
+    return df_dash
+
+
+def resumo_cards_gargalos(df_dash):
+    """
+    Gera indicadores compactos para os cards do mini dashboard.
+    """
+    if df_dash is None or df_dash.empty:
+        return {
+            "total_processos": 0,
+            "total_itens_fila": 0,
+            "total_horas_fila": 0.0,
+            "total_baixas_ativas": 0,
+            "gargalo_critico": "-",
+            "qtd_criticos": 0,
+            "qtd_atencao": 0,
+            "qtd_controlados": 0
+        }
+
+    gargalo_critico = df_dash.iloc[0]["Processo"] if not df_dash.empty else "-"
+
+    return {
+        "total_processos": int(df_dash["Processo"].nunique()),
+        "total_itens_fila": int(df_dash["Qtd_Fila"].sum()),
+        "total_horas_fila": float(df_dash["Horas_Fila"].sum()),
+        "total_baixas_ativas": int(df_dash["Qtd_Baixas_Ativas"].sum()),
+        "gargalo_critico": gargalo_critico,
+        "qtd_criticos": int((df_dash["Status_Gargalo"] == "CRITICO").sum()),
+        "qtd_atencao": int((df_dash["Status_Gargalo"] == "ATENCAO").sum()),
+        "qtd_controlados": int((df_dash["Status_Gargalo"] == "CONTROLADO").sum())
+    }
+
+# ============================================================
+# MINI DASHBOARD POR GARGALO 
+# LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
+# SUBSTITUIR TODO O BLOCO VISUAL ANTIGO
+# ============================================================
+
+st.markdown("## 🔥 Mini Dashboard por Gargalo")
+
+df_mini_gargalos = montar_mini_dashboard_gargalos(
+    fila=fila,
+    df_baixas_ativas=df_baixas_ativas
+)
+
+cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
+
+if df_mini_gargalos.empty:
+    st.info("Nenhum dado disponível para análise de gargalos.")
+else:
+    # ------------------------------------------------------------
+    # CARDS GERAIS
+    # ------------------------------------------------------------
+    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+
+    with col_g1:
+        st.metric("Processos", cards_gargalos["total_processos"])
+
+    with col_g2:
+        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
+
+    with col_g3:
+        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
+
+    with col_g4:
+        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
+
+    with col_g5:
+        st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
+
+    st.markdown("### 🚨 Classificação dos Gargalos")
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+
+    with col_s1:
+        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
+
+    with col_s2:
+        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
+
+    with col_s3:
+        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
+
+    # ------------------------------------------------------------
+    # TOP 3 GARGALOS MAIS CRÍTICOS
+    # ------------------------------------------------------------
+    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
+
+    top3 = df_mini_gargalos.head(3)
+    top3_cols = st.columns(3)
+
+    for i in range(3):
+        with top3_cols[i]:
+            if i < len(top3):
+                row = top3.iloc[i]
+
+                status = row["Status_Gargalo"]
+
+                if status == "CRITICO":
+                    emoji = "🔴"
+                elif status == "ATENCAO":
+                    emoji = "🟡"
+                else:
+                    emoji = "🟢"
+
+                st.metric(
+                    label=f"{emoji} {row['Processo']}",
+                    value=f"{int(row['Qtd_Fila'])} itens",
+                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
+                )
+            else:
+                st.metric(label="-", value="-", delta="-")
+
+    # ------------------------------------------------------------
+    # TABELA FINAL DE RANKING
+    # ------------------------------------------------------------
+    st.markdown("### 📊 Ranking Inteligente de Gargalos")
+
+    df_exibicao_gargalos = df_mini_gargalos.copy()
+
+    colunas_exibicao = [
+        "Ranking",
+        "Processo",
+        "Status_Gargalo",
+        "Qtd_Fila",
+        "Horas_Fila",
+        "Qtd_Baixas_Ativas",
+        "Carga_Total",
+        "Score"
+    ]
+
+    for col in colunas_exibicao:
+        if col not in df_exibicao_gargalos.columns:
+            df_exibicao_gargalos[col] = None
+
+    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
+
+    df_exibicao_gargalos["Horas_Fila"] = (
+        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    df_exibicao_gargalos["Score"] = (
+        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    st.dataframe(
+        df_exibicao_gargalos,
+        use_container_width=True,
+        hide_index=True
+    )
+
+# ---------------------------------------
+# FILA ATUAL DE CORTE
+# ---------------------------------------
+st.markdown("### 🧾 Fila Atual de Corte")
+
+if not fila_corte_dash.empty:
+    fila_corte_exib = fila_corte_dash.copy()
+
+    if "ENTREGA" in fila_corte_exib.columns:
+        fila_corte_exib["ENTREGA"] = pd.to_datetime(fila_corte_exib["ENTREGA"], errors="coerce")
+        fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    fila_corte_exib["Horas"] = fila_corte_exib["Horas"].round(1)
+
+    colunas_corte_fila = [
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Dias para Entrega",
+        "ENTREGA"
+    ]
+    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
+
+    st.dataframe(
+        fila_corte_exib[colunas_corte_fila]
+        .sort_values(["Processo", "Dias para Entrega"], ascending=[True, True])
+        .reset_index(drop=True),
+        use_container_width=True,
+        hide_index=True,
+        height=320
+    )
+else:
+    st.success("Nenhuma operação de corte pendente no momento. 🎯")
+
+st.divider()
+
+st.subheader("🔎 Busca rápida de PV / Cliente")
+
+col_b1, col_b2 = st.columns(2)
+
+busca_pv = col_b1.text_input("Buscar por PV")
+busca_cliente = col_b2.text_input("Buscar por Cliente")
+
+busca_df = base_op.copy()
+
+if busca_pv:
+    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
+
+if busca_cliente:
+    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
+
+if busca_pv or busca_cliente:
+    busca_df["Horas"] = busca_df["Horas"].round(1)
+
+    if "ENTREGA" in busca_df.columns:
+        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    st.dataframe(busca_df, use_container_width=True)
+
+st.subheader("📥 Exportar dados filtrados")
+
+@st.cache_data
+def converter_excel(df_export):
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_export.to_excel(writer, index=False)
+    return buffer.getvalue()
+
+if not busca_df.empty:
+    excel_bytes = converter_excel(busca_df)
+
+    st.download_button(
+        label="📥 Baixar Excel",
+        data=excel_bytes,
+        file_name="consulta_pvs.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+st.divider()
+
+st.subheader("🧪 Auditoria de PV")
+
+if not df_auditoria_pv.empty:
+
+    df_auditoria_pv["PV"] = df_auditoria_pv["PV"].astype(str).str.strip()
+
+    total_excel = pvs_totais_excel
+    total_aps = df_auditoria_pv["PV"].nunique()
+    total_auditadas = len(df_auditoria_pv)
+
+    resumo_auditoria = (
+        df_auditoria_pv["Status"]
+        .value_counts()
+        .reset_index()
+    )
+    resumo_auditoria.columns = ["Status", "Qtde"]
+
+    def semaforo_auditoria(x):
+        x = str(x).strip().upper()
+        if x == "OK":
+            return "🟢"
+        elif x == "DIVERGENTE":
+            return "🟡"
+        elif x == "FALTANDO":
+            return "🔴"
+        elif x == "SEM PROCESSO VÁLIDO":
+            return "🟠"
+        return "⚪"
+
+    df_auditoria_exibicao = df_auditoria_pv.copy()
+    df_auditoria_exibicao["Semáforo"] = df_auditoria_exibicao["Status"].apply(semaforo_auditoria)
+
+    qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
+    qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
+    qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
+    qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
+
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
+    col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
+    col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
+    col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
+    col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
+    col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
+    col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
+
+    st.markdown("### 📊 Resumo da Auditoria")
+    st.dataframe(
+        resumo_auditoria,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.markdown("### 🚨 PVs com inconsistência de processo")
+
+    problemas_processo = df_auditoria_pv[
+        df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
+    ].copy()
+
+    if not problemas_processo.empty:
+        if "DATA_ENTREGA_APS" in problemas_processo.columns:
+            problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
+                problemas_processo["DATA_ENTREGA_APS"],
+                errors="coerce"
+            ).dt.strftime("%d/%m/%Y")
+
+        colunas_problema = [
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "DATA_ENTREGA_APS",
+            "Qtd",
+            "Status",
+            "Motivo"
+        ]
+        colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
+
+        st.dataframe(
+            problemas_processo[colunas_problema]
+            .sort_values(["PV"])
+            .reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
+
+    st.markdown("### 📋 Detalhamento da Auditoria")
+    colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
+
+    st.dataframe(
+        df_auditoria_exibicao[colunas_auditoria]
+        .sort_values(["Status", "PV"])
+        .reset_index(drop=True),
+        use_container_width=True,
+        height=420
+    )
+
+else:
+    st.info("Nenhuma auditoria de PV disponível.")
+
+with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
+
+    base_roteiro = df_pv.copy()
+    base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
+
+    processos_ordenados = [
+        "CORTE - SERRA",
+        "CORTE-PLASMA",
+        "CORTE-LASER",
+        "CORTE-GUILHOTINA",
+        "TORNO CONVENCIONAL",
+        "TORNO CNC",
+        "CENTRO DE USINAGEM",
+        "FRESADORAS",
+        "FURADEIRA DE BANCADA",
+        "PRENSA (AMASSAMENTO)",
+        "CALANDRA",
+        "DOBRADEIRA",
+        "ROSQUEADEIRA",
+        "METALEIRA",
+        "SOLDAGEM",
+        "ACABAMENTO",
+        "JATEAMENTO",
+        "PINTURA",
+        "MONTAGEM",
+        "DIVERSOS"
+    ]
+
+    processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
+
+    if len(processos_validos) == 0:
+        st.warning("Nenhum processo válido encontrado na planilha.")
+    else:
+        roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
+
+        for proc in processos_validos:
+            roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
+
+        st.markdown("### 🔎 Consultar Roteiro por Código")
+
+        col_r1, col_r2, col_r3 = st.columns([2, 1, 1])
+
+        codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+        codigo_sel = col_r1.selectbox("Selecione o código", codigos)
+
+        roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
+
+        roteiro_detalhado = roteiro_sel.melt(
+            id_vars=["CODIGO_KEY"],
+            value_vars=processos_validos,
+            var_name="Processo",
+            value_name="Tempo (min)"
+        )
+
+        roteiro_detalhado["Tempo (min)"] = pd.to_numeric(
+            roteiro_detalhado["Tempo (min)"], errors="coerce"
+        ).fillna(0)
+
+        roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0].copy()
+
+        ordem = {p: i for i, p in enumerate(processos_ordenados)}
+        roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
+        roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
+
+        roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
+        roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
+
+        tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
+        tempo_total_h = round(tempo_total_min / 60, 2)
+        qtd_processos = len(roteiro_exibicao)
+
+        col_r2.metric("🧩 Etapas", f"{qtd_processos:,.0f}")
+        col_r3.metric("⏱️ Tempo Total (h)", f"{tempo_total_h:,.2f}")
+
+        st.markdown(f"### 🛠️ Roteiro do Código: `{codigo_sel}`")
+
+        if not roteiro_exibicao.empty:
+            st.dataframe(
+                roteiro_exibicao.reset_index(drop=True),
+                use_container_width=True,
+                height=420,
+                hide_index=True
+            )
+        else:
+            st.warning("Este código não possui tempos válidos nos processos mapeados.")
+
+        with st.expander("📋 Base Completa de Roteiros", expanded=False):
+            st.dataframe(
+                roteiro,
+                use_container_width=True,
+                height=320,
+                hide_index=True
+            )
+
+        from io import BytesIO
+
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            roteiro.to_excel(writer, index=False)
+
+        st.download_button(
+            label="📥 Baixar Roteiros em Excel",
+            data=buffer.getvalue(),
+            file_name="roteiro_fabricacao.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 # ============================================================
 # ======================= GRÁFICOS ============================
@@ -2045,6 +2461,237 @@ fig_status = px.pie(
 )
 
 st.plotly_chart(fig_status, use_container_width=True)
+
+# =========================================================
+# DASHBOARD DO CORTE
+# =========================================================
+st.markdown("## 📊 Dashboard do Corte")
+st.caption("Indicadores operacionais e gerenciais do setor de corte.")
+
+# ---------------------------------------
+# BASES DO DASHBOARD DE CORTE
+# ---------------------------------------
+fila_corte_dash = fila.copy()
+fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
+
+fila_corte_dash = fila_corte_dash[
+    (
+        fila_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
+        fila_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
+        fila_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
+    )
+].copy()
+
+fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
+
+hist_corte_dash = pd.DataFrame()
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+    hist_corte_dash = df_baixas_historico.copy()
+    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
+    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
+
+    hist_corte_dash = hist_corte_dash[
+        (
+            hist_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
+            hist_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
+            hist_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
+        )
+    ].copy()
+
+    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
+    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
+
+# ---------------------------------------
+# KPIs DO CORTE
+# ---------------------------------------
+ops_fila_corte = len(fila_corte_dash)
+horas_fila_corte = fila_corte_dash["Horas"].sum()
+
+if not hist_corte_dash.empty:
+    baixas_ativas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    baixas_estornadas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
+    ].copy()
+
+    qtd_baixadas_corte = len(baixas_ativas_corte)
+    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
+    qtd_estornadas_corte = len(baixas_estornadas_corte)
+else:
+    qtd_baixadas_corte = 0
+    horas_baixadas_corte = 0
+    qtd_estornadas_corte = 0
+
+col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
+col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
+col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
+col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
+col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
+col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
+
+st.divider()
+
+# ---------------------------------------
+# THROUGHPUT POR PROCESSO DE CORTE
+# ---------------------------------------
+st.markdown("### ⚙️ Throughput por Processo de Corte")
+
+if not hist_corte_dash.empty:
+    throughput = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    throughput["Processo_Corte"] = throughput["PROC_UPPER"].apply(
+        lambda x: "SERRA" if "SERRA" in x else (
+            "LASER" if "LASER" in x else (
+                "PLASMA" if "PLASMA" in x else "OUTROS"
+            )
+        )
+    )
+
+    throughput_resumo = (
+        throughput.groupby("Processo_Corte", as_index=False)
+        .agg(
+            Operacoes_Baixadas=("PV", "count"),
+            Horas_Baixadas=("Horas", "sum")
+        )
+        .sort_values("Horas_Baixadas", ascending=False)
+    )
+
+    throughput_resumo["Horas_Baixadas"] = throughput_resumo["Horas_Baixadas"].round(1)
+
+    st.dataframe(
+        throughput_resumo,
+        use_container_width=True,
+        hide_index=True
+    )
+else:
+    st.info("Ainda não há baixas suficientes para calcular throughput do corte.")
+
+st.divider()
+
+# ---------------------------------------
+# EVOLUÇÃO DIÁRIA DO CORTE (POR TIPO)
+# ---------------------------------------
+st.markdown("### 📈 Evolução Diária do Corte")
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+
+    evolucao = df_baixas_historico.copy()
+
+    # -----------------------------------
+    # PADRONIZAÇÃO
+    # -----------------------------------
+    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
+    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
+
+    # -----------------------------------
+    # FILTRO: SOMENTE CORTE VÁLIDO
+    # -----------------------------------
+    evolucao = evolucao[
+        (
+            evolucao["Processo"].str.contains("SERRA", na=False) |
+            evolucao["Processo"].str.contains("LASER", na=False) |
+            evolucao["Processo"].str.contains("PLASMA", na=False)
+        ) &
+        (
+            evolucao["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+        )
+    ].copy()
+
+    evolucao = evolucao.dropna(subset=["Data_Baixa"]).copy()
+
+    if not evolucao.empty:
+
+        # -----------------------------------
+        # CLASSIFICA TIPO DE CORTE
+        # -----------------------------------
+        def classificar_corte(proc):
+            proc = str(proc).upper().strip()
+            if "SERRA" in proc:
+                return "SERRA"
+            elif "LASER" in proc:
+                return "LASER"
+            elif "PLASMA" in proc:
+                return "PLASMA"
+            return "OUTROS"
+
+        evolucao["Tipo_Corte"] = evolucao["Processo"].apply(classificar_corte)
+        evolucao["Dia"] = evolucao["Data_Baixa"].dt.strftime("%d/%m/%Y")
+
+        # -----------------------------------
+        # RESUMO ANALÍTICO
+        # -----------------------------------
+        evolucao_resumo = (
+            evolucao.groupby(["Dia", "Tipo_Corte"], as_index=False)
+            .agg(
+                Horas_Baixadas=("Horas", "sum"),
+                Operacoes_Baixadas=("CHAVE_OPERACAO", "count")
+            )
+        )
+
+        evolucao_resumo["Horas_Baixadas"] = evolucao_resumo["Horas_Baixadas"].round(1)
+
+        # ordena por data real
+        evolucao_resumo["Dia_Ordenacao"] = pd.to_datetime(evolucao_resumo["Dia"], format="%d/%m/%Y", errors="coerce")
+        evolucao_resumo = evolucao_resumo.sort_values(["Dia_Ordenacao", "Tipo_Corte"]).reset_index(drop=True)
+
+        # -----------------------------------
+        # GRÁFICO - HORAS POR DIA / TIPO
+        # -----------------------------------
+        grafico_horas = evolucao_resumo.pivot_table(
+            index="Dia",
+            columns="Tipo_Corte",
+            values="Horas_Baixadas",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        # ordena corretamente o eixo X
+        ordem_datas = (
+            evolucao_resumo[["Dia", "Dia_Ordenacao"]]
+            .drop_duplicates()
+            .sort_values("Dia_Ordenacao")["Dia"]
+            .tolist()
+        )
+
+        grafico_horas = grafico_horas.reindex(ordem_datas)
+
+        if not grafico_horas.empty:
+            st.line_chart(grafico_horas, use_container_width=True)
+
+            st.caption("Horas baixadas por dia, separadas por tipo de corte.")
+        else:
+            st.info("Não há dados suficientes para gerar o gráfico de evolução.")
+
+        # -----------------------------------
+        # TABELA DE APOIO
+        # -----------------------------------
+        st.markdown("#### 📋 Detalhamento da Evolução do Corte")
+
+        st.dataframe(
+            evolucao_resumo[
+                ["Dia", "Tipo_Corte", "Horas_Baixadas", "Operacoes_Baixadas"]
+            ].rename(columns={
+                "Dia": "Data",
+                "Tipo_Corte": "Tipo de Corte",
+                "Horas_Baixadas": "Horas Baixadas",
+                "Operacoes_Baixadas": "Operações Baixadas"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("Ainda não há baixas válidas de corte para alimentar a evolução diária.")
+
+else:
+    st.info("Histórico de baixas não disponível para gerar a evolução diária.")
 
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
@@ -2951,652 +3598,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     st.dataframe(dem_proc, use_container_width=True)
 
     st.divider()
-
-
-# =========================================================
-# DASHBOARD DO CORTE
-# =========================================================
-st.markdown("## 📊 Dashboard do Corte")
-st.caption("Indicadores operacionais e gerenciais do setor de corte.")
-
-# ---------------------------------------
-# BASES DO DASHBOARD DE CORTE
-# ---------------------------------------
-fila_corte_dash = fila.copy()
-fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
-
-fila_corte_dash = fila_corte_dash[
-    (
-        fila_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
-        fila_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
-        fila_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
-    )
-].copy()
-
-fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
-
-hist_corte_dash = pd.DataFrame()
-
-if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-    hist_corte_dash = df_baixas_historico.copy()
-    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
-    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
-
-    hist_corte_dash = hist_corte_dash[
-        (
-            hist_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
-            hist_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
-            hist_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
-        )
-    ].copy()
-
-    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
-    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
-
-# ---------------------------------------
-# KPIs DO CORTE
-# ---------------------------------------
-ops_fila_corte = len(fila_corte_dash)
-horas_fila_corte = fila_corte_dash["Horas"].sum()
-
-if not hist_corte_dash.empty:
-    baixas_ativas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    baixas_estornadas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
-    ].copy()
-
-    qtd_baixadas_corte = len(baixas_ativas_corte)
-    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
-    qtd_estornadas_corte = len(baixas_estornadas_corte)
-else:
-    qtd_baixadas_corte = 0
-    horas_baixadas_corte = 0
-    qtd_estornadas_corte = 0
-
-col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
-col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
-col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
-col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
-col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
-col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
-
-st.divider()
-
-# ---------------------------------------
-# THROUGHPUT POR PROCESSO DE CORTE
-# ---------------------------------------
-st.markdown("### ⚙️ Throughput por Processo de Corte")
-
-if not hist_corte_dash.empty:
-    throughput = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    throughput["Processo_Corte"] = throughput["PROC_UPPER"].apply(
-        lambda x: "SERRA" if "SERRA" in x else (
-            "LASER" if "LASER" in x else (
-                "PLASMA" if "PLASMA" in x else "OUTROS"
-            )
-        )
-    )
-
-    throughput_resumo = (
-        throughput.groupby("Processo_Corte", as_index=False)
-        .agg(
-            Operacoes_Baixadas=("PV", "count"),
-            Horas_Baixadas=("Horas", "sum")
-        )
-        .sort_values("Horas_Baixadas", ascending=False)
-    )
-
-    throughput_resumo["Horas_Baixadas"] = throughput_resumo["Horas_Baixadas"].round(1)
-
-    st.dataframe(
-        throughput_resumo,
-        use_container_width=True,
-        hide_index=True
-    )
-else:
-    st.info("Ainda não há baixas suficientes para calcular throughput do corte.")
-
-st.divider()
-
-# ---------------------------------------
-# EVOLUÇÃO DIÁRIA DO CORTE (POR TIPO)
-# ---------------------------------------
-st.markdown("### 📈 Evolução Diária do Corte")
-
-if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-
-    evolucao = df_baixas_historico.copy()
-
-    # -----------------------------------
-    # PADRONIZAÇÃO
-    # -----------------------------------
-    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.upper().str.strip()
-    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.upper().str.strip()
-    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
-    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
-
-    # -----------------------------------
-    # FILTRO: SOMENTE CORTE VÁLIDO
-    # -----------------------------------
-    evolucao = evolucao[
-        (
-            evolucao["Processo"].str.contains("SERRA", na=False) |
-            evolucao["Processo"].str.contains("LASER", na=False) |
-            evolucao["Processo"].str.contains("PLASMA", na=False)
-        ) &
-        (
-            evolucao["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-        )
-    ].copy()
-
-    evolucao = evolucao.dropna(subset=["Data_Baixa"]).copy()
-
-    if not evolucao.empty:
-
-        # -----------------------------------
-        # CLASSIFICA TIPO DE CORTE
-        # -----------------------------------
-        def classificar_corte(proc):
-            proc = str(proc).upper().strip()
-            if "SERRA" in proc:
-                return "SERRA"
-            elif "LASER" in proc:
-                return "LASER"
-            elif "PLASMA" in proc:
-                return "PLASMA"
-            return "OUTROS"
-
-        evolucao["Tipo_Corte"] = evolucao["Processo"].apply(classificar_corte)
-        evolucao["Dia"] = evolucao["Data_Baixa"].dt.strftime("%d/%m/%Y")
-
-        # -----------------------------------
-        # RESUMO ANALÍTICO
-        # -----------------------------------
-        evolucao_resumo = (
-            evolucao.groupby(["Dia", "Tipo_Corte"], as_index=False)
-            .agg(
-                Horas_Baixadas=("Horas", "sum"),
-                Operacoes_Baixadas=("CHAVE_OPERACAO", "count")
-            )
-        )
-
-        evolucao_resumo["Horas_Baixadas"] = evolucao_resumo["Horas_Baixadas"].round(1)
-
-        # ordena por data real
-        evolucao_resumo["Dia_Ordenacao"] = pd.to_datetime(evolucao_resumo["Dia"], format="%d/%m/%Y", errors="coerce")
-        evolucao_resumo = evolucao_resumo.sort_values(["Dia_Ordenacao", "Tipo_Corte"]).reset_index(drop=True)
-
-        # -----------------------------------
-        # GRÁFICO - HORAS POR DIA / TIPO
-        # -----------------------------------
-        grafico_horas = evolucao_resumo.pivot_table(
-            index="Dia",
-            columns="Tipo_Corte",
-            values="Horas_Baixadas",
-            aggfunc="sum",
-            fill_value=0
-        )
-
-        # ordena corretamente o eixo X
-        ordem_datas = (
-            evolucao_resumo[["Dia", "Dia_Ordenacao"]]
-            .drop_duplicates()
-            .sort_values("Dia_Ordenacao")["Dia"]
-            .tolist()
-        )
-
-        grafico_horas = grafico_horas.reindex(ordem_datas)
-
-        if not grafico_horas.empty:
-            st.line_chart(grafico_horas, use_container_width=True)
-
-            st.caption("Horas baixadas por dia, separadas por tipo de corte.")
-        else:
-            st.info("Não há dados suficientes para gerar o gráfico de evolução.")
-
-        # -----------------------------------
-        # TABELA DE APOIO
-        # -----------------------------------
-        st.markdown("#### 📋 Detalhamento da Evolução do Corte")
-
-        st.dataframe(
-            evolucao_resumo[
-                ["Dia", "Tipo_Corte", "Horas_Baixadas", "Operacoes_Baixadas"]
-            ].rename(columns={
-                "Dia": "Data",
-                "Tipo_Corte": "Tipo de Corte",
-                "Horas_Baixadas": "Horas Baixadas",
-                "Operacoes_Baixadas": "Operações Baixadas"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-
-    else:
-        st.info("Ainda não há baixas válidas de corte para alimentar a evolução diária.")
-
-else:
-    st.info("Histórico de baixas não disponível para gerar a evolução diária.")
-
-# ============================================================
-# MINI DASHBOARD POR GARGALO v2
-# LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
-# SUBSTITUIR TODO O BLOCO VISUAL ANTIGO
-# ============================================================
-
-st.markdown("## 🔥 Mini Dashboard por Gargalo v2")
-
-df_mini_gargalos = montar_mini_dashboard_gargalos(
-    fila=fila,
-    df_baixas_ativas=df_baixas_ativas
-)
-
-cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
-
-if df_mini_gargalos.empty:
-    st.info("Nenhum dado disponível para análise de gargalos.")
-else:
-    # ------------------------------------------------------------
-    # CARDS GERAIS
-    # ------------------------------------------------------------
-    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
-
-    with col_g1:
-        st.metric("Processos", cards_gargalos["total_processos"])
-
-    with col_g2:
-        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
-
-    with col_g3:
-        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
-
-    with col_g4:
-        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
-
-    with col_g5:
-        st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
-
-    st.markdown("### 🚨 Classificação dos Gargalos")
-
-    col_s1, col_s2, col_s3 = st.columns(3)
-
-    with col_s1:
-        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
-
-    with col_s2:
-        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
-
-    with col_s3:
-        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
-
-    # ------------------------------------------------------------
-    # TOP 3 GARGALOS MAIS CRÍTICOS
-    # ------------------------------------------------------------
-    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
-
-    top3 = df_mini_gargalos.head(3)
-    top3_cols = st.columns(3)
-
-    for i in range(3):
-        with top3_cols[i]:
-            if i < len(top3):
-                row = top3.iloc[i]
-
-                status = row["Status_Gargalo"]
-
-                if status == "CRITICO":
-                    emoji = "🔴"
-                elif status == "ATENCAO":
-                    emoji = "🟡"
-                else:
-                    emoji = "🟢"
-
-                st.metric(
-                    label=f"{emoji} {row['Processo']}",
-                    value=f"{int(row['Qtd_Fila'])} itens",
-                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
-                )
-            else:
-                st.metric(label="-", value="-", delta="-")
-
-    # ------------------------------------------------------------
-    # TABELA FINAL DE RANKING
-    # ------------------------------------------------------------
-    st.markdown("### 📊 Ranking Inteligente de Gargalos")
-
-    df_exibicao_gargalos = df_mini_gargalos.copy()
-
-    colunas_exibicao = [
-        "Ranking",
-        "Processo",
-        "Status_Gargalo",
-        "Qtd_Fila",
-        "Horas_Fila",
-        "Qtd_Baixas_Ativas",
-        "Carga_Total",
-        "Score"
-    ]
-
-    for col in colunas_exibicao:
-        if col not in df_exibicao_gargalos.columns:
-            df_exibicao_gargalos[col] = None
-
-    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
-
-    df_exibicao_gargalos["Horas_Fila"] = (
-        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    df_exibicao_gargalos["Score"] = (
-        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    st.dataframe(
-        df_exibicao_gargalos,
-        use_container_width=True,
-        hide_index=True
-    )
-
-# ---------------------------------------
-# FILA ATUAL DE CORTE
-# ---------------------------------------
-st.markdown("### 🧾 Fila Atual de Corte")
-
-if not fila_corte_dash.empty:
-    fila_corte_exib = fila_corte_dash.copy()
-
-    if "ENTREGA" in fila_corte_exib.columns:
-        fila_corte_exib["ENTREGA"] = pd.to_datetime(fila_corte_exib["ENTREGA"], errors="coerce")
-        fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-    fila_corte_exib["Horas"] = fila_corte_exib["Horas"].round(1)
-
-    colunas_corte_fila = [
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Dias para Entrega",
-        "ENTREGA"
-    ]
-    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
-
-    st.dataframe(
-        fila_corte_exib[colunas_corte_fila]
-        .sort_values(["Processo", "Dias para Entrega"], ascending=[True, True])
-        .reset_index(drop=True),
-        use_container_width=True,
-        hide_index=True,
-        height=320
-    )
-else:
-    st.success("Nenhuma operação de corte pendente no momento. 🎯")
-
-st.divider()
-
-st.subheader("🔎 Busca rápida de PV / Cliente")
-
-col_b1, col_b2 = st.columns(2)
-
-busca_pv = col_b1.text_input("Buscar por PV")
-busca_cliente = col_b2.text_input("Buscar por Cliente")
-
-busca_df = base_op.copy()
-
-if busca_pv:
-    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
-
-if busca_cliente:
-    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
-
-if busca_pv or busca_cliente:
-    busca_df["Horas"] = busca_df["Horas"].round(1)
-
-    if "ENTREGA" in busca_df.columns:
-        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-    st.dataframe(busca_df, use_container_width=True)
-
-st.subheader("📥 Exportar dados filtrados")
-
-@st.cache_data
-def converter_excel(df_export):
-    from io import BytesIO
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_export.to_excel(writer, index=False)
-    return buffer.getvalue()
-
-if not busca_df.empty:
-    excel_bytes = converter_excel(busca_df)
-
-    st.download_button(
-        label="📥 Baixar Excel",
-        data=excel_bytes,
-        file_name="consulta_pvs.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-st.divider()
-
-st.subheader("🧪 Auditoria de PV")
-
-if not df_auditoria_pv.empty:
-
-    df_auditoria_pv["PV"] = df_auditoria_pv["PV"].astype(str).str.strip()
-
-    total_excel = pvs_totais_excel
-    total_aps = df_auditoria_pv["PV"].nunique()
-    total_auditadas = len(df_auditoria_pv)
-
-    resumo_auditoria = (
-        df_auditoria_pv["Status"]
-        .value_counts()
-        .reset_index()
-    )
-    resumo_auditoria.columns = ["Status", "Qtde"]
-
-    def semaforo_auditoria(x):
-        x = str(x).strip().upper()
-        if x == "OK":
-            return "🟢"
-        elif x == "DIVERGENTE":
-            return "🟡"
-        elif x == "FALTANDO":
-            return "🔴"
-        elif x == "SEM PROCESSO VÁLIDO":
-            return "🟠"
-        return "⚪"
-
-    df_auditoria_exibicao = df_auditoria_pv.copy()
-    df_auditoria_exibicao["Semáforo"] = df_auditoria_exibicao["Status"].apply(semaforo_auditoria)
-
-    qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
-    qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
-    qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
-    qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
-
-    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-    col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
-    col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
-    col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
-    col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
-    col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
-    col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
-    col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
-
-    st.markdown("### 📊 Resumo da Auditoria")
-    st.dataframe(
-        resumo_auditoria,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.markdown("### 🚨 PVs com inconsistência de processo")
-
-    problemas_processo = df_auditoria_pv[
-        df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
-    ].copy()
-
-    if not problemas_processo.empty:
-        if "DATA_ENTREGA_APS" in problemas_processo.columns:
-            problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
-                problemas_processo["DATA_ENTREGA_APS"],
-                errors="coerce"
-            ).dt.strftime("%d/%m/%Y")
-
-        colunas_problema = [
-            "PV",
-            "Cliente",
-            "CODIGO_PV",
-            "DATA_ENTREGA_APS",
-            "Qtd",
-            "Status",
-            "Motivo"
-        ]
-        colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
-
-        st.dataframe(
-            problemas_processo[colunas_problema]
-            .sort_values(["PV"])
-            .reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
-
-    st.markdown("### 📋 Detalhamento da Auditoria")
-    colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
-
-    st.dataframe(
-        df_auditoria_exibicao[colunas_auditoria]
-        .sort_values(["Status", "PV"])
-        .reset_index(drop=True),
-        use_container_width=True,
-        height=420
-    )
-
-else:
-    st.info("Nenhuma auditoria de PV disponível.")
-
-with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
-
-    base_roteiro = df_pv.copy()
-    base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
-
-    processos_ordenados = [
-        "CORTE - SERRA",
-        "CORTE-PLASMA",
-        "CORTE-LASER",
-        "CORTE-GUILHOTINA",
-        "TORNO CONVENCIONAL",
-        "TORNO CNC",
-        "CENTRO DE USINAGEM",
-        "FRESADORAS",
-        "FURADEIRA DE BANCADA",
-        "PRENSA (AMASSAMENTO)",
-        "CALANDRA",
-        "DOBRADEIRA",
-        "ROSQUEADEIRA",
-        "METALEIRA",
-        "SOLDAGEM",
-        "ACABAMENTO",
-        "JATEAMENTO",
-        "PINTURA",
-        "MONTAGEM",
-        "DIVERSOS"
-    ]
-
-    processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
-
-    if len(processos_validos) == 0:
-        st.warning("Nenhum processo válido encontrado na planilha.")
-    else:
-        roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
-
-        for proc in processos_validos:
-            roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
-
-        st.markdown("### 🔎 Consultar Roteiro por Código")
-
-        col_r1, col_r2, col_r3 = st.columns([2, 1, 1])
-
-        codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
-        codigo_sel = col_r1.selectbox("Selecione o código", codigos)
-
-        roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
-
-        roteiro_detalhado = roteiro_sel.melt(
-            id_vars=["CODIGO_KEY"],
-            value_vars=processos_validos,
-            var_name="Processo",
-            value_name="Tempo (min)"
-        )
-
-        roteiro_detalhado["Tempo (min)"] = pd.to_numeric(
-            roteiro_detalhado["Tempo (min)"], errors="coerce"
-        ).fillna(0)
-
-        roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0].copy()
-
-        ordem = {p: i for i, p in enumerate(processos_ordenados)}
-        roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
-        roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
-
-        roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
-        roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
-
-        tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
-        tempo_total_h = round(tempo_total_min / 60, 2)
-        qtd_processos = len(roteiro_exibicao)
-
-        col_r2.metric("🧩 Etapas", f"{qtd_processos:,.0f}")
-        col_r3.metric("⏱️ Tempo Total (h)", f"{tempo_total_h:,.2f}")
-
-        st.markdown(f"### 🛠️ Roteiro do Código: `{codigo_sel}`")
-
-        if not roteiro_exibicao.empty:
-            st.dataframe(
-                roteiro_exibicao.reset_index(drop=True),
-                use_container_width=True,
-                height=420,
-                hide_index=True
-            )
-        else:
-            st.warning("Este código não possui tempos válidos nos processos mapeados.")
-
-        with st.expander("📋 Base Completa de Roteiros", expanded=False):
-            st.dataframe(
-                roteiro,
-                use_container_width=True,
-                height=320,
-                hide_index=True
-            )
-
-        from io import BytesIO
-
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            roteiro.to_excel(writer, index=False)
-
-        st.download_button(
-            label="📥 Baixar Roteiros em Excel",
-            data=buffer.getvalue(),
-            file_name="roteiro_fabricacao.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
 
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS ============
