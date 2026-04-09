@@ -1778,10 +1778,10 @@ risco = pv_carga[
 ].copy()
 
 # ============================================================
-# ====================== VISÃO GERENCIAL =====================
+# ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
-st.markdown("## 📊 Visão Gerencial")
-st.caption("Indicadores estratégicos, gargalos, capacidade e visão consolidada da produção.")
+st.markdown("## 📊 Painel Executivo APS")
+st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
 
 # ===============================
 # BASE EXECUTIVA
@@ -1863,23 +1863,6 @@ def semaforo_entrega(dias):
         return "🟢 Normal"
 
 # ===============================
-# BASE EXECUTIVA DE COLAPSO (REAPROVEITA A BASE JÁ CALCULADA)
-# ===============================
-# Blindagem para garantir que a coluna exista sempre
-if "Semáforo Colapso" not in ranking_colapso.columns:
-    ranking_colapso["Semáforo Colapso"] = "🟢 Sob Controle"
-
-# Blindagem para garantir colunas numéricas
-for col in ["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)", "Saldo (h)"]:
-    if col not in ranking_colapso.columns:
-        ranking_colapso[col] = 0
-
-ranking_colapso["Ocupacao"] = pd.to_numeric(ranking_colapso["Ocupacao"], errors="coerce").fillna(0)
-ranking_colapso["Fila Max (dias)"] = pd.to_numeric(ranking_colapso["Fila Max (dias)"], errors="coerce").fillna(0)
-ranking_colapso["Fila Acumulada Max (h)"] = pd.to_numeric(ranking_colapso["Fila Acumulada Max (h)"], errors="coerce").fillna(0)
-ranking_colapso["Saldo (h)"] = pd.to_numeric(ranking_colapso["Saldo (h)"], errors="coerce").fillna(0)
-
-# ===============================
 # STATUS EXECUTIVO
 # ===============================
 st.subheader("🚦 Status Executivo")
@@ -1899,88 +1882,6 @@ d1, d2, d3 = st.columns(3)
 d1.metric("🔥 Gargalo Principal", gargalo_exec if gargalo_exec else "N/D")
 d2.metric("🏗️ Processo Mais Carregado", processo_mais_carga if processo_mais_carga else "N/D")
 d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
-
-# ===============================
-# ALERTA DE COLAPSO DO GARGALO
-# ===============================
-st.subheader("🚨 Semáforo de Colapso dos Gargalos")
-
-if not ranking_colapso.empty:
-    colapso_exib = ranking_colapso.copy()
-
-    # Blindagem estrutural
-    if "Semáforo Colapso" not in colapso_exib.columns:
-        colapso_exib["Semáforo Colapso"] = "🟢 Sob Controle"
-    if "Processo" not in colapso_exib.columns:
-        colapso_exib["Processo"] = "N/D"
-    if "Ocupacao" not in colapso_exib.columns:
-        colapso_exib["Ocupacao"] = 0
-    if "Fila Acumulada Max (h)" not in colapso_exib.columns:
-        colapso_exib["Fila Acumulada Max (h)"] = 0
-    if "Fila Max (dias)" not in colapso_exib.columns:
-        colapso_exib["Fila Max (dias)"] = 0
-    if "Saldo (h)" not in colapso_exib.columns:
-        colapso_exib["Saldo (h)"] = 0
-
-    colapso_exib["Ocupação (%)"] = colapso_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    colapso_exib["Fila Acumulada (h)"] = colapso_exib["Fila Acumulada Max (h)"].apply(lambda x: fmt_br_num(x, 1))
-    colapso_exib["Fila (dias)"] = colapso_exib["Fila Max (dias)"].apply(lambda x: fmt_br_num(x, 1))
-    colapso_exib["Saldo Exibição (h)"] = colapso_exib["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
-
-    st.dataframe(
-        colapso_exib[
-            ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo Exibição (h)"]
-        ].rename(columns={
-            "Saldo Exibição (h)": "Saldo (h)"
-        }),
-        use_container_width=True
-    )
-
-    topo_colapso = str(colapso_exib.iloc[0]["Semáforo Colapso"])
-    processo_topo = str(colapso_exib.iloc[0]["Processo"])
-
-    if "🔥" in topo_colapso or "🔴" in topo_colapso:
-        st.error(f"Risco elevado detectado no processo: {processo_topo}")
-    elif "🟡" in topo_colapso:
-        st.warning(f"Atenção para pressão crescente no processo: {processo_topo}")
-    else:
-        st.success("Nenhum gargalo em risco de colapso no momento.")
-else:
-    st.info("Sem dados suficientes para cálculo de colapso.")
-
-# ===============================
-# ALERTA DE CAPACIDADE CRÍTICA
-# ===============================
-st.subheader("⚠️ Capacidade Crítica")
-
-critico = dem[dem["Ocupacao"] > 95].copy()
-
-if not critico.empty:
-    st.error("Capacidade próxima ou acima do limite detectada.")
-
-    critico_exib = critico.copy()
-    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
-    critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-    critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-
-    critico_exib = critico_exib.sort_values(
-        ["Ocupacao", "Horas"],
-        ascending=[False, False]
-    ).reset_index(drop=True)
-
-    st.dataframe(
-        critico_exib[
-            ["Semáforo", "Periodo", "Processo", "Horas_fmt", "Capacidade_fmt", "Ocupação_fmt"]
-        ].rename(columns={
-            "Horas_fmt": "Horas",
-            "Capacidade_fmt": "Capacidade",
-            "Ocupação_fmt": "Ocupação (%)"
-        }),
-        use_container_width=True
-    )
-else:
-    st.success("Capacidade sob controle.")
 
 # ============================================================
 # ======================= GRÁFICOS ============================
@@ -2811,6 +2712,108 @@ else:
     st.info("Ainda não há histórico de baixas de corte para estorno.")
 
 st.divider()
+
+# ============================================================
+# ============ TABELAS ANALÍTICAS DE CAPACIDADE ==============
+# ============================================================
+st.markdown("## 📋 Tabelas Analíticas de Capacidade")
+st.caption("Leitura técnica de colapso, pressão de fila e criticidade de capacidade.")
+
+# ===============================
+# BASE EXECUTIVA DE COLAPSO
+# ===============================
+if "Semáforo Colapso" not in ranking_colapso.columns:
+    ranking_colapso["Semáforo Colapso"] = "🟢 Sob Controle"
+
+for col in ["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)", "Saldo (h)"]:
+    if col not in ranking_colapso.columns:
+        ranking_colapso[col] = 0
+
+ranking_colapso["Ocupacao"] = pd.to_numeric(ranking_colapso["Ocupacao"], errors="coerce").fillna(0)
+ranking_colapso["Fila Max (dias)"] = pd.to_numeric(ranking_colapso["Fila Max (dias)"], errors="coerce").fillna(0)
+ranking_colapso["Fila Acumulada Max (h)"] = pd.to_numeric(ranking_colapso["Fila Acumulada Max (h)"], errors="coerce").fillna(0)
+ranking_colapso["Saldo (h)"] = pd.to_numeric(ranking_colapso["Saldo (h)"], errors="coerce").fillna(0)
+
+# ===============================
+# ALERTA DE COLAPSO DO GARGALO
+# ===============================
+st.subheader("🚨 Semáforo de Colapso dos Gargalos")
+
+if not ranking_colapso.empty:
+    colapso_exib = ranking_colapso.copy()
+
+    if "Semáforo Colapso" not in colapso_exib.columns:
+        colapso_exib["Semáforo Colapso"] = "🟢 Sob Controle"
+    if "Processo" not in colapso_exib.columns:
+        colapso_exib["Processo"] = "N/D"
+    if "Ocupacao" not in colapso_exib.columns:
+        colapso_exib["Ocupacao"] = 0
+    if "Fila Acumulada Max (h)" not in colapso_exib.columns:
+        colapso_exib["Fila Acumulada Max (h)"] = 0
+    if "Fila Max (dias)" not in colapso_exib.columns:
+        colapso_exib["Fila Max (dias)"] = 0
+    if "Saldo (h)" not in colapso_exib.columns:
+        colapso_exib["Saldo (h)"] = 0
+
+    colapso_exib["Ocupação (%)"] = colapso_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+    colapso_exib["Fila Acumulada (h)"] = colapso_exib["Fila Acumulada Max (h)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Fila (dias)"] = colapso_exib["Fila Max (dias)"].apply(lambda x: fmt_br_num(x, 1))
+    colapso_exib["Saldo Exibição (h)"] = colapso_exib["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
+
+    st.dataframe(
+        colapso_exib[
+            ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo Exibição (h)"]
+        ].rename(columns={
+            "Saldo Exibição (h)": "Saldo (h)"
+        }),
+        use_container_width=True
+    )
+
+    topo_colapso = str(colapso_exib.iloc[0]["Semáforo Colapso"])
+    processo_topo = str(colapso_exib.iloc[0]["Processo"])
+
+    if "🔥" in topo_colapso or "🔴" in topo_colapso:
+        st.error(f"Risco elevado detectado no processo: {processo_topo}")
+    elif "🟡" in topo_colapso:
+        st.warning(f"Atenção para pressão crescente no processo: {processo_topo}")
+    else:
+        st.success("Nenhum gargalo em risco de colapso no momento.")
+else:
+    st.info("Sem dados suficientes para cálculo de colapso.")
+
+# ===============================
+# ALERTA DE CAPACIDADE CRÍTICA
+# ===============================
+st.subheader("⚠️ Capacidade Crítica")
+
+critico = dem[dem["Ocupacao"] > 95].copy()
+
+if not critico.empty:
+    st.error("Capacidade próxima ou acima do limite detectada.")
+
+    critico_exib = critico.copy()
+    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
+    critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+
+    critico_exib = critico_exib.sort_values(
+        ["Ocupacao", "Horas"],
+        ascending=[False, False]
+    ).reset_index(drop=True)
+
+    st.dataframe(
+        critico_exib[
+            ["Semáforo", "Periodo", "Processo", "Horas_fmt", "Capacidade_fmt", "Ocupação_fmt"]
+        ].rename(columns={
+            "Horas_fmt": "Horas",
+            "Capacidade_fmt": "Capacidade",
+            "Ocupação_fmt": "Ocupação (%)"
+        }),
+        use_container_width=True
+    )
+else:
+    st.success("Capacidade sob controle.")
 
 # ============================================================
 # ===================== VISÃO OPERACIONAL ====================
