@@ -2067,24 +2067,45 @@ st.plotly_chart(fig_status, use_container_width=True)
 # ===============================
 st.subheader("📊 Carga x Capacidade por Processo")
 
-comp = dem.copy()
+base = dem_proc.copy()
 
-for col in ["Horas", "Capacidade"]:
-    if col not in comp.columns:
-        comp[col] = 0
+# segurança numérica
+for col in ["Horas", "Capacidade Processo"]:
+    if col not in base.columns:
+        base[col] = 0
 
-    comp[col] = pd.to_numeric(comp[col], errors="coerce").fillna(0)
+    base[col] = pd.to_numeric(base[col], errors="coerce").fillna(0)
 
 fig_comp = px.bar(
-    comp.sort_values("Horas", ascending=False),
+    base.sort_values("Horas", ascending=False),
     x="Processo",
-    y=["Horas", "Capacidade"],
-    barmode="group"
+    y=["Horas", "Capacidade Processo"],
+    barmode="group",
+    text_auto=True
+)
+
+# cores corretas
+fig_comp.update_traces(
+    selector=dict(name="Horas"),
+    marker_color="#FF7A00"  # laranja
+)
+
+fig_comp.update_traces(
+    selector=dict(name="Capacidade Processo"),
+    marker_color="#1f77b4"  # azul
+)
+
+# rótulos em cima
+fig_comp.update_traces(
+    textposition="outside"
 )
 
 fig_comp.update_layout(
     yaxis_title="Horas",
-    height=500
+    height=550,
+    xaxis_title="Processo",
+    uniformtext_minsize=8,
+    uniformtext_mode="hide"
 )
 
 st.plotly_chart(fig_comp, use_container_width=True)
