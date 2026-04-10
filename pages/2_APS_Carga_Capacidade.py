@@ -1419,6 +1419,63 @@ if df.empty:
 
     st.stop()
 
+ 
+# ===============================
+# FILTRO POR CLIENTE
+# ===============================
+df_excluidas = pd.DataFrame(pvs_excluidas)
+df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
+
+clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
+cliente_sel = st.selectbox("Filtrar Cliente", ["Todos"] + clientes_disponiveis)
+
+if cliente_sel != "Todos":
+    df = df[df["Cliente"] == cliente_sel].copy()
+    df_excluidas = df_excluidas[df_excluidas["Cliente"] == cliente_sel].copy() if not df_excluidas.empty else df_excluidas
+    df_sem_carga = df_sem_carga[df_sem_carga["Cliente"] == cliente_sel].copy() if not df_sem_carga.empty else df_sem_carga
+    df_auditoria_pv = df_auditoria_pv[df_auditoria_pv["Cliente"] == cliente_sel].copy() if not df_auditoria_pv.empty else df_auditoria_pv
+
+if df.empty:
+    st.warning("Nenhum dado encontrado para o filtro selecionado.")
+    st.stop()
+
+# ===============================
+# DATAS
+# ===============================
+df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
+df["Ano"] = df["Data"].dt.year
+df["Mes"] = df["Data"].dt.month
+mes_ref = int(df["Mes"].mode()[0])
+ano_ref = int(df["Ano"].mode()[0])
+
+horas_mes = horas_uteis_mes(ano_ref, mes_ref)
+total_recursos = sum(MAQUINAS.values())
+
+# ===============================
+# FILA REAL POR PROCESSO
+# ===============================
+df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
+df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
+
+def capacidade_diaria_real(processo):
+    """
+    Capacidade média diária operacional por processo.
+    Usada para estimativa contínua de fila.
+    """
+    recursos = MAQUINAS.get(processo, 0)
+    if recursos <= 0:
+        return 0
+    return HORAS_DIA_UTIL_MEDIA * recursos * EFICIENCIA
+
+df["Capacidade Diária Real (h)"] = df["Processo"].apply(capacidade_diaria_real)
+
+df["Fila (dias)"] = np.where(
+    df["Capacidade Diária Real (h)"] > 0,
+    df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
+    0
+)
+
+
 # =========================================================
 # DASHBOARD DO CORTE
 # =========================================================
@@ -1428,7 +1485,7 @@ st.caption("Indicadores operacionais e gerenciais do setor de corte.")
 # ---------------------------------------
 # BASES DO DASHBOARD DE CORTE
 # ---------------------------------------
-fila_corte_dash = fila.copy()
+fila_corte_dash = df.copy()
 fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
 
 fila_corte_dash = fila_corte_dash[
@@ -1649,61 +1706,8 @@ if "df_baixas_historico" in globals() and df_baixas_historico is not None and no
 
 else:
     st.info("Histórico de baixas não disponível para gerar a evolução diária.")
- 
-# ===============================
-# FILTRO POR CLIENTE
-# ===============================
-df_excluidas = pd.DataFrame(pvs_excluidas)
-df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
 
-clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
-cliente_sel = st.selectbox("Filtrar Cliente", ["Todos"] + clientes_disponiveis)
 
-if cliente_sel != "Todos":
-    df = df[df["Cliente"] == cliente_sel].copy()
-    df_excluidas = df_excluidas[df_excluidas["Cliente"] == cliente_sel].copy() if not df_excluidas.empty else df_excluidas
-    df_sem_carga = df_sem_carga[df_sem_carga["Cliente"] == cliente_sel].copy() if not df_sem_carga.empty else df_sem_carga
-    df_auditoria_pv = df_auditoria_pv[df_auditoria_pv["Cliente"] == cliente_sel].copy() if not df_auditoria_pv.empty else df_auditoria_pv
-
-if df.empty:
-    st.warning("Nenhum dado encontrado para o filtro selecionado.")
-    st.stop()
-
-# ===============================
-# DATAS
-# ===============================
-df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
-df["Ano"] = df["Data"].dt.year
-df["Mes"] = df["Data"].dt.month
-mes_ref = int(df["Mes"].mode()[0])
-ano_ref = int(df["Ano"].mode()[0])
-
-horas_mes = horas_uteis_mes(ano_ref, mes_ref)
-total_recursos = sum(MAQUINAS.values())
-
-# ===============================
-# FILA REAL POR PROCESSO
-# ===============================
-df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
-df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
-
-def capacidade_diaria_real(processo):
-    """
-    Capacidade média diária operacional por processo.
-    Usada para estimativa contínua de fila.
-    """
-    recursos = MAQUINAS.get(processo, 0)
-    if recursos <= 0:
-        return 0
-    return HORAS_DIA_UTIL_MEDIA * recursos * EFICIENCIA
-
-df["Capacidade Diária Real (h)"] = df["Processo"].apply(capacidade_diaria_real)
-
-df["Fila (dias)"] = np.where(
-    df["Capacidade Diária Real (h)"] > 0,
-    df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
-    0
-)
 
 # ===============================
 # CALENDÁRIO
