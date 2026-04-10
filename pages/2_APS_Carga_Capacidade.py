@@ -21,8 +21,7 @@ import math
 st.set_page_config(layout="wide")
 
 # ============================================================
-# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO
-# LOCAL: TOPO DO ARQUIVO (APÓS IMPORTS)
+# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
 # ============================================================
 
 import os
@@ -45,7 +44,7 @@ def _gerar_nome_backup():
 def _criar_backup():
     try:
         if not os.path.exists(ARQUIVO_HISTORICO_BAIXAS):
-            return False, "Arquivo não existe ainda"
+            return False, "Arquivo ainda não existe (primeira gravação)"
 
         _garantir_pasta_backup()
 
@@ -65,18 +64,36 @@ def _criar_backup():
 def salvar_historico_baixas(df):
     """
     🔴 ÚNICO PONTO OFICIAL DE GRAVAÇÃO DO HISTÓRICO
+    🔒 COM PROTEÇÃO CONTRA PERDA DE DADOS
     """
-    try:
-        # SALVA PRINCIPAL
-        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
 
-        # BACKUP AUTOMÁTICO
-        ok, msg = _criar_backup()
+    try:
+        # ----------------------------
+        # PROTEÇÃO 1: NÃO SALVAR VAZIO
+        # ----------------------------
+        if df is None or df.empty:
+            return {
+                "ok": False,
+                "erro": "DataFrame vazio - gravação cancelada para evitar perda de histórico",
+                "backup_ok": False,
+                "backup_msg": None
+            }
+
+        # ----------------------------
+        # PROTEÇÃO 2: BACKUP ANTES
+        # ----------------------------
+        backup_ok, backup_msg = _criar_backup()
+
+        # ----------------------------
+        # SALVA PRINCIPAL
+        # ----------------------------
+        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
 
         return {
             "ok": True,
-            "backup_ok": ok,
-            "backup_msg": msg
+            "linhas": len(df),
+            "backup_ok": backup_ok,
+            "backup_msg": backup_msg
         }
 
     except Exception as e:
