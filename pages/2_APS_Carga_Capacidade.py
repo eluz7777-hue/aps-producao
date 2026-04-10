@@ -2062,6 +2062,33 @@ fig_status = px.pie(
 
 st.plotly_chart(fig_status, use_container_width=True)
 
+# ===============================
+# 7) COMPARAÇÃO CARGA x CAPACIDADE
+# ===============================
+st.subheader("📊 Carga x Capacidade por Processo")
+
+comp = dem.copy()
+
+for col in ["Horas", "Capacidade"]:
+    if col not in comp.columns:
+        comp[col] = 0
+
+    comp[col] = pd.to_numeric(comp[col], errors="coerce").fillna(0)
+
+fig_comp = px.bar(
+    comp.sort_values("Horas", ascending=False),
+    x="Processo",
+    y=["Horas", "Capacidade"],
+    barmode="group"
+)
+
+fig_comp.update_layout(
+    yaxis_title="Horas",
+    height=500
+)
+
+st.plotly_chart(fig_comp, use_container_width=True)
+
 
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
