@@ -629,6 +629,399 @@ def historico_baixas_completo(df_baixas):
 
     return _padronizar_df_baixas(df_baixas.copy())
 
+# --------------------------------------------------------
+# HISTÓRICO PREMIUM DE BAIXA
+# --------------------------------------------------------
+st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
+st.caption("Rastreabilidade completa das baixas operacionais, terceirizações e estornos.")
+
+if "df_baixas_historico" not in locals() or df_baixas_historico is None:
+    df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
+else:
+    df_baixas_exib = df_baixas_historico.copy()
+
+if not df_baixas_exib.empty:
+    for col in [
+        "PV", "Cliente", "CODIGO_PV", "Processo", "Usuario",
+        "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+    ]:
+        if col in df_baixas_exib.columns:
+            df_baixas_exib[col] = (
+                df_baixas_exib[col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+
+    if "Status_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Status_Baixa"] = (
+            df_baixas_exib["Status_Baixa"]
+            .replace("", "ATIVA")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+    else:
+        df_baixas_exib["Status_Baixa"] = "ATIVA"
+
+    if "Data_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Baixa"] = pd.to_datetime(
+            df_baixas_exib["Data_Baixa"],
+            errors="coerce"
+        )
+
+    if "Data_Estorno" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Estorno"] = pd.to_datetime(
+            df_baixas_exib["Data_Estorno"],
+            errors="coerce"
+        )
+
+    col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
+
+    status_hist_sel = col_hist1.selectbox(
+        "Filtrar por status",
+        ["Todos", "ATIVA", "TERCEIRIZADA", "ESTORNADA"],
+        key="filtro_status_historico_baixas"
+    )
+
+    processo_hist_sel = col_hist2.selectbox(
+        "Filtrar por processo",
+        ["Todos"] + sorted(
+            df_baixas_exib["Processo"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        ),
+        key="filtro_processo_historico_baixas"
+    )
+
+    cliente_hist_sel = col_hist3.selectbox(
+        "Filtrar por cliente",
+        ["Todos"] + sorted(
+            df_baixas_exib["Cliente"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        ),
+        key="filtro_cliente_historico_baixas"
+    )
+
+    if status_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Status_Baixa"] == status_hist_sel
+        ].copy()
+
+    if processo_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
+        ].copy()
+
+    if cliente_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
+        ].copy()
+
+    col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
+    col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
+    col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
+    col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
+    col_hk4.metric(
+        "Horas Registradas",
+        fmt_br_num(
+            pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(),
+            1
+        ) + " h"
+    )
+
+    def status_historico_label(x):
+        x = str(x).strip().upper()
+        if x == "ATIVA":
+            return "✅ Baixada"
+        elif x == "TERCEIRIZADA":
+            return "🟣 Terceirizada"
+        elif x == "ESTORNADA":
+            return "🔁 Estornada"
+        return "⚪ Indefinido"
+
+    df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
+
+    if "Data_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+
+    if "Data_Estorno" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Estorno"] = df_baixas_exib["Data_Estorno"].dt.strftime("%d/%m/%Y %H:%M")
+
+    df_baixas_exib = df_baixas_exib.sort_values(
+        by=["Data_Baixa"],
+        ascending=False,
+        na_position="last"
+    ).copy()
+
+    colunas_exibir = [
+        "Status Exibição",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Data_Baixa",
+        "Usuario",
+        "Observacao",
+        "Data_Estorno",
+        "Motivo_Estorno"
+    ]
+    colunas_exibir = [c for c in colunas_exibir if c in df_baixas_exib.columns]
+
+    st.dataframe(
+        df_baixas_exib[colunas_exibir].rename(columns={
+            "Status Exibição": "Status",
+            "Data_Baixa": "Data da Baixa",
+            "Usuario": "Usuário",
+            "Observacao": "Observação",
+            "Data_Estorno": "Data do Estorno",
+            "Motivo_Estorno": "Motivo do Estorno"
+        }),
+        use_container_width=True,
+        hide_index=True,
+        height=340
+    )
+else:
+    st.info("Nenhuma baixa operacional registrada até o momento.")
+
+# =========================================================
+# DASHBOARD DO CORTE
+# =========================================================
+st.markdown("## 📊 Dashboard do Corte")
+st.caption("Indicadores operacionais e gerenciais do setor de corte.")
+
+# ---------------------------------------
+# BASES DO DASHBOARD DE CORTE
+# ---------------------------------------
+fila_corte_dash = fila.copy()
+fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
+
+fila_corte_dash = fila_corte_dash[
+    (
+        fila_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
+        fila_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
+        fila_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
+    )
+].copy()
+
+fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
+
+hist_corte_dash = pd.DataFrame()
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+    hist_corte_dash = df_baixas_historico.copy()
+    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
+    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
+
+    hist_corte_dash = hist_corte_dash[
+        (
+            hist_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
+            hist_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
+            hist_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
+        )
+    ].copy()
+
+    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
+    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
+
+# ---------------------------------------
+# KPIs DO CORTE
+# ---------------------------------------
+ops_fila_corte = len(fila_corte_dash)
+horas_fila_corte = fila_corte_dash["Horas"].sum()
+
+if not hist_corte_dash.empty:
+    baixas_ativas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    baixas_estornadas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
+    ].copy()
+
+    qtd_baixadas_corte = len(baixas_ativas_corte)
+    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
+    qtd_estornadas_corte = len(baixas_estornadas_corte)
+else:
+    qtd_baixadas_corte = 0
+    horas_baixadas_corte = 0
+    qtd_estornadas_corte = 0
+
+col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
+col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
+col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
+col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
+col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
+col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
+
+st.divider()
+
+# ---------------------------------------
+# THROUGHPUT POR PROCESSO DE CORTE
+# ---------------------------------------
+st.markdown("### ⚙️ Throughput por Processo de Corte")
+
+if not hist_corte_dash.empty:
+    throughput = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    throughput["Processo_Corte"] = throughput["PROC_UPPER"].apply(
+        lambda x: "SERRA" if "SERRA" in x else (
+            "LASER" if "LASER" in x else (
+                "PLASMA" if "PLASMA" in x else "OUTROS"
+            )
+        )
+    )
+
+    throughput_resumo = (
+        throughput.groupby("Processo_Corte", as_index=False)
+        .agg(
+            Operacoes_Baixadas=("PV", "count"),
+            Horas_Baixadas=("Horas", "sum")
+        )
+        .sort_values("Horas_Baixadas", ascending=False)
+    )
+
+    throughput_resumo["Horas_Baixadas"] = throughput_resumo["Horas_Baixadas"].round(1)
+
+    st.dataframe(
+        throughput_resumo,
+        use_container_width=True,
+        hide_index=True
+    )
+else:
+    st.info("Ainda não há baixas suficientes para calcular throughput do corte.")
+
+st.divider()
+
+# ---------------------------------------
+# EVOLUÇÃO DIÁRIA DO CORTE (POR TIPO)
+# ---------------------------------------
+st.markdown("### 📈 Evolução Diária do Corte")
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+
+    evolucao = df_baixas_historico.copy()
+
+    # -----------------------------------
+    # PADRONIZAÇÃO
+    # -----------------------------------
+    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
+    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
+
+    # -----------------------------------
+    # FILTRO: SOMENTE CORTE VÁLIDO
+    # -----------------------------------
+    evolucao = evolucao[
+        (
+            evolucao["Processo"].str.contains("SERRA", na=False) |
+            evolucao["Processo"].str.contains("LASER", na=False) |
+            evolucao["Processo"].str.contains("PLASMA", na=False)
+        ) &
+        (
+            evolucao["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+        )
+    ].copy()
+
+    evolucao = evolucao.dropna(subset=["Data_Baixa"]).copy()
+
+    if not evolucao.empty:
+
+        # -----------------------------------
+        # CLASSIFICA TIPO DE CORTE
+        # -----------------------------------
+        def classificar_corte(proc):
+            proc = str(proc).upper().strip()
+            if "SERRA" in proc:
+                return "SERRA"
+            elif "LASER" in proc:
+                return "LASER"
+            elif "PLASMA" in proc:
+                return "PLASMA"
+            return "OUTROS"
+
+        evolucao["Tipo_Corte"] = evolucao["Processo"].apply(classificar_corte)
+        evolucao["Dia"] = evolucao["Data_Baixa"].dt.strftime("%d/%m/%Y")
+
+        # -----------------------------------
+        # RESUMO ANALÍTICO
+        # -----------------------------------
+        evolucao_resumo = (
+            evolucao.groupby(["Dia", "Tipo_Corte"], as_index=False)
+            .agg(
+                Horas_Baixadas=("Horas", "sum"),
+                Operacoes_Baixadas=("CHAVE_OPERACAO", "count")
+            )
+        )
+
+        evolucao_resumo["Horas_Baixadas"] = evolucao_resumo["Horas_Baixadas"].round(1)
+
+        # ordena por data real
+        evolucao_resumo["Dia_Ordenacao"] = pd.to_datetime(evolucao_resumo["Dia"], format="%d/%m/%Y", errors="coerce")
+        evolucao_resumo = evolucao_resumo.sort_values(["Dia_Ordenacao", "Tipo_Corte"]).reset_index(drop=True)
+
+        # -----------------------------------
+        # GRÁFICO - HORAS POR DIA / TIPO
+        # -----------------------------------
+        grafico_horas = evolucao_resumo.pivot_table(
+            index="Dia",
+            columns="Tipo_Corte",
+            values="Horas_Baixadas",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        # ordena corretamente o eixo X
+        ordem_datas = (
+            evolucao_resumo[["Dia", "Dia_Ordenacao"]]
+            .drop_duplicates()
+            .sort_values("Dia_Ordenacao")["Dia"]
+            .tolist()
+        )
+
+        grafico_horas = grafico_horas.reindex(ordem_datas)
+
+        if not grafico_horas.empty:
+            st.line_chart(grafico_horas, use_container_width=True)
+
+            st.caption("Horas baixadas por dia, separadas por tipo de corte.")
+        else:
+            st.info("Não há dados suficientes para gerar o gráfico de evolução.")
+
+        # -----------------------------------
+        # TABELA DE APOIO
+        # -----------------------------------
+        st.markdown("#### 📋 Detalhamento da Evolução do Corte")
+
+        st.dataframe(
+            evolucao_resumo[
+                ["Dia", "Tipo_Corte", "Horas_Baixadas", "Operacoes_Baixadas"]
+            ].rename(columns={
+                "Dia": "Data",
+                "Tipo_Corte": "Tipo de Corte",
+                "Horas_Baixadas": "Horas Baixadas",
+                "Operacoes_Baixadas": "Operações Baixadas"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("Ainda não há baixas válidas de corte para alimentar a evolução diária.")
+
+else:
+    st.info("Histórico de baixas não disponível para gerar a evolução diária.")
 
 # ===============================
 # CSS VISUAL PREMIUM APS
@@ -2713,236 +3106,6 @@ else:
 
 st.divider()
 
-# =========================================================
-# DASHBOARD DO CORTE
-# =========================================================
-st.markdown("## 📊 Dashboard do Corte")
-st.caption("Indicadores operacionais e gerenciais do setor de corte.")
-
-# ---------------------------------------
-# BASES DO DASHBOARD DE CORTE
-# ---------------------------------------
-fila_corte_dash = fila.copy()
-fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
-
-fila_corte_dash = fila_corte_dash[
-    (
-        fila_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
-        fila_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
-        fila_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
-    )
-].copy()
-
-fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
-
-hist_corte_dash = pd.DataFrame()
-
-if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-    hist_corte_dash = df_baixas_historico.copy()
-    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
-    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
-
-    hist_corte_dash = hist_corte_dash[
-        (
-            hist_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
-            hist_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
-            hist_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
-        )
-    ].copy()
-
-    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
-    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
-
-# ---------------------------------------
-# KPIs DO CORTE
-# ---------------------------------------
-ops_fila_corte = len(fila_corte_dash)
-horas_fila_corte = fila_corte_dash["Horas"].sum()
-
-if not hist_corte_dash.empty:
-    baixas_ativas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    baixas_estornadas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
-    ].copy()
-
-    qtd_baixadas_corte = len(baixas_ativas_corte)
-    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
-    qtd_estornadas_corte = len(baixas_estornadas_corte)
-else:
-    qtd_baixadas_corte = 0
-    horas_baixadas_corte = 0
-    qtd_estornadas_corte = 0
-
-col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
-col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
-col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
-col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
-col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
-col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
-
-st.divider()
-
-# ---------------------------------------
-# THROUGHPUT POR PROCESSO DE CORTE
-# ---------------------------------------
-st.markdown("### ⚙️ Throughput por Processo de Corte")
-
-if not hist_corte_dash.empty:
-    throughput = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    throughput["Processo_Corte"] = throughput["PROC_UPPER"].apply(
-        lambda x: "SERRA" if "SERRA" in x else (
-            "LASER" if "LASER" in x else (
-                "PLASMA" if "PLASMA" in x else "OUTROS"
-            )
-        )
-    )
-
-    throughput_resumo = (
-        throughput.groupby("Processo_Corte", as_index=False)
-        .agg(
-            Operacoes_Baixadas=("PV", "count"),
-            Horas_Baixadas=("Horas", "sum")
-        )
-        .sort_values("Horas_Baixadas", ascending=False)
-    )
-
-    throughput_resumo["Horas_Baixadas"] = throughput_resumo["Horas_Baixadas"].round(1)
-
-    st.dataframe(
-        throughput_resumo,
-        use_container_width=True,
-        hide_index=True
-    )
-else:
-    st.info("Ainda não há baixas suficientes para calcular throughput do corte.")
-
-st.divider()
-
-# ---------------------------------------
-# EVOLUÇÃO DIÁRIA DO CORTE (POR TIPO)
-# ---------------------------------------
-st.markdown("### 📈 Evolução Diária do Corte")
-
-if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-
-    evolucao = df_baixas_historico.copy()
-
-    # -----------------------------------
-    # PADRONIZAÇÃO
-    # -----------------------------------
-    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.upper().str.strip()
-    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.upper().str.strip()
-    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
-    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
-
-    # -----------------------------------
-    # FILTRO: SOMENTE CORTE VÁLIDO
-    # -----------------------------------
-    evolucao = evolucao[
-        (
-            evolucao["Processo"].str.contains("SERRA", na=False) |
-            evolucao["Processo"].str.contains("LASER", na=False) |
-            evolucao["Processo"].str.contains("PLASMA", na=False)
-        ) &
-        (
-            evolucao["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-        )
-    ].copy()
-
-    evolucao = evolucao.dropna(subset=["Data_Baixa"]).copy()
-
-    if not evolucao.empty:
-
-        # -----------------------------------
-        # CLASSIFICA TIPO DE CORTE
-        # -----------------------------------
-        def classificar_corte(proc):
-            proc = str(proc).upper().strip()
-            if "SERRA" in proc:
-                return "SERRA"
-            elif "LASER" in proc:
-                return "LASER"
-            elif "PLASMA" in proc:
-                return "PLASMA"
-            return "OUTROS"
-
-        evolucao["Tipo_Corte"] = evolucao["Processo"].apply(classificar_corte)
-        evolucao["Dia"] = evolucao["Data_Baixa"].dt.strftime("%d/%m/%Y")
-
-        # -----------------------------------
-        # RESUMO ANALÍTICO
-        # -----------------------------------
-        evolucao_resumo = (
-            evolucao.groupby(["Dia", "Tipo_Corte"], as_index=False)
-            .agg(
-                Horas_Baixadas=("Horas", "sum"),
-                Operacoes_Baixadas=("CHAVE_OPERACAO", "count")
-            )
-        )
-
-        evolucao_resumo["Horas_Baixadas"] = evolucao_resumo["Horas_Baixadas"].round(1)
-
-        # ordena por data real
-        evolucao_resumo["Dia_Ordenacao"] = pd.to_datetime(evolucao_resumo["Dia"], format="%d/%m/%Y", errors="coerce")
-        evolucao_resumo = evolucao_resumo.sort_values(["Dia_Ordenacao", "Tipo_Corte"]).reset_index(drop=True)
-
-        # -----------------------------------
-        # GRÁFICO - HORAS POR DIA / TIPO
-        # -----------------------------------
-        grafico_horas = evolucao_resumo.pivot_table(
-            index="Dia",
-            columns="Tipo_Corte",
-            values="Horas_Baixadas",
-            aggfunc="sum",
-            fill_value=0
-        )
-
-        # ordena corretamente o eixo X
-        ordem_datas = (
-            evolucao_resumo[["Dia", "Dia_Ordenacao"]]
-            .drop_duplicates()
-            .sort_values("Dia_Ordenacao")["Dia"]
-            .tolist()
-        )
-
-        grafico_horas = grafico_horas.reindex(ordem_datas)
-
-        if not grafico_horas.empty:
-            st.line_chart(grafico_horas, use_container_width=True)
-
-            st.caption("Horas baixadas por dia, separadas por tipo de corte.")
-        else:
-            st.info("Não há dados suficientes para gerar o gráfico de evolução.")
-
-        # -----------------------------------
-        # TABELA DE APOIO
-        # -----------------------------------
-        st.markdown("#### 📋 Detalhamento da Evolução do Corte")
-
-        st.dataframe(
-            evolucao_resumo[
-                ["Dia", "Tipo_Corte", "Horas_Baixadas", "Operacoes_Baixadas"]
-            ].rename(columns={
-                "Dia": "Data",
-                "Tipo_Corte": "Tipo de Corte",
-                "Horas_Baixadas": "Horas Baixadas",
-                "Operacoes_Baixadas": "Operações Baixadas"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-
-    else:
-        st.info("Ainda não há baixas válidas de corte para alimentar a evolução diária.")
-
-else:
-    st.info("Histórico de baixas não disponível para gerar a evolução diária.")
 
 # ============================================================
 # MINI DASHBOARD POR GARGALO 
@@ -3473,168 +3636,6 @@ if not critico.empty:
 else:
     st.success("Capacidade sob controle.")
 
-# --------------------------------------------------------
-# HISTÓRICO PREMIUM DE BAIXA
-# --------------------------------------------------------
-st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
-st.caption("Rastreabilidade completa das baixas operacionais, terceirizações e estornos.")
-
-if "df_baixas_historico" not in locals() or df_baixas_historico is None:
-    df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
-else:
-    df_baixas_exib = df_baixas_historico.copy()
-
-if not df_baixas_exib.empty:
-    for col in [
-        "PV", "Cliente", "CODIGO_PV", "Processo", "Usuario",
-        "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
-    ]:
-        if col in df_baixas_exib.columns:
-            df_baixas_exib[col] = (
-                df_baixas_exib[col]
-                .fillna("")
-                .astype(str)
-                .str.strip()
-            )
-
-    if "Status_Baixa" in df_baixas_exib.columns:
-        df_baixas_exib["Status_Baixa"] = (
-            df_baixas_exib["Status_Baixa"]
-            .replace("", "ATIVA")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-    else:
-        df_baixas_exib["Status_Baixa"] = "ATIVA"
-
-    if "Data_Baixa" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Baixa"] = pd.to_datetime(
-            df_baixas_exib["Data_Baixa"],
-            errors="coerce"
-        )
-
-    if "Data_Estorno" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Estorno"] = pd.to_datetime(
-            df_baixas_exib["Data_Estorno"],
-            errors="coerce"
-        )
-
-    col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
-
-    status_hist_sel = col_hist1.selectbox(
-        "Filtrar por status",
-        ["Todos", "ATIVA", "TERCEIRIZADA", "ESTORNADA"],
-        key="filtro_status_historico_baixas"
-    )
-
-    processo_hist_sel = col_hist2.selectbox(
-        "Filtrar por processo",
-        ["Todos"] + sorted(
-            df_baixas_exib["Processo"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-            .tolist()
-        ),
-        key="filtro_processo_historico_baixas"
-    )
-
-    cliente_hist_sel = col_hist3.selectbox(
-        "Filtrar por cliente",
-        ["Todos"] + sorted(
-            df_baixas_exib["Cliente"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-            .tolist()
-        ),
-        key="filtro_cliente_historico_baixas"
-    )
-
-    if status_hist_sel != "Todos":
-        df_baixas_exib = df_baixas_exib[
-            df_baixas_exib["Status_Baixa"] == status_hist_sel
-        ].copy()
-
-    if processo_hist_sel != "Todos":
-        df_baixas_exib = df_baixas_exib[
-            df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
-        ].copy()
-
-    if cliente_hist_sel != "Todos":
-        df_baixas_exib = df_baixas_exib[
-            df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
-        ].copy()
-
-    col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
-    col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
-    col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
-    col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
-    col_hk4.metric(
-        "Horas Registradas",
-        fmt_br_num(
-            pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(),
-            1
-        ) + " h"
-    )
-
-    def status_historico_label(x):
-        x = str(x).strip().upper()
-        if x == "ATIVA":
-            return "✅ Baixada"
-        elif x == "TERCEIRIZADA":
-            return "🟣 Terceirizada"
-        elif x == "ESTORNADA":
-            return "🔁 Estornada"
-        return "⚪ Indefinido"
-
-    df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
-
-    if "Data_Baixa" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
-
-    if "Data_Estorno" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Estorno"] = df_baixas_exib["Data_Estorno"].dt.strftime("%d/%m/%Y %H:%M")
-
-    df_baixas_exib = df_baixas_exib.sort_values(
-        by=["Data_Baixa"],
-        ascending=False,
-        na_position="last"
-    ).copy()
-
-    colunas_exibir = [
-        "Status Exibição",
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Data_Baixa",
-        "Usuario",
-        "Observacao",
-        "Data_Estorno",
-        "Motivo_Estorno"
-    ]
-    colunas_exibir = [c for c in colunas_exibir if c in df_baixas_exib.columns]
-
-    st.dataframe(
-        df_baixas_exib[colunas_exibir].rename(columns={
-            "Status Exibição": "Status",
-            "Data_Baixa": "Data da Baixa",
-            "Usuario": "Usuário",
-            "Observacao": "Observação",
-            "Data_Estorno": "Data do Estorno",
-            "Motivo_Estorno": "Motivo do Estorno"
-        }),
-        use_container_width=True,
-        hide_index=True,
-        height=340
-    )
-else:
-    st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ============================================================
 # ===================== VISÃO OPERACIONAL ====================
