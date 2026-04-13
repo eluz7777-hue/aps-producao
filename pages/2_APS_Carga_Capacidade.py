@@ -2015,14 +2015,9 @@ d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
 
 # ============================================================
 # Mini Dashboard por Gargalo (INTELIGENTE)
-# LOCAL: FUNÇÕES AUXILIARES / CÁLCULOS / DASHBOARDS
-# SUBSTITUIR TODO O BLOCO ANTIGO DO MINI DASHBOARD
 # ============================================================
 
 def _normalizar_coluna_processo(df, coluna="Processo"):
-    """
-    Padroniza a coluna de processo para agrupamentos seguros.
-    """
     if df is None or df.empty or coluna not in df.columns:
         return df
 
@@ -2032,9 +2027,11 @@ def _normalizar_coluna_processo(df, coluna="Processo"):
 
 
 def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
-    """
-    Monta um dashboard inteligente por gargalo/processo com score de criticidade.
-    """
+
+    # 🔒 GARANTIA ABSOLUTA (CORREÇÃO DO SEU ERRO)
+    if df_baixas_ativas is None or not isinstance(df_baixas_ativas, pd.DataFrame):
+        df_baixas_ativas = pd.DataFrame()
+
     if fila is None or fila.empty:
         return pd.DataFrame(columns=[
             "Processo",
@@ -2070,7 +2067,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     # ------------------------------------------------------------
     # BASE DE BAIXAS ATIVAS
     # ------------------------------------------------------------
-    if df_baixas_ativas is None or df_baixas_ativas.empty:
+    if df_baixas_ativas.empty or "Processo" not in df_baixas_ativas.columns:
         resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
     else:
         baixas_tmp = df_baixas_ativas.copy()
@@ -2101,8 +2098,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
 
     # ------------------------------------------------------------
-    # SCORE INTELIGENTE DE GARGALO
-    # Peso maior para horas (carga real)
+    # SCORE
     # ------------------------------------------------------------
     df_dash["Score"] = (
         (df_dash["Horas_Fila"] * 1.5) +
@@ -2111,7 +2107,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     # ------------------------------------------------------------
-    # CLASSIFICAÇÃO AUTOMÁTICA
+    # CLASSIFICAÇÃO
     # ------------------------------------------------------------
     def classificar_gargalo(score):
         if score >= 80:
@@ -2124,7 +2120,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar_gargalo)
 
     # ------------------------------------------------------------
-    # ORDENAÇÃO E RANKING
+    # ORDENAÇÃO
     # ------------------------------------------------------------
     df_dash = df_dash.sort_values(
         by=["Score", "Horas_Fila", "Qtd_Fila"],
@@ -2137,9 +2133,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
 
 
 def resumo_cards_gargalos(df_dash):
-    """
-    Gera indicadores compactos para os cards do mini dashboard.
-    """
+
     if df_dash is None or df_dash.empty:
         return {
             "total_processos": 0,
@@ -2152,7 +2146,7 @@ def resumo_cards_gargalos(df_dash):
             "qtd_controlados": 0
         }
 
-    gargalo_critico = df_dash.iloc[0]["Processo"] if not df_dash.empty else "-"
+    gargalo_critico = df_dash.iloc[0]["Processo"]
 
     return {
         "total_processos": int(df_dash["Processo"].nunique()),
