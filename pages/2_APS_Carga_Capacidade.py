@@ -1431,6 +1431,34 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
+# ============================================================
+# 📊 UTILIZAÇÃO POR PROCESSO (BASE)
+# ============================================================
+
+# capacidade por processo no mês
+def capacidade_processo(processo):
+    recursos = MAQUINAS.get(processo, 0)
+    if recursos <= 0:
+        return 0
+    return horas_mes * recursos * EFICIENCIA
+
+dem_proc["Capacidade Processo"] = dem_proc["Processo"].apply(capacidade_processo)
+
+# evita divisão por zero
+dem_proc["Utilização (%)"] = np.where(
+    dem_proc["Capacidade Processo"] > 0,
+    (dem_proc["Horas"] / dem_proc["Capacidade Processo"]) * 100,
+    0
+)
+
+dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].replace([np.inf, -np.inf], 0).fillna(0).round(1)
+
+# classificação (opcional mas recomendado)
+dem_proc["Faixa"] = np.where(
+    dem_proc["Utilização (%)"] >= 100, "Crítico",
+    np.where(dem_proc["Utilização (%)"] >= 80, "Atenção", "OK")
+)
+
 # ===============================
 # 2) UTILIZAÇÃO POR PROCESSO
 # ===============================
