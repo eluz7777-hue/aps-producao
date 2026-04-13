@@ -824,6 +824,198 @@ if df.empty:
     st.stop()
 
 
+
+ 
+# ===============================
+# FILTRO POR CLIENTE
+# ===============================
+df_excluidas = pd.DataFrame(pvs_excluidas)
+df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
+
+clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
+cliente_sel = st.selectbox("Filtrar Cliente", ["Todos"] + clientes_disponiveis)
+
+if cliente_sel != "Todos":
+    df = df[df["Cliente"] == cliente_sel].copy()
+    df_excluidas = df_excluidas[df_excluidas["Cliente"] == cliente_sel].copy() if not df_excluidas.empty else df_excluidas
+    df_sem_carga = df_sem_carga[df_sem_carga["Cliente"] == cliente_sel].copy() if not df_sem_carga.empty else df_sem_carga
+    df_auditoria_pv = df_auditoria_pv[df_auditoria_pv["Cliente"] == cliente_sel].copy() if not df_auditoria_pv.empty else df_auditoria_pv
+
+if df.empty:
+    st.warning("Nenhum dado encontrado para o filtro selecionado.")
+    st.stop()
+
+# ===============================
+# DATAS
+# ===============================
+df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
+df["Ano"] = df["Data"].dt.year
+df["Mes"] = df["Data"].dt.month
+mes_ref = int(df["Mes"].mode()[0])
+ano_ref = int(df["Ano"].mode()[0])
+
+horas_mes = horas_uteis_mes(ano_ref, mes_ref)
+total_recursos = sum(MAQUINAS.values())
+
+# ===============================
+# FILA REAL POR PROCESSO
+# ===============================
+df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
+df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
+
+def capacidade_diaria_real(processo):
+    """
+    Capacidade média diária operacional por processo.
+    Usada para estimativa contínua de fila.
+    """
+    recursos = MAQUINAS.get(processo, 0)
+    if recursos <= 0:
+        return 0
+    return HORAS_DIA_UTIL_MEDIA * recursos * EFICIENCIA
+
+df["Capacidade Diária Real (h)"] = df["Processo"].apply(capacidade_diaria_real)
+
+df["Fila (dias)"] = np.where(
+    df["Capacidade Diária Real (h)"] > 0,
+    df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
+    0
+)
+
+
+# ===============================
+# CALENDÁRIO
+# ===============================
+cal = df[["Data", "Semana", "Ano"]].drop_duplicates().copy()
+
+cal["Inicio"] = cal["Data"] - pd.to_timedelta(cal["Data"].dt.weekday, unit="d")
+cal["Fim"] = cal["Inicio"] + pd.Timedelta(days=6)
+
+cal = cal.groupby(["Semana", "Ano"]).agg({
+    "Inicio": "min",
+    "Fim": "max"
+}).reset_index()
+
+cal["Dias Úteis"] = cal.apply(
+    lambda x: dias_uteis_periodo(x["Inicio"], x["Fim"]), axis=1
+)
+
+# ===============================
+# VISÃO
+# ===============================
+tipo = st.radio("Visualização", ["Semanal", "Mensal"], horizontal=True)
+
+# Garantia de colunas de data corretas
+df["Ano"] = df["Data"].dt.year
+df["Mes"] = df["Data"].dt.month
+df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
+
+if tipo == "Semanal":
+    df["Periodo"] = "Sem " + df["Semana"].astype(str)
+
+    dem = df.groupby(
+        ["Periodo", "Processo", "Semana", "Ano"],
+        as_index=False
+    )["Horas"].sum()
+
+    dem = dem.merge(cal, on=["Semana", "Ano"], how="left")
+
+    # DEBUG (mantenha por enquanto)
+    st.write("DEBUG dem colunas:", dem.columns.tolist())
+    st.write("DEBUG dem preview:", dem.head())
+
+    # 🔒 FUNÇÃO SEGURA
+    def calcular_capacidade_segura(r):
+        try:
+            inicio = r.get("Inicio", None)
+            fim = r.get("Fim", None)
+            processo = r.get("Processo", None)
+
+            if pd.isna(inicio) or pd.isna(fim) or processo is None:
+                return 0
+
+            return capacidade_semana_por_processo(inicio, fim, processo)
+        except Exception as e:
+            return 0
+
+    dem["Capacidade"] = dem.apply(calcular_capacidade_segura, axis=1)
+
+else:
+    df["Periodo"] = "Mês " + df["Mes"].astype(str)
+
+    dem = df.groupby(
+        ["Periodo", "Processo", "Mes", "Ano"],
+        as_index=False
+    )["Horas"].sum()
+
+    dem["Capacidade"] = dem.apply(
+        lambda r: capacidade_mes_por_processo(
+            r.get("Ano"),
+            r.get("Mes"),
+            r.get("Processo")
+        ),
+        axis=1
+    )
+
+# ===============================
+# TRATAMENTOS FINAIS
+# ===============================
+
+# Evita divisão por zero
+dem["Capacidade"] = dem["Capacidade"].fillna(0)
+
+dem["Ocupacao"] = np.where(
+    dem["Capacidade"] > 0,
+    (dem["Horas"] / dem["Capacidade"]) * 100,
+    0
+)
+
+dem["Ocupacao"] = dem["Ocupacao"].replace([np.inf, -np.inf], 0).fillna(0)
+
+# Remove processos sem capacidade produtiva
+dem = dem[dem["Capacidade"] > 0].copy()
+
+# Remove linhas irrelevantes
+dem = dem[(dem["Horas"] > 0) | (dem["Ocupacao"] > 0)].copy()
+
+# Ordenação
+if tipo == "Mensal":
+    dem["Ordem_Periodo"] = dem["Mes"]
+else:
+    dem["Ordem_Periodo"] = dem["Semana"]
+
+dem = dem.sort_values(["Ordem_Periodo", "Processo"]).copy()
+
+# Labels
+dem["Horas_Label"] = dem["Horas"].round(1).astype(str) + "h"
+dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
+
+# ===============================
+# AGRUPAMENTO POR PROCESSO
+# ===============================
+dem_proc = df.groupby(["Processo"])["Horas"].sum().reset_index()
+
+# ===============================
+# MÉTRICAS
+# ===============================
+# Padronização técnica da ocupação
+dem["Ocupacao"] = dem["Ocupacao"].replace([float("inf"), -float("inf")], 0)
+dem["Ocupacao"] = dem["Ocupacao"].fillna(0)
+dem["Ocupacao"] = dem["Ocupacao"].round(1)
+
+def status(x):
+    if x > 100:
+        return "🔴"
+    elif x > 80:
+        return "🟡"
+    else:
+        return "🟢"
+
+dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
+
+# Coluna apenas para exibição visual
+dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
+
+
 # ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
@@ -1394,195 +1586,7 @@ fig_comp.update_layout(
 
 st.plotly_chart(fig_comp, use_container_width=True)
 
- 
-# ===============================
-# FILTRO POR CLIENTE
-# ===============================
-df_excluidas = pd.DataFrame(pvs_excluidas)
-df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
 
-clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
-cliente_sel = st.selectbox("Filtrar Cliente", ["Todos"] + clientes_disponiveis)
-
-if cliente_sel != "Todos":
-    df = df[df["Cliente"] == cliente_sel].copy()
-    df_excluidas = df_excluidas[df_excluidas["Cliente"] == cliente_sel].copy() if not df_excluidas.empty else df_excluidas
-    df_sem_carga = df_sem_carga[df_sem_carga["Cliente"] == cliente_sel].copy() if not df_sem_carga.empty else df_sem_carga
-    df_auditoria_pv = df_auditoria_pv[df_auditoria_pv["Cliente"] == cliente_sel].copy() if not df_auditoria_pv.empty else df_auditoria_pv
-
-if df.empty:
-    st.warning("Nenhum dado encontrado para o filtro selecionado.")
-    st.stop()
-
-# ===============================
-# DATAS
-# ===============================
-df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
-df["Ano"] = df["Data"].dt.year
-df["Mes"] = df["Data"].dt.month
-mes_ref = int(df["Mes"].mode()[0])
-ano_ref = int(df["Ano"].mode()[0])
-
-horas_mes = horas_uteis_mes(ano_ref, mes_ref)
-total_recursos = sum(MAQUINAS.values())
-
-# ===============================
-# FILA REAL POR PROCESSO
-# ===============================
-df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
-df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
-
-def capacidade_diaria_real(processo):
-    """
-    Capacidade média diária operacional por processo.
-    Usada para estimativa contínua de fila.
-    """
-    recursos = MAQUINAS.get(processo, 0)
-    if recursos <= 0:
-        return 0
-    return HORAS_DIA_UTIL_MEDIA * recursos * EFICIENCIA
-
-df["Capacidade Diária Real (h)"] = df["Processo"].apply(capacidade_diaria_real)
-
-df["Fila (dias)"] = np.where(
-    df["Capacidade Diária Real (h)"] > 0,
-    df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
-    0
-)
-
-
-# ===============================
-# CALENDÁRIO
-# ===============================
-cal = df[["Data", "Semana", "Ano"]].drop_duplicates().copy()
-
-cal["Inicio"] = cal["Data"] - pd.to_timedelta(cal["Data"].dt.weekday, unit="d")
-cal["Fim"] = cal["Inicio"] + pd.Timedelta(days=6)
-
-cal = cal.groupby(["Semana", "Ano"]).agg({
-    "Inicio": "min",
-    "Fim": "max"
-}).reset_index()
-
-cal["Dias Úteis"] = cal.apply(
-    lambda x: dias_uteis_periodo(x["Inicio"], x["Fim"]), axis=1
-)
-
-# ===============================
-# VISÃO
-# ===============================
-tipo = st.radio("Visualização", ["Semanal", "Mensal"], horizontal=True)
-
-# Garantia de colunas de data corretas
-df["Ano"] = df["Data"].dt.year
-df["Mes"] = df["Data"].dt.month
-df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
-
-if tipo == "Semanal":
-    df["Periodo"] = "Sem " + df["Semana"].astype(str)
-
-    dem = df.groupby(
-        ["Periodo", "Processo", "Semana", "Ano"],
-        as_index=False
-    )["Horas"].sum()
-
-    dem = dem.merge(cal, on=["Semana", "Ano"], how="left")
-
-    # DEBUG (mantenha por enquanto)
-    st.write("DEBUG dem colunas:", dem.columns.tolist())
-    st.write("DEBUG dem preview:", dem.head())
-
-    # 🔒 FUNÇÃO SEGURA
-    def calcular_capacidade_segura(r):
-        try:
-            inicio = r.get("Inicio", None)
-            fim = r.get("Fim", None)
-            processo = r.get("Processo", None)
-
-            if pd.isna(inicio) or pd.isna(fim) or processo is None:
-                return 0
-
-            return capacidade_semana_por_processo(inicio, fim, processo)
-        except Exception as e:
-            return 0
-
-    dem["Capacidade"] = dem.apply(calcular_capacidade_segura, axis=1)
-
-else:
-    df["Periodo"] = "Mês " + df["Mes"].astype(str)
-
-    dem = df.groupby(
-        ["Periodo", "Processo", "Mes", "Ano"],
-        as_index=False
-    )["Horas"].sum()
-
-    dem["Capacidade"] = dem.apply(
-        lambda r: capacidade_mes_por_processo(
-            r.get("Ano"),
-            r.get("Mes"),
-            r.get("Processo")
-        ),
-        axis=1
-    )
-
-# ===============================
-# TRATAMENTOS FINAIS
-# ===============================
-
-# Evita divisão por zero
-dem["Capacidade"] = dem["Capacidade"].fillna(0)
-
-dem["Ocupacao"] = np.where(
-    dem["Capacidade"] > 0,
-    (dem["Horas"] / dem["Capacidade"]) * 100,
-    0
-)
-
-dem["Ocupacao"] = dem["Ocupacao"].replace([np.inf, -np.inf], 0).fillna(0)
-
-# Remove processos sem capacidade produtiva
-dem = dem[dem["Capacidade"] > 0].copy()
-
-# Remove linhas irrelevantes
-dem = dem[(dem["Horas"] > 0) | (dem["Ocupacao"] > 0)].copy()
-
-# Ordenação
-if tipo == "Mensal":
-    dem["Ordem_Periodo"] = dem["Mes"]
-else:
-    dem["Ordem_Periodo"] = dem["Semana"]
-
-dem = dem.sort_values(["Ordem_Periodo", "Processo"]).copy()
-
-# Labels
-dem["Horas_Label"] = dem["Horas"].round(1).astype(str) + "h"
-dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
-
-# ===============================
-# AGRUPAMENTO POR PROCESSO
-# ===============================
-dem_proc = df.groupby(["Processo"])["Horas"].sum().reset_index()
-
-# ===============================
-# MÉTRICAS
-# ===============================
-# Padronização técnica da ocupação
-dem["Ocupacao"] = dem["Ocupacao"].replace([float("inf"), -float("inf")], 0)
-dem["Ocupacao"] = dem["Ocupacao"].fillna(0)
-dem["Ocupacao"] = dem["Ocupacao"].round(1)
-
-def status(x):
-    if x > 100:
-        return "🔴"
-    elif x > 80:
-        return "🟡"
-    else:
-        return "🟢"
-
-dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
-
-# Coluna apenas para exibição visual
-dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
 
 
 # ===============================
