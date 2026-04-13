@@ -4060,7 +4060,9 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
                     try:
                         df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
+
                         st.cache_data.clear()
+                        st.rerun()
 
                         st.success("✅ Baixa operacional registrada com sucesso.")
                         st.info(
