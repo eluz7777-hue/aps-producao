@@ -904,40 +904,6 @@ file_mtime = os.path.getmtime(arquivo_pv)
 df_pv = carregar_dados(arquivo_pv, file_mtime)
 
 # ===============================
-# INTEGRAÇÃO DO HISTÓRICO DE BAIXAS OPERACIONAIS
-# ===============================
-if "BASE_PATH" in globals():
-    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-
-    if os.path.exists(caminho_baixas):
-        file_mtime_baixas = os.path.getmtime(caminho_baixas)
-    else:
-        file_mtime_baixas = 0
-
-    df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
-    df_baixas_historico = historico_baixas_completo(df_baixas)
-    df_baixas_ativas = historico_baixas_ativas(df_baixas)
-
-    for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
-        if not _df.empty:
-            for col in ["PV", "Processo", "CODIGO_PV", "CHAVE_OPERACAO"]:
-                if col in _df.columns:
-                    _df[col] = _df[col].fillna("").astype(str).str.strip().str.upper()
-
-    if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
-        chaves_baixadas = set(
-            df_baixas_ativas["CHAVE_OPERACAO"].dropna().astype(str).str.strip().str.upper().unique()
-        )
-    else:
-        chaves_baixadas = set()
-else:
-    df_baixas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    df_baixas_historico = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    df_baixas_ativas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    chaves_baixadas = set()
-
-
-# ===============================
 # NORMALIZAÇÃO FORTE DE CABEÇALHOS
 # ===============================
 df_pv.columns = [
@@ -3755,20 +3721,10 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
     st.subheader("🏭 Operações mais carregadas do APS")
     st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
 
-    # --------------------------------------------------------
-    # BASE DOS GARGALOS ATUAIS (usa apenas pendentes reais)
-    # --------------------------------------------------------
     gargalos_top3 = (
         df.groupby("Processo", as_index=False)
-        .agg(
-            Horas_Pendentes=("Horas", "sum"),
-            PVs_Pendentes=("PV", "nunique")
-        )
-        .merge(
-            dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]],
-            on="Processo",
-            how="left"
-        )
+        .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
+        .merge(dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]], on="Processo", how="left")
         .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
         .head(3)
         .reset_index(drop=True)
@@ -3782,9 +3738,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
         gargalos_top3["Ranking"] = gargalos_top3.index + 1
 
-        # --------------------------------------------------------
-        # DIAS DE FILA DO GARGALO
-        # --------------------------------------------------------
         gargalos_top3["Dias de Fila"] = np.where(
             gargalos_top3["Capacidade Processo"] > 0,
             (gargalos_top3["Horas_Pendentes"] / gargalos_top3["Capacidade Processo"]).round(1),
@@ -3803,558 +3756,114 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.dataframe(
             exib_top3[
-                [
-                    "Ranking",
-                    "Processo",
-                    "Horas Pendentes (h)",
-                    "PVs_Pendentes",
-                    "Capacidade Processo (h)",
-                    "Dias de Fila",
-                    "Utilização (%)"
-                ]
-            ].rename(columns={
-                "PVs_Pendentes": "PVs Pendentes"
-            }),
+                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes",
+                 "Capacidade Processo (h)", "Dias de Fila", "Utilização (%)"]
+            ].rename(columns={"PVs_Pendentes": "PVs Pendentes"}),
             use_container_width=True,
             hide_index=True
         )
 
         st.divider()
 
-        # --------------------------------------------------------
-        # FILA DOS GARGALOS (usa base visual completa)
-        # --------------------------------------------------------
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
-
         base_gargalos = df_operacional[df_operacional["Processo"].isin(processos_top3)].copy()
 
-        # Blindagem estrutural
         for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Status Operacional"]:
             if col not in base_gargalos.columns:
                 base_gargalos[col] = ""
             base_gargalos[col] = base_gargalos[col].fillna("").astype(str).str.strip()
 
-        if "CHAVE_OPERACAO" not in base_gargalos.columns:
-            base_gargalos["CHAVE_OPERACAO"] = (
-                base_gargalos["PV"].astype(str).str.strip().str.upper() + "||" +
-                base_gargalos["Processo"].astype(str).str.strip().str.upper() + "||" +
-                base_gargalos["CODIGO_PV"].astype(str).str.strip().str.upper()
-            )
-        else:
-            base_gargalos["CHAVE_OPERACAO"] = (
-                base_gargalos["CHAVE_OPERACAO"].fillna("").astype(str).str.strip().str.upper()
-            )
-
-        if "ENTREGA" in base_gargalos.columns:
-            base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
-            base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
-            base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
-            base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
-        else:
-            base_gargalos["Dias para Entrega"] = None
-            base_gargalos["Semáforo"] = "⚪ Sem data"
-            base_gargalos["ENTREGA_FMT"] = ""
-
-        base_gargalos["Horas"] = pd.to_numeric(base_gargalos["Horas"], errors="coerce").fillna(0).round(1)
-
-        st.markdown("### 📋 PVs dos Gargalos (Pendentes + Baixadas)")
-
-        processo_baixa_sel = st.selectbox(
-            "Selecione o gargalo para trabalhar",
-            processos_top3,
-            key="gargalo_top3_select_operacional"
+        base_gargalos["CHAVE_OPERACAO"] = (
+            base_gargalos["PV"].str.upper().str.strip() + "||" +
+            base_gargalos["Processo"].str.upper().str.strip() + "||" +
+            base_gargalos["CODIGO_PV"].str.upper().str.strip()
         )
 
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == processo_baixa_sel
-        ].copy()
+        base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
+        base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
+        base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
+        base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+        st.markdown("### 📋 PVs dos Gargalos")
+
+        processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
+
+        fila_gargalo = base_gargalos[base_gargalos["Processo"] == processo_baixa_sel].copy()
 
         fila_gargalo = fila_gargalo.sort_values(
             ["Status Operacional", "Dias para Entrega", "Horas", "PV"],
             ascending=[True, True, False, True]
         ).reset_index(drop=True)
 
-        # --------------------------------------------------------
-        # TEMPO ACUMULADO DE FILA
-        # --------------------------------------------------------
-        capacidade_dia_gargalo = np.nan
-
-        if "Capacidade/Dia" in gargalos_top3.columns:
-            capacidade_tmp = gargalos_top3.loc[
-                gargalos_top3["Processo"] == processo_baixa_sel,
-                "Capacidade/Dia"
-            ]
-            if not capacidade_tmp.empty:
-                capacidade_dia_gargalo = pd.to_numeric(capacidade_tmp.iloc[0], errors="coerce")
-
-        elif "Capacidade" in gargalos_top3.columns:
-            capacidade_tmp = gargalos_top3.loc[
-                gargalos_top3["Processo"] == processo_baixa_sel,
-                "Capacidade"
-            ]
-            if not capacidade_tmp.empty:
-                capacidade_dia_gargalo = pd.to_numeric(capacidade_tmp.iloc[0], errors="coerce")
-
-        fila_gargalo["Horas"] = pd.to_numeric(fila_gargalo["Horas"], errors="coerce").fillna(0)
-
-        fila_gargalo["Horas_Pendentes_Acumuladas"] = np.where(
-            fila_gargalo["Status Operacional"] == "⏳ Pendente",
-            fila_gargalo["Horas"],
-            0
-        )
-
-        fila_gargalo["Fila Acumulada (h)"] = fila_gargalo["Horas_Pendentes_Acumuladas"].cumsum().round(1)
-
-        if pd.notna(capacidade_dia_gargalo) and capacidade_dia_gargalo > 0:
-            fila_gargalo["Dias até Entrada"] = (
-                fila_gargalo["Fila Acumulada (h)"] / capacidade_dia_gargalo
-            ).round(1)
-
-            fila_gargalo["Entrada Prevista"] = fila_gargalo["Dias até Entrada"].apply(
-                lambda x: "Hoje" if x <= 1 else f"{int(np.ceil(x))} dias"
-            )
-        else:
-            fila_gargalo["Dias até Entrada"] = np.nan
-            fila_gargalo["Entrada Prevista"] = "Sem capacidade"
-
         fila_gargalo_pendente = fila_gargalo[
             fila_gargalo["Status Operacional"] == "⏳ Pendente"
         ].copy()
 
-        col_g1, col_g2, col_g3, col_g4 = st.columns(4)
-
-        col_g1.metric("Processo Selecionado", processo_baixa_sel)
-        col_g2.metric("PVs Pendentes", fmt_br_int(fila_gargalo_pendente["PV"].nunique()))
-        col_g3.metric("Horas Pendentes", fmt_br_num(fila_gargalo_pendente["Horas"].sum(), 1) + " h")
-
-        if not fila_gargalo_pendente.empty and "Fila Acumulada (h)" in fila_gargalo_pendente.columns:
-            fila_total_h = pd.to_numeric(fila_gargalo_pendente["Fila Acumulada (h)"], errors="coerce").max()
-        else:
-            fila_total_h = 0
-
-        col_g4.metric("Fila Total do Gargalo", fmt_br_num(fila_total_h, 1) + " h")
-
-        fila_gargalo_exib = fila_gargalo.copy()
-
-        st.dataframe(
-            fila_gargalo_exib[
-                [
-                    "Status Operacional",
-                    "Semáforo",
-                    "PV",
-                    "Cliente",
-                    "CODIGO_PV",
-                    "Processo",
-                    "Horas",
-                    "Fila Acumulada (h)",
-                    "Entrada Prevista",
-                    "Dias para Entrega",
-                    "ENTREGA_FMT"
-                ]
-            ].rename(columns={
-                "ENTREGA_FMT": "Entrega"
-            }),
-            use_container_width=True,
-            hide_index=True,
-            height=360
-        )
+        st.dataframe(fila_gargalo, use_container_width=True, height=360)
 
         st.divider()
 
-        # --------------------------------------------------------
-        # BAIXA OPERACIONAL / TERCEIRIZAÇÃO / LOTE
-        # --------------------------------------------------------
+        # =========================================================
+        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
+        # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
         if fila_gargalo_pendente.empty:
-            st.info("Nenhuma PV pendente disponível para baixa neste gargalo.")
+            st.info("Nenhuma PV pendente disponível.")
         else:
             base_baixa = fila_gargalo_pendente.copy()
 
-            # blindagem estrutural
-            for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Horas", "CHAVE_OPERACAO"]:
-                if col not in base_baixa.columns:
-                    base_baixa[col] = ""
-
-            base_baixa["PV"] = base_baixa["PV"].fillna("").astype(str).str.strip().str.upper()
-            base_baixa["Cliente"] = base_baixa["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
-            base_baixa["CODIGO_PV"] = base_baixa["CODIGO_PV"].fillna("").astype(str).str.strip().str.upper()
-            base_baixa["Processo"] = base_baixa["Processo"].fillna("").astype(str).str.strip().str.upper()
-            base_baixa["Horas"] = pd.to_numeric(base_baixa["Horas"], errors="coerce").fillna(0)
-
-            # garante CHAVE_OPERACAO real e padronizada
-            base_baixa["CHAVE_OPERACAO"] = (
-                base_baixa["PV"].astype(str).str.strip().str.upper() + "||" +
-                base_baixa["Processo"].astype(str).str.strip().str.upper() + "||" +
-                base_baixa["CODIGO_PV"].astype(str).str.strip().str.upper()
-            )
-
-            # remove duplicidade visual da mesma operação
-            base_baixa = base_baixa.drop_duplicates(subset=["CHAVE_OPERACAO"]).copy()
-
-            # rótulo único e estável
             base_baixa["ROTULO_BAIXA"] = (
                 "PV " + base_baixa["PV"] +
                 " | " + base_baixa["Processo"] +
                 " | " + base_baixa["CODIGO_PV"] +
-                " | " + base_baixa["Horas"].round(1).astype(str) + " h"
+                " | " + base_baixa["Horas"].astype(str) + " h"
             )
 
-            opcoes_baixa = base_baixa["ROTULO_BAIXA"].dropna().astype(str).tolist()
+            opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
-            # =========================================================
-            # BAIXA / TERCEIRIZAÇÃO UNITÁRIA
-            # =========================================================
+            # 🔹 UNITÁRIO
             st.markdown("#### 🔹 Ação Unitária")
 
-            col_bx1, col_bx2 = st.columns([2, 2])
+            col_bx1, col_bx2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox(
-                "Selecione a operação concluída",
-                opcoes_baixa,
-                key="pv_baixa_top3_select"
-            )
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            observacao_baixa = col_bx2.text_input("Observação")
 
-            observacao_baixa = col_bx2.text_input(
-                "Observação da baixa (opcional)",
-                key="obs_baixa_top3_input"
-            )
-
-            registro_baixa_df = base_baixa[
-                base_baixa["ROTULO_BAIXA"] == baixa_sel
-            ].copy()
+            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
             if not registro_baixa_df.empty:
                 linha_baixa = registro_baixa_df.iloc[0]
 
-                chave_selecionada = str(linha_baixa["CHAVE_OPERACAO"]).strip().upper()
-
-                st.info(
-                    f"Você está prestes a registrar a operação **{linha_baixa['Processo']}** "
-                    f"da PV **{linha_baixa['PV']}** "
-                    f"({fmt_br_num(linha_baixa['Horas'], 1)} h)."
-                )
-
-                st.caption(f"🔑 CHAVE_OPERACAO: {chave_selecionada}")
-
                 col_btn1, col_btn2 = st.columns(2)
 
-                # --------------------------------------------
-                # BOTÃO BAIXA NORMAL
-                # --------------------------------------------
-                if col_btn1.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
+                if col_btn1.button("💾 Baixar"):
+                    salvar_baixa_operacional(BASE_PATH, linha_baixa.to_dict())
+                    st.cache_data.clear()
+                    st.rerun()
 
-                    registro_baixa = {
-                        "PV": str(linha_baixa["PV"]).strip().upper(),
-                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
-                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip().upper(),
-                        "Processo": str(linha_baixa["Processo"]).strip().upper(),
-                        "Horas": float(linha_baixa["Horas"]),
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "APS",
-                        "Observacao": observacao_baixa.strip() if observacao_baixa else "",
-                        "Status_Baixa": "ATIVA",
-                        "Data_Estorno": pd.NaT,
-                        "Motivo_Estorno": ""
-                    }
-
-                    try:
-                        df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
-
-                        st.cache_data.clear()
-                        st.rerun()
-
-                        st.success("✅ Baixa operacional registrada com sucesso.")
-                        st.info(
-                            f"Registro salvo: PV {registro_baixa['PV']} | "
-                            f"{registro_baixa['Processo']} | "
-                            f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
-                        )
-
-                        if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                            st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
-
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(f"Erro ao salvar baixa operacional: {e}")
-
-                # --------------------------------------------
-                # BOTÃO TERCEIRIZADA
-                # --------------------------------------------
-                if col_btn2.button("🟣 Marcar como Terceirizada", key="btn_terceirizada_top3"):
-
-                    registro_baixa = {
-                        "PV": str(linha_baixa["PV"]).strip().upper(),
-                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
-                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip().upper(),
-                        "Processo": str(linha_baixa["Processo"]).strip().upper(),
-                        "Horas": float(linha_baixa["Horas"]),
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "APS",
-                        "Observacao": f"TERCEIRIZADA | {observacao_baixa.strip()}" if observacao_baixa else "TERCEIRIZADA",
-                        "Status_Baixa": "TERCEIRIZADA",
-                        "Data_Estorno": pd.NaT,
-                        "Motivo_Estorno": ""
-                    }
-
-                    try:
-                        df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
-                        st.cache_data.clear()
-
-                        st.success("🟣 Operação marcada como terceirizada.")
-                        st.info(
-                            f"Registro salvo: PV {registro_baixa['PV']} | "
-                            f"{registro_baixa['Processo']} | "
-                            f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
-                        )
-
-                        if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                            st.caption(f"📁 Total de registros operacionais: {len(df_baixas_salvo)}")
-
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(f"Erro ao registrar terceirização: {e}")
+                if col_btn2.button("🟣 Terceirizar"):
+                    salvar_baixa_operacional(BASE_PATH, linha_baixa.to_dict())
+                    st.cache_data.clear()
+                    st.rerun()
 
             st.divider()
 
-            # =========================================================
-            # BAIXA / TERCEIRIZAÇÃO EM LOTE
-            # =========================================================
+            # 📦 LOTE
             st.markdown("#### 📦 Ação em Lote")
 
-            selecao_lote_gargalo = st.multiselect(
-                "Selecione uma ou mais operações pendentes deste gargalo",
-                options=opcoes_baixa,
-                key="multiselect_baixa_lote_top3"
-            )
+            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
 
-            obs_lote_gargalo = st.text_input(
-                "Observação do lote (opcional)",
-                key="obs_lote_top3"
-            )
+            if selecao_lote:
+                if st.button("📦 Baixar Lote"):
+                    for label in selecao_lote:
+                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
+                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
 
-            if selecao_lote_gargalo:
-                st.caption(f"Total selecionado para ação em lote: {len(selecao_lote_gargalo)} operação(ões).")
-
-                col_lote1, col_lote2 = st.columns(2)
-
-                # --------------------------------------------
-                # BAIXA EM LOTE
-                # --------------------------------------------
-                if col_lote1.button("📦 Confirmar Baixa em Lote", key="btn_baixa_lote_top3"):
-                    sucessos = 0
-                    falhas = []
-
-                    for label_sel in selecao_lote_gargalo:
-                        linha_lote = base_baixa[
-                            base_baixa["ROTULO_BAIXA"] == label_sel
-                        ].iloc[0]
-
-                        registro_lote = {
-                            "PV": str(linha_lote["PV"]).strip().upper(),
-                            "Cliente": str(linha_lote.get("Cliente", "SEM CLIENTE")).strip(),
-                            "CODIGO_PV": str(linha_lote.get("CODIGO_PV", "")).strip().upper(),
-                            "Processo": str(linha_lote["Processo"]).strip().upper(),
-                            "Horas": float(linha_lote["Horas"]),
-                            "Data_Baixa": pd.Timestamp.now(),
-                            "Usuario": "APS - LOTE",
-                            "Observacao": str(obs_lote_gargalo).strip(),
-                            "Status_Baixa": "ATIVA",
-                            "Data_Estorno": pd.NaT,
-                            "Motivo_Estorno": ""
-                        }
-
-                        try:
-                            df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_lote)
-
-                            chave_teste = (
-                                str(registro_lote["PV"]).strip().upper() + "||" +
-                                str(registro_lote["Processo"]).strip().upper() + "||" +
-                                str(registro_lote["CODIGO_PV"]).strip().upper()
-                            )
-
-                            df_validacao = historico_baixas_completo(df_baixas_result)
-
-                            if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
-                                existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
-                            else:
-                                existe = False
-
-                            if existe:
-                                sucessos += 1
-                            else:
-                                falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']}")
-
-                        except Exception as e:
-                            falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']} ({e})")
-
-                    if sucessos > 0:
-                        st.success(f"Baixa em lote concluída com sucesso para {sucessos} operação(ões).")
-
-                    if falhas:
-                        st.warning("Algumas operações não puderam ser validadas após a baixa:")
-                        for f in falhas:
-                            st.caption(f"• {f}")
-
-                    if sucessos > 0:
-                        st.cache_data.clear()
-                        st.rerun()
-
-                # --------------------------------------------
-                # TERCEIRIZAÇÃO EM LOTE
-                # --------------------------------------------
-                if col_lote2.button("🟣 Marcar Lote como Terceirizado", key="btn_terceirizada_lote_top3"):
-                    sucessos = 0
-                    falhas = []
-
-                    for label_sel in selecao_lote_gargalo:
-                        linha_lote = base_baixa[
-                            base_baixa["ROTULO_BAIXA"] == label_sel
-                        ].iloc[0]
-
-                        registro_lote = {
-                            "PV": str(linha_lote["PV"]).strip().upper(),
-                            "Cliente": str(linha_lote.get("Cliente", "SEM CLIENTE")).strip(),
-                            "CODIGO_PV": str(linha_lote.get("CODIGO_PV", "")).strip().upper(),
-                            "Processo": str(linha_lote["Processo"]).strip().upper(),
-                            "Horas": float(linha_lote["Horas"]),
-                            "Data_Baixa": pd.Timestamp.now(),
-                            "Usuario": "APS - LOTE",
-                            "Observacao": f"TERCEIRIZADA | {str(obs_lote_gargalo).strip()}" if str(obs_lote_gargalo).strip() else "TERCEIRIZADA",
-                            "Status_Baixa": "TERCEIRIZADA",
-                            "Data_Estorno": pd.NaT,
-                            "Motivo_Estorno": ""
-                        }
-
-                        try:
-                            df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_lote)
-
-                            chave_teste = (
-                                str(registro_lote["PV"]).strip().upper() + "||" +
-                                str(registro_lote["Processo"]).strip().upper() + "||" +
-                                str(registro_lote["CODIGO_PV"]).strip().upper()
-                            )
-
-                            df_validacao = historico_baixas_completo(df_baixas_result)
-
-                            if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
-                                existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
-                            else:
-                                existe = False
-
-                            if existe:
-                                sucessos += 1
-                            else:
-                                falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']}")
-
-                        except Exception as e:
-                            falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']} ({e})")
-
-                    if sucessos > 0:
-                        st.success(f"Lote terceirizado com sucesso para {sucessos} operação(ões).")
-
-                    if falhas:
-                        st.warning("Algumas operações não puderam ser validadas após a terceirização:")
-                        for f in falhas:
-                            st.caption(f"• {f}")
-
-                    if sucessos > 0:
-                        st.cache_data.clear()
-                        st.rerun()
-            else:
-                st.info("Selecione uma ou mais operações para habilitar a ação em lote.")
+                    st.cache_data.clear()
+                    st.rerun()
 
         st.divider()
-
-        # --------------------------------------------------------
-        # DESFAZER BAIXA OPERACIONAL
-        # --------------------------------------------------------
-        st.markdown("### 🔁 Desfazer Baixa Operacional")
-
-        if "df_baixas_historico" not in locals() or df_baixas_historico is None or df_baixas_historico.empty:
-            st.info("Nenhuma baixa operacional disponível para estorno.")
-        else:
-            df_baixas_ativas_ui = df_baixas_historico.copy()
-
-            if "Status_Baixa" not in df_baixas_ativas_ui.columns:
-                df_baixas_ativas_ui["Status_Baixa"] = "ATIVA"
-
-            df_baixas_ativas_ui["Status_Baixa"] = (
-                df_baixas_ativas_ui["Status_Baixa"]
-                .fillna("ATIVA")
-                .astype(str)
-                .str.strip()
-                .str.upper()
-            )
-
-            df_baixas_ativas_ui = df_baixas_ativas_ui[
-                df_baixas_ativas_ui["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-            ].copy()
-
-            if cliente_sel != "Todos" and "Cliente" in df_baixas_ativas_ui.columns:
-                df_baixas_ativas_ui = df_baixas_ativas_ui[
-                    df_baixas_ativas_ui["Cliente"].astype(str).str.strip() == cliente_sel
-                ].copy()
-
-            if df_baixas_ativas_ui.empty:
-                st.info("Nenhuma baixa ativa disponível para estorno.")
-            else:
-                df_baixas_ativas_ui["ROTULO_ESTORNO"] = (
-                    "PV " + df_baixas_ativas_ui["PV"].astype(str).str.strip() +
-                    " | " + df_baixas_ativas_ui["Processo"].astype(str).str.strip() +
-                    " | " + df_baixas_ativas_ui["CODIGO_PV"].astype(str).str.strip() +
-                    " | " + df_baixas_ativas_ui["Horas"].astype(str)
-                )
-
-                opcoes_estorno = df_baixas_ativas_ui["ROTULO_ESTORNO"].dropna().astype(str).tolist()
-
-                col_est1, col_est2 = st.columns([2, 2])
-
-                baixa_estorno_sel = col_est1.selectbox(
-                    "Selecione a baixa para desfazer",
-                    opcoes_estorno,
-                    key="select_estorno_baixa_operacional"
-                )
-
-                motivo_estorno = col_est2.text_input(
-                    "Motivo do estorno",
-                    key="motivo_estorno_baixa_operacional"
-                )
-
-                linha_estorno = df_baixas_ativas_ui[
-                    df_baixas_ativas_ui["ROTULO_ESTORNO"] == baixa_estorno_sel
-                ].copy()
-
-                if not linha_estorno.empty:
-                    linha_estorno = linha_estorno.iloc[0]
-
-                    st.warning(
-                        f"Você está prestes a desfazer a baixa da PV **{linha_estorno['PV']}** "
-                        f"no processo **{linha_estorno['Processo']}**."
-                    )
-
-                    if st.button("🔁 Confirmar Estorno da Baixa", key="btn_estornar_baixa_operacional"):
-                        try:
-                            ok_estorno, msg_estorno = estornar_baixa_operacional(
-                                BASE_PATH,
-                                pv=linha_estorno["PV"],
-                                processo=linha_estorno["Processo"],
-                                codigo_pv=linha_estorno.get("CODIGO_PV", ""),
-                                motivo_estorno=motivo_estorno
-                            )
-
-                            if ok_estorno:
-                                st.cache_data.clear()
-                                st.success(f"✅ {msg_estorno}")
-                                st.rerun()
-                            else:
-                                st.warning(f"⚠️ {msg_estorno}")
-
-                        except Exception as e:
-                            st.error(f"Erro ao estornar baixa operacional: {e}")
-
         
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
