@@ -3261,15 +3261,16 @@ if not fila_corte_dash.empty:
     ]
     colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
 
-    st.dataframe(
-        fila_corte_exib[colunas_corte_fila]
-        print(df.columns.tolist())
-        .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
-        .reset_index(drop=True),
-        use_container_width=True,
-        hide_index=True,
-        height=320
-    )
+   print(df.columns.tolist())
+
+st.dataframe(
+    fila_corte_exib[colunas_corte_fila]
+    .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
+    .reset_index(drop=True),
+    use_container_width=True,
+    hide_index=True,
+    height=320
+)
 else:
     st.success("Nenhuma operação de corte pendente no momento. 🎯")
 
