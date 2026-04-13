@@ -1017,6 +1017,96 @@ dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
 
 
 # ============================================================
+# 🔷 BASE EXECUTIVA APS (PV + PRAZO + STATUS)
+# ============================================================
+
+# 🔒 Validação mínima da base
+if df is None or df.empty:
+    st.error("Erro: base APS (df) está vazia.")
+    st.stop()
+
+if "DATA_ENTREGA_APS" not in df.columns:
+    st.error("Erro: coluna DATA_ENTREGA_APS não encontrada.")
+    st.stop()
+
+if "Horas" not in df.columns:
+    st.error("Erro: coluna Horas não encontrada.")
+    st.stop()
+
+# ============================================================
+# 📦 CONSOLIDAÇÃO POR PV
+# ============================================================
+
+pv_carga = (
+    df.groupby("PV", as_index=False)
+    .agg({
+        "Horas": "sum",
+        "DATA_ENTREGA_APS": "min"
+    })
+)
+
+# 🔒 Garantia de tipo de data
+pv_carga["DATA_ENTREGA_APS"] = pd.to_datetime(
+    pv_carga["DATA_ENTREGA_APS"],
+    errors="coerce"
+)
+
+# ============================================================
+# 📅 CÁLCULO DE PRAZO
+# ============================================================
+
+hoje = pd.Timestamp.now().normalize()
+
+pv_carga["Dias Disponíveis"] = (
+    pv_carga["DATA_ENTREGA_APS"] - hoje
+).dt.days
+
+pv_carga["Dias Disponíveis"] = pd.to_numeric(
+    pv_carga["Dias Disponíveis"], errors="coerce"
+).fillna(0)
+
+pv_carga["Atraso (dias)"] = np.where(
+    pv_carga["Dias Disponíveis"] < 0,
+    pv_carga["Dias Disponíveis"] * -1,
+    0
+)
+
+# ============================================================
+# 🚦 STATUS EXECUTIVO
+# ============================================================
+
+pv_carga["Status Prazo"] = np.where(
+    pv_carga["Atraso (dias)"] > 0,
+    "Atrasado",
+    np.where(
+        pv_carga["Dias Disponíveis"] <= 3,
+        "Risco",
+        "OK"
+    )
+)
+
+# ============================================================
+# 📊 AGRUPAMENTOS EXECUTIVOS
+# ============================================================
+
+atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
+
+risco = pv_carga[
+    (pv_carga["Atraso (dias)"] == 0) &
+    (pv_carga["Dias Disponíveis"] <= 3)
+].copy()
+
+ok = pv_carga[
+    (pv_carga["Atraso (dias)"] == 0) &
+    (pv_carga["Dias Disponíveis"] > 3)
+].copy()
+
+# 🔒 Blindagem final
+if pv_carga.empty:
+    st.error("Erro crítico: pv_carga não foi gerado corretamente.")
+    st.stop()
+
+# ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
 st.markdown("## 📊 Painel Executivo APS")
