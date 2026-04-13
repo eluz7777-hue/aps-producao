@@ -2711,121 +2711,6 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
 
     st.plotly_chart(fig_cliente_carga, use_container_width=True)
 
-# ============================================================
-# ===================== PAINEL OPERACIONAL ===================
-# ============================================================
-st.markdown("## ⚡ Painel Operacional")
-st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
-
-base_op = df.copy()
-hoje = pd.Timestamp.today().normalize()
-
-if "DATA_ENTREGA_APS" in base_op.columns:
-    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(
-        base_op["DATA_ENTREGA_APS"], errors="coerce"
-    )
-
-    base_op["Dias para Entrega"] = (
-        base_op["DATA_ENTREGA_APS"] - hoje
-    ).dt.days
-
-    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
-else:
-    base_op["Dias para Entrega"] = None
-    base_op["ENTREGA"] = pd.NaT
-
-# ===============================
-# PVs QUE VENCEM HOJE
-# ===============================
-st.subheader("📅 PVs que vencem HOJE")
-
-pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
-
-if not pvs_hoje.empty:
-    pvs_hoje["Horas"] = pd.to_numeric(pvs_hoje["Horas"], errors="coerce").fillna(0).round(1)
-    pvs_hoje["ENTREGA"] = pd.to_datetime(
-        pvs_hoje["ENTREGA"], errors="coerce"
-    ).dt.strftime("%d/%m/%Y")
-
-    st.dataframe(
-        pvs_hoje.sort_values("Horas", ascending=False),
-        use_container_width=True
-    )
-else:
-    st.success("Nenhuma PV vence hoje ✅")
-
-# ===============================
-# TOP 10 PVS MAIS CRÍTICAS
-# ===============================
-st.subheader("🔥 Top 10 PVs mais críticas")
-
-criticas = base_op.copy()
-
-if "Horas" in criticas.columns:
-    criticas["Horas"] = pd.to_numeric(criticas["Horas"], errors="coerce").fillna(0)
-
-if "Dias para Entrega" not in criticas.columns:
-    criticas["Dias para Entrega"] = None
-
-criticas = criticas.sort_values(
-    ["Dias para Entrega", "Horas"],
-    ascending=[True, False]
-).head(10)
-
-criticas["Horas"] = criticas["Horas"].round(1)
-
-if "ENTREGA" in criticas.columns:
-    criticas["ENTREGA"] = pd.to_datetime(
-        criticas["ENTREGA"], errors="coerce"
-    ).dt.strftime("%d/%m/%Y")
-
-st.dataframe(criticas, use_container_width=True)
-
-# ===============================
-# PVS URGENTES DA SEMANA
-# ===============================
-st.subheader("🚨 PVs Urgentes da Semana")
-
-pvs_urgentes = base_op.copy()
-
-if "Dias para Entrega" in pvs_urgentes.columns:
-    pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
-
-    urgentes = pvs_urgentes[
-        pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
-    ].copy()
-
-    if not urgentes.empty:
-        urgentes["Horas"] = pd.to_numeric(urgentes["Horas"], errors="coerce").fillna(0).round(1)
-
-        if "ENTREGA" in urgentes.columns:
-            urgentes["ENTREGA"] = pd.to_datetime(
-                urgentes["ENTREGA"], errors="coerce"
-            ).dt.strftime("%d/%m/%Y")
-
-        colunas_urgentes = [
-            "Semáforo",
-            "PV",
-            "Cliente",
-            "CODIGO_PV",
-            "Processo",
-            "Horas",
-            "Dias para Entrega",
-            "ENTREGA"
-        ]
-        colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
-
-        st.dataframe(
-            urgentes[colunas_urgentes].sort_values(
-                ["Dias para Entrega", "Horas"],
-                ascending=[True, False]
-            ),
-            use_container_width=True
-        )
-    else:
-        st.success("Nenhuma PV urgente para os próximos 7 dias ✅")
-else:
-    st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
 
 # ============================================================
 # ===================== FILA POR PROCESSO ====================
@@ -3419,12 +3304,121 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
         )
 
 
+# ============================================================
+# ===================== PAINEL OPERACIONAL ===================
+# ============================================================
+st.markdown("## ⚡ Painel Operacional")
+st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
 
+base_op = df.copy()
+hoje = pd.Timestamp.today().normalize()
 
+if "DATA_ENTREGA_APS" in base_op.columns:
+    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(
+        base_op["DATA_ENTREGA_APS"], errors="coerce"
+    )
 
+    base_op["Dias para Entrega"] = (
+        base_op["DATA_ENTREGA_APS"] - hoje
+    ).dt.days
 
+    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
+else:
+    base_op["Dias para Entrega"] = None
+    base_op["ENTREGA"] = pd.NaT
 
+# ===============================
+# PVs QUE VENCEM HOJE
+# ===============================
+st.subheader("📅 PVs que vencem HOJE")
 
+pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
+
+if not pvs_hoje.empty:
+    pvs_hoje["Horas"] = pd.to_numeric(pvs_hoje["Horas"], errors="coerce").fillna(0).round(1)
+    pvs_hoje["ENTREGA"] = pd.to_datetime(
+        pvs_hoje["ENTREGA"], errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
+
+    st.dataframe(
+        pvs_hoje.sort_values("Horas", ascending=False),
+        use_container_width=True
+    )
+else:
+    st.success("Nenhuma PV vence hoje ✅")
+
+# ===============================
+# TOP 10 PVS MAIS CRÍTICAS
+# ===============================
+st.subheader("🔥 Top 10 PVs mais críticas")
+
+criticas = base_op.copy()
+
+if "Horas" in criticas.columns:
+    criticas["Horas"] = pd.to_numeric(criticas["Horas"], errors="coerce").fillna(0)
+
+if "Dias para Entrega" not in criticas.columns:
+    criticas["Dias para Entrega"] = None
+
+criticas = criticas.sort_values(
+    ["Dias para Entrega", "Horas"],
+    ascending=[True, False]
+).head(10)
+
+criticas["Horas"] = criticas["Horas"].round(1)
+
+if "ENTREGA" in criticas.columns:
+    criticas["ENTREGA"] = pd.to_datetime(
+        criticas["ENTREGA"], errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
+
+st.dataframe(criticas, use_container_width=True)
+
+# ===============================
+# PVS URGENTES DA SEMANA
+# ===============================
+st.subheader("🚨 PVs Urgentes da Semana")
+
+pvs_urgentes = base_op.copy()
+
+if "Dias para Entrega" in pvs_urgentes.columns:
+    pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
+
+    urgentes = pvs_urgentes[
+        pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
+    ].copy()
+
+    if not urgentes.empty:
+        urgentes["Horas"] = pd.to_numeric(urgentes["Horas"], errors="coerce").fillna(0).round(1)
+
+        if "ENTREGA" in urgentes.columns:
+            urgentes["ENTREGA"] = pd.to_datetime(
+                urgentes["ENTREGA"], errors="coerce"
+            ).dt.strftime("%d/%m/%Y")
+
+        colunas_urgentes = [
+            "Semáforo",
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "Processo",
+            "Horas",
+            "Dias para Entrega",
+            "ENTREGA"
+        ]
+        colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
+
+        st.dataframe(
+            urgentes[colunas_urgentes].sort_values(
+                ["Dias para Entrega", "Horas"],
+                ascending=[True, False]
+            ),
+            use_container_width=True
+        )
+    else:
+        st.success("Nenhuma PV urgente para os próximos 7 dias ✅")
+else:
+    st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
 
 
 # ============================================================
