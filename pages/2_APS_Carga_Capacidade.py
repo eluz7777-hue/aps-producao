@@ -1641,27 +1641,57 @@ df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
 if tipo == "Semanal":
     df["Periodo"] = "Sem " + df["Semana"].astype(str)
 
-    dem = df.groupby(["Periodo", "Processo", "Semana", "Ano"], as_index=False)["Horas"].sum()
+    dem = df.groupby(
+        ["Periodo", "Processo", "Semana", "Ano"],
+        as_index=False
+    )["Horas"].sum()
+
     dem = dem.merge(cal, on=["Semana", "Ano"], how="left")
 
-    # Capacidade semanal real = dias úteis da semana × jornada real × recursos × eficiência
-    dem["Capacidade"] = dem.apply(
-    lambda r: capacidade_semana_por_processo(r["Inicio"], r["Fim"], r["Processo"]),
-    axis=1
-)
+    # DEBUG (mantenha por enquanto)
+    st.write("DEBUG dem colunas:", dem.columns.tolist())
+    st.write("DEBUG dem preview:", dem.head())
+
+    # 🔒 FUNÇÃO SEGURA
+    def calcular_capacidade_segura(r):
+        try:
+            inicio = r.get("Inicio", None)
+            fim = r.get("Fim", None)
+            processo = r.get("Processo", None)
+
+            if pd.isna(inicio) or pd.isna(fim) or processo is None:
+                return 0
+
+            return capacidade_semana_por_processo(inicio, fim, processo)
+        except Exception as e:
+            return 0
+
+    dem["Capacidade"] = dem.apply(calcular_capacidade_segura, axis=1)
 
 else:
     df["Periodo"] = "Mês " + df["Mes"].astype(str)
 
-    dem = df.groupby(["Periodo", "Processo", "Mes", "Ano"], as_index=False)["Horas"].sum()
+    dem = df.groupby(
+        ["Periodo", "Processo", "Mes", "Ano"],
+        as_index=False
+    )["Horas"].sum()
 
     dem["Capacidade"] = dem.apply(
-        lambda r: capacidade_mes_por_processo(r["Ano"], r["Mes"], r["Processo"]),
+        lambda r: capacidade_mes_por_processo(
+            r.get("Ano"),
+            r.get("Mes"),
+            r.get("Processo")
+        ),
         axis=1
     )
 
+# ===============================
+# TRATAMENTOS FINAIS
+# ===============================
+
 # Evita divisão por zero
 dem["Capacidade"] = dem["Capacidade"].fillna(0)
+
 dem["Ocupacao"] = np.where(
     dem["Capacidade"] > 0,
     (dem["Horas"] / dem["Capacidade"]) * 100,
@@ -1670,13 +1700,13 @@ dem["Ocupacao"] = np.where(
 
 dem["Ocupacao"] = dem["Ocupacao"].replace([np.inf, -np.inf], 0).fillna(0)
 
-# Remove processos sem capacidade produtiva da visão de ocupação
+# Remove processos sem capacidade produtiva
 dem = dem[dem["Capacidade"] > 0].copy()
 
-# Remove linhas zeradas para não poluir gráfico
+# Remove linhas irrelevantes
 dem = dem[(dem["Horas"] > 0) | (dem["Ocupacao"] > 0)].copy()
 
-# Ordenação correta do eixo
+# Ordenação
 if tipo == "Mensal":
     dem["Ordem_Periodo"] = dem["Mes"]
 else:
@@ -1684,7 +1714,7 @@ else:
 
 dem = dem.sort_values(["Ordem_Periodo", "Processo"]).copy()
 
-# Rótulos com 1 casa decimal
+# Labels
 dem["Horas_Label"] = dem["Horas"].round(1).astype(str) + "h"
 dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
 
