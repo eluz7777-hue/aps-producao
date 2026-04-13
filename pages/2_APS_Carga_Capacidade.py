@@ -2065,9 +2065,14 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     # ------------------------------------------------------------
-    # BASE DE BAIXAS ATIVAS
+    # BASE DE BAIXAS ATIVAS (BLINDADO)
     # ------------------------------------------------------------
-    if df_baixas_ativas.empty or "Processo" not in df_baixas_ativas.columns:
+    if (
+        df_baixas_ativas is None
+        or not isinstance(df_baixas_ativas, pd.DataFrame)
+        or df_baixas_ativas.empty
+        or "Processo" not in df_baixas_ativas.columns
+    ):
         resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
     else:
         baixas_tmp = df_baixas_ativas.copy()
