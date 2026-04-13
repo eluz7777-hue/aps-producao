@@ -2064,20 +2064,22 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         .reset_index()
     )
 
-    # ------------------------------------------------------------
-    # BASE DE BAIXAS ATIVAS
-    # ------------------------------------------------------------
-    if df_baixas_ativas.empty or "Processo" not in df_baixas_ativas.columns:
-        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
-    else:
-        baixas_tmp = df_baixas_ativas.copy()
-        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
 
-        resumo_baixas = (
-            baixas_tmp.groupby("Processo", dropna=False)
-            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
-            .reset_index()
-        )
+# ------------------------------------------------------------
+# BASE DE BAIXAS ATIVAS
+# ------------------------------------------------------------
+if df_baixas_ativas.empty or "Processo" not in df_baixas_ativas.columns:
+    resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
+else:
+    baixas_tmp = df_baixas_ativas.copy()
+    baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
+
+    resumo_baixas = (
+        baixas_tmp.groupby("Processo", dropna=False)
+        .agg(Qtd_Baixas_Ativas=("Processo", "size"))
+        .reset_index()
+    )
+            
 
     # ------------------------------------------------------------
     # CONSOLIDAÇÃO
