@@ -2491,37 +2491,78 @@ ranking_colapso = dem_colapso.sort_values(
 # ===============================
 # CAPACIDADE POR PROCESSO
 # ===============================
+
+# 🔒 Garantia mínima
+if dem_proc is None or dem_proc.empty:
+    st.error("Erro: dem_proc vazio.")
+    st.stop()
+
+if "Processo" not in dem_proc.columns:
+    st.error("Erro: coluna 'Processo' não encontrada em dem_proc.")
+    st.stop()
+
+if "Horas" not in dem_proc.columns:
+    dem_proc["Horas"] = 0
+
+# -------------------------------
+# CÁLCULO DE CAPACIDADE
+# -------------------------------
 if tipo == "Mensal":
+
     capacidade_proc = {
         proc: horas_uteis_mes(ano_ref, mes_ref) * MAQUINAS.get(proc, 0) * EFICIENCIA
         for proc in processos
     }
+
     dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
 
 else:
-    capacidade_proc = (
-        dem.groupby("Processo", as_index=False)["Capacidade"]
-        .sum()
-        .rename(columns={"Capacidade": "Capacidade Processo"})
-    )
-    dem_proc = dem_proc.merge(capacidade_proc, on="Processo", how="left")
+    if dem is not None and not dem.empty and "Capacidade" in dem.columns:
+        capacidade_proc = (
+            dem.groupby("Processo", as_index=False)["Capacidade"]
+            .sum()
+            .rename(columns={"Capacidade": "Capacidade Processo"})
+        )
 
-dem_proc["Capacidade Processo"] = dem_proc["Capacidade Processo"].fillna(0)
+        dem_proc = dem_proc.merge(capacidade_proc, on="Processo", how="left")
 
+    else:
+        dem_proc["Capacidade Processo"] = 0
+
+# -------------------------------
+# BLINDAGEM DA CAPACIDADE
+# -------------------------------
+if "Capacidade Processo" not in dem_proc.columns:
+    dem_proc["Capacidade Processo"] = 0
+
+dem_proc["Capacidade Processo"] = pd.to_numeric(
+    dem_proc["Capacidade Processo"], errors="coerce"
+).fillna(0)
+
+# -------------------------------
+# CÁLCULO DE UTILIZAÇÃO
+# -------------------------------
 dem_proc["Utilização (%)"] = np.where(
     dem_proc["Capacidade Processo"] > 0,
     (dem_proc["Horas"] / dem_proc["Capacidade Processo"]) * 100,
     0
 )
 
-dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].replace([float("inf"), -float("inf")], 0)
-dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].fillna(0)
-dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].round(0).astype(int)
+dem_proc["Utilização (%)"] = (
+    dem_proc["Utilização (%)"]
+    .replace([float("inf"), -float("inf")], 0)
+    .fillna(0)
+    .round(0)
+    .astype(int)
+)
 
+# -------------------------------
+# CLASSIFICAÇÃO
+# -------------------------------
 def faixa_utilizacao(x):
-    if x > 100:
+    if x >= 100:
         return "Crítico"
-    elif x > 80:
+    elif x >= 80:
         return "Atenção"
     else:
         return "OK"
