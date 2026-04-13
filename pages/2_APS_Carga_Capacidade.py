@@ -1229,6 +1229,10 @@ if not df_operacional.empty:
 else:
     df_operacional["CHAVE_OPERACAO"] = ""
 
+# GARANTE QUE A VARIÁVEL SEMPRE EXISTE
+if "df_baixas_ativas" not in locals():
+    df_baixas_ativas = pd.DataFrame()
+
 # --------------------------------------------
 # BASE OFICIAL PARA TIRAR DA FILA
 # SOMENTE BAIXAS ATIVAS / TERCEIRIZADAS
