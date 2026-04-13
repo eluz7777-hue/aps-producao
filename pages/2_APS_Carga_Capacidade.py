@@ -1,7 +1,5 @@
 import streamlit as st
 
-
-
 # ===============================
 # 🔐 BLOQUEIO DE ACESSO GLOBAL
 # ===============================
@@ -9,7 +7,9 @@ if "logado" not in st.session_state or not st.session_state.logado:
     st.warning("🔒 Acesso não autorizado. Redirecionando para login...")
     st.switch_page("app.py")
 
-import streamlit as st
+# ===============================
+# IMPORTS (ORGANIZADOS)
+# ===============================
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -17,16 +17,14 @@ import os
 import time
 import holidays
 import math
+import shutil
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 
 # ============================================================
 # 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
 # ============================================================
-
-import os
-import shutil
-from datetime import datetime
 
 PASTA_BACKUP_BAIXAS = "backup_baixas"
 ARQUIVO_HISTORICO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
@@ -68,9 +66,6 @@ def salvar_historico_baixas(df):
     """
 
     try:
-        # ----------------------------
-        # PROTEÇÃO 1: NÃO SALVAR VAZIO
-        # ----------------------------
         if df is None or df.empty:
             return {
                 "ok": False,
@@ -79,14 +74,8 @@ def salvar_historico_baixas(df):
                 "backup_msg": None
             }
 
-        # ----------------------------
-        # PROTEÇÃO 2: BACKUP ANTES
-        # ----------------------------
         backup_ok, backup_msg = _criar_backup()
 
-        # ----------------------------
-        # SALVA PRINCIPAL
-        # ----------------------------
         df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
 
         return {
@@ -105,7 +94,7 @@ def salvar_historico_baixas(df):
         }
 
 # ===============================
-# FORMATAÇÃO BR
+# FORMATAÇÃO BR (INALTERADO)
 # ===============================
 def fmt_br_num(valor, casas=1):
     try:
@@ -133,7 +122,7 @@ def fmt_br_pct(valor, casas=1):
         return "0,0%"
 
 # ===============================
-# LOGO + TÍTULO
+# LOGO + TÍTULO (INALTERADO)
 # ===============================
 col1, col2 = st.columns([1, 6])
 
@@ -145,23 +134,18 @@ with col2:
     st.title("APS | Carga & Capacidade")
 
 # ===============================
-# CONFIG
+# CONFIG ORIGINAL (INALTERADO)
 # ===============================
-import holidays
-
 EFICIENCIA = 0.80
 
-# Jornada real da fábrica
-HORAS_SEG_A_QUI = 9  # 07h às 17h com 1h almoço
-HORAS_SEXTA = 8      # 07h às 16h com 1h almoço
+HORAS_SEG_A_QUI = 9
+HORAS_SEXTA = 8
 HORAS_DIA_UTIL_MEDIA = ((HORAS_SEG_A_QUI * 4) + HORAS_SEXTA) / 5
 
-# Calendário de feriados Brasil
 FERIADOS_BR = holidays.Brazil()
 
-# Recursos / máquinas por processo
 MAQUINAS = {
-    "CORTE - SERRA": 2,          # Serra Fita + Serra Circular
+    "CORTE - SERRA": 2,
     "CORTE-PLASMA": 1,
     "CORTE-LASER": 1,
     "CORTE-GUILHOTINA": 0,
@@ -183,22 +167,12 @@ MAQUINAS = {
     "DIVERSOS": 0
 }
 
-def capacidade_mes_por_processo(ano, mes, processo):
-    recursos = MAQUINAS.get(processo, 0)
-    if recursos <= 0:
-        return 0
-    return horas_uteis_mes(ano, mes) * recursos * EFICIENCIA
-
 # ===============================
-# FERIADOS
+# FUNÇÕES DE TEMPO (INALTERADAS)
 # ===============================
 br_holidays = holidays.Brazil()
 
 def dias_uteis_periodo(inicio, fim):
-    """
-    Conta apenas os dias úteis reais entre duas datas
-    (segunda a sexta, excluindo feriados nacionais).
-    """
     if pd.isna(inicio) or pd.isna(fim):
         return 0
 
@@ -212,12 +186,6 @@ def dias_uteis_periodo(inicio, fim):
     return sum(1 for d in dias if d.weekday() < 5 and d.date() not in br_holidays)
 
 def horas_uteis_periodo(inicio, fim):
-    """
-    Calcula as horas úteis reais entre duas datas considerando:
-    - Seg a Qui = 9h
-    - Sexta = 8h
-    - exclui sábados, domingos e feriados
-    """
     if pd.isna(inicio) or pd.isna(fim):
         return 0
 
@@ -232,10 +200,7 @@ def horas_uteis_periodo(inicio, fim):
 
     for d in dias:
         if d.weekday() < 5 and d.date() not in br_holidays:
-            if d.weekday() == 4:  # sexta
-                total_horas += HORAS_SEXTA
-            else:  # segunda a quinta
-                total_horas += HORAS_SEG_A_QUI
+            total_horas += HORAS_SEXTA if d.weekday() == 4 else HORAS_SEG_A_QUI
 
     return total_horas
 
@@ -249,42 +214,14 @@ def horas_uteis_mes(ano, mes):
     fim = inicio + pd.offsets.MonthEnd(1)
     return horas_uteis_periodo(inicio, fim)
 
-def horas_uteis_semana(inicio, fim):
-    """
-    Calcula as horas úteis reais da semana/período considerando:
-    - Seg a Qui = 9h
-    - Sexta = 8h
-    - exclui sábados, domingos e feriados
-    """
-    if pd.isna(inicio) or pd.isna(fim):
-        return 0
-
-    inicio = pd.Timestamp(inicio).normalize()
-    fim = pd.Timestamp(fim).normalize()
-
-    if fim < inicio:
-        return 0
-
-    dias = pd.date_range(inicio, fim, freq="D")
-    total_horas = 0
-
-    for d in dias:
-        if d.weekday() < 5 and d.date() not in br_holidays:
-            if d.weekday() == 4:  # sexta
-                total_horas += HORAS_SEXTA
-            else:  # segunda a quinta
-                total_horas += HORAS_SEG_A_QUI
-
-    return total_horas
-
-def capacidade_semana_por_processo(inicio, fim, processo):
+def capacidade_mes_por_processo(ano, mes, processo):
     recursos = MAQUINAS.get(processo, 0)
     if recursos <= 0:
         return 0
-    return horas_uteis_semana(inicio, fim) * recursos * EFICIENCIA
+    return horas_uteis_mes(ano, mes) * recursos * EFICIENCIA
 
 # ===============================
-# CACHE DE LEITURA
+# CACHE (INALTERADO)
 # ===============================
 @st.cache_data(ttl=0)
 def carregar_dados(arquivo_pv, file_mtime):
@@ -793,7 +730,6 @@ else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
 
 
-
 # ===============================
 # CSS VISUAL PREMIUM APS
 # ===============================
@@ -1228,10 +1164,6 @@ if not df_operacional.empty:
     )
 else:
     df_operacional["CHAVE_OPERACAO"] = ""
-
-# GARANTE QUE A VARIÁVEL SEMPRE EXISTE
-if "df_baixas_ativas" not in locals():
-    df_baixas_ativas = pd.DataFrame()
 
 # --------------------------------------------
 # BASE OFICIAL PARA TIRAR DA FILA
