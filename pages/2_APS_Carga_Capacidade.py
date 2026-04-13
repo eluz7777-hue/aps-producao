@@ -3263,7 +3263,7 @@ if not fila_corte_dash.empty:
 
     st.dataframe(
         fila_corte_exib[colunas_corte_fila]
-        .sort_values(["Processo", "Dias para Entrega"], ascending=[True, True])
+        .sort_values(["Processo", "DATA_ENTREGA_APS"], ascending=[True, True])
         .reset_index(drop=True),
         use_container_width=True,
         hide_index=True,
