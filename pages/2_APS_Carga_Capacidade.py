@@ -3242,13 +3242,18 @@ else:
 st.markdown("### 🧾 Fila Atual de Corte")
 
 if not fila_corte_dash.empty:
+
     fila_corte_exib = fila_corte_dash.copy()
 
     if "ENTREGA" in fila_corte_exib.columns:
-        fila_corte_exib["ENTREGA"] = pd.to_datetime(fila_corte_exib["ENTREGA"], errors="coerce")
+        fila_corte_exib["ENTREGA"] = pd.to_datetime(
+            fila_corte_exib["ENTREGA"], errors="coerce"
+        )
         fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-    fila_corte_exib["Horas"] = fila_corte_exib["Horas"].round(1)
+    fila_corte_exib["Horas"] = pd.to_numeric(
+        fila_corte_exib["Horas"], errors="coerce"
+    ).fillna(0).round(1)
 
     colunas_corte_fila = [
         "PV",
@@ -3256,21 +3261,32 @@ if not fila_corte_dash.empty:
         "CODIGO_PV",
         "Processo",
         "Horas",
-        "Dias para Entrega",
+        "Dias para Entrega",  # mantido, mas protegido abaixo
         "ENTREGA"
     ]
-    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
 
-   print(df.columns.tolist())
+    # mantém só colunas existentes (proteção contra KeyError)
+    colunas_corte_fila = [
+        c for c in colunas_corte_fila if c in fila_corte_exib.columns
+    ]
 
-st.dataframe(
-    fila_corte_exib[colunas_corte_fila]
-    .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
-    .reset_index(drop=True),
-    use_container_width=True,
-    hide_index=True,
-    height=320
-)
+    # ordenação segura (só usa ENTREGA se existir)
+    if "ENTREGA" in fila_corte_exib.columns:
+        df_exib = fila_corte_exib[colunas_corte_fila] \
+            .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
+    else:
+        df_exib = fila_corte_exib[colunas_corte_fila] \
+            .sort_values(["Processo"], ascending=[True])
+
+    df_exib = df_exib.reset_index(drop=True)
+
+    st.dataframe(
+        df_exib,
+        use_container_width=True,
+        hide_index=True,
+        height=320
+    )
+
 else:
     st.success("Nenhuma operação de corte pendente no momento. 🎯")
 
