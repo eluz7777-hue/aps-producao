@@ -2680,23 +2680,14 @@ fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
 col_f1, col_f2, col_f3 = st.columns(3)
 
 processos_fila = sorted(fila["Processo"].dropna().astype(str).str.strip().unique().tolist())
-processo_fila_sel = col_f1.selectbox(
-    "Filtrar por Processo",
-    ["Todos"] + processos_fila,
-    key="filtro_fila_processo_unico"
-)
+processo_fila_sel = col_f1.selectbox("Filtrar por Processo", ["Todos"] + processos_fila)
 
 pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
-pv_fila_sel = col_f2.selectbox(
-    "Filtrar por PV específica",
-    ["Todas"] + pvs_fila,
-    key="filtro_fila_pv_unico"
-)
+pv_fila_sel = col_f2.selectbox("Filtrar por PV específica", ["Todas"] + pvs_fila)
 
 tipo_corte_sel = col_f3.selectbox(
     "Filtrar por Tipo de Corte",
-    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"],
-    key="filtro_fila_tipo_corte"
+    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"]
 )
 
 if processo_fila_sel != "Todos":
@@ -2705,9 +2696,6 @@ if processo_fila_sel != "Todos":
 if pv_fila_sel != "Todas":
     fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
 
-# ---------------------------------------
-# FILTRO INTELIGENTE DE CORTE
-# ---------------------------------------
 fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
 
 if tipo_corte_sel == "Apenas Corte":
@@ -2736,338 +2724,111 @@ if "ENTREGA" in fila_detalhe.columns:
     fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
     fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-colunas_fila = [
-    "Semáforo",
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "Dias para Entrega",
-    "ENTREGA"
-]
+colunas_fila = ["Semáforo","PV","Cliente","CODIGO_PV","Processo","Horas","Dias para Entrega","ENTREGA"]
 colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
 
-ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
-asc_fila = [True, True, False][:len(ordenacao_fila)]
+fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
 
-fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
+st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
-if ordenacao_fila:
-    fila_detalhe_exib = fila_detalhe_exib.sort_values(
-        ordenacao_fila,
-        ascending=asc_fila
-    )
-
-fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
-
-st.dataframe(
-    fila_detalhe_exib,
-    use_container_width=True,
-    hide_index=True
-)
-
-# ---------------------------------------
-# BAIXA RÁPIDA / LOTE / ESTORNO DE CORTE
-# ---------------------------------------
-st.markdown("### ⚡ Módulo de Corte — Baixa Rápida, Lote e Estorno")
+# =========================================================
+# BAIXAS DE CORTE
+# =========================================================
+st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
 
 fila_corte = fila.copy()
-
 proc_upper = fila_corte["Processo"].astype(str).str.strip().str.upper()
 
 fila_corte = fila_corte[
-    (
-        proc_upper.str.contains("SERRA", na=False) |
-        proc_upper.str.contains("LASER", na=False) |
-        proc_upper.str.contains("PLASMA", na=False)
-    )
+    proc_upper.str.contains("SERRA|LASER|PLASMA", na=False)
 ].copy()
 
 if not fila_corte.empty:
+
     fila_corte["Horas"] = pd.to_numeric(fila_corte["Horas"], errors="coerce").fillna(0).round(1)
 
-    fila_corte["LABEL_BAIXA_CORTE"] = (
-        "PV " + fila_corte["PV"].astype(str).str.strip() +
-        " | " + fila_corte["Processo"].astype(str).str.strip() +
-        " | " + fila_corte["CODIGO_PV"].astype(str).str.strip() +
+    fila_corte["LABEL"] = (
+        "PV " + fila_corte["PV"].astype(str) +
+        " | " + fila_corte["Processo"].astype(str) +
+        " | " + fila_corte["CODIGO_PV"].astype(str) +
         " | " + fila_corte["Horas"].astype(str) + " h"
     )
 
-    # =========================================================
-    # BAIXA UNITÁRIA
-    # =========================================================
-    st.markdown("#### 🪚 Baixa Unitária de Corte")
+    opcoes = fila_corte["LABEL"].tolist()
 
-    opcoes_corte = fila_corte["LABEL_BAIXA_CORTE"].tolist()
+    escolha = st.selectbox("Operação", opcoes)
 
-    col_bc1, col_bc2 = st.columns([3, 2])
+    linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
 
-    operacao_corte_sel = col_bc1.selectbox(
-        "Selecione a operação de corte concluída",
-        opcoes_corte,
-        key="select_baixa_rapida_corte"
-    )
+    if not linha_sel.empty:
+        linha = linha_sel.iloc[0]
 
-    obs_baixa_corte = col_bc2.text_input(
-        "Observação da baixa unitária (opcional)",
-        key="obs_baixa_rapida_corte"
-    )
+        if st.button("Confirmar Baixa"):
+            salvar_baixa_operacional(BASE_PATH, {
+                "PV": linha.get("PV"),
+                "Processo": linha.get("Processo"),
+                "Horas": linha.get("Horas"),
+                "Data_Baixa": pd.Timestamp.now(),
+                "Status_Baixa": "ATIVA"
+            })
 
-    linha_baixa_corte = fila_corte[
-        fila_corte["LABEL_BAIXA_CORTE"] == operacao_corte_sel
-    ].iloc[0]
-
-    st.info(
-        f"Você está prestes a registrar a operação "
-        f"**{linha_baixa_corte['Processo']}** da PV **{linha_baixa_corte['PV']}** "
-        f"({linha_baixa_corte['Horas']} h)."
-    )
-
-    if st.button("🪚 Confirmar Baixa Unitária", key="btn_confirmar_baixa_rapida_corte"):
-        registro_baixa_corte = {
-            "PV": str(linha_baixa_corte.get("PV", "")).strip(),
-            "Cliente": str(linha_baixa_corte.get("Cliente", "")).strip(),
-            "CODIGO_PV": str(linha_baixa_corte.get("CODIGO_PV", "")).strip(),
-            "Processo": str(linha_baixa_corte.get("Processo", "")).strip(),
-            "Horas": pd.to_numeric(linha_baixa_corte.get("Horas", 0), errors="coerce"),
-            "Data_Baixa": pd.Timestamp.now(),
-            "Usuario": "APS - BAIXA UNITÁRIA CORTE",
-            "Observacao": str(obs_baixa_corte).strip(),
-            "Status_Baixa": "ATIVA",
-            "Data_Estorno": "",
-            "Motivo_Estorno": ""
-        }
-
-        df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_baixa_corte)
-
-        chave_teste = (
-            str(registro_baixa_corte["PV"]).strip().upper() + "||" +
-            str(registro_baixa_corte["Processo"]).strip().upper() + "||" +
-            str(registro_baixa_corte["CODIGO_PV"]).strip().upper()
-        )
-
-        df_validacao = historico_baixas_completo(df_baixas_result)
-
-        if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
-            existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
-        else:
-            existe = False
-
-        if existe:
-            st.success("Baixa unitária de corte registrada com sucesso.")
-            st.caption(
-                f"Registro salvo: PV {registro_baixa_corte['PV']} | "
-                f"{registro_baixa_corte['Processo']} | "
-                f"{float(registro_baixa_corte['Horas']):.1f} h"
-            )
-            st.cache_data.clear()
+            st.success("Baixa registrada")
             st.rerun()
-        else:
-            st.error("A baixa unitária de corte não foi localizada no histórico após salvar.")
-
-    st.divider()
-
-    # =========================================================
-    # BAIXA EM LOTE
-    # =========================================================
-    st.markdown("#### 📦 Baixa em Lote de Corte")
-
-    selecao_lote = st.multiselect(
-        "Selecione uma ou mais operações de corte concluídas",
-        options=opcoes_corte,
-        key="multiselect_baixa_lote_corte"
-    )
-
-    obs_lote = st.text_input(
-        "Observação do lote (opcional)",
-        key="obs_baixa_lote_corte"
-    )
-
-    if selecao_lote:
-        st.caption(f"Total selecionado para baixa em lote: {len(selecao_lote)} operação(ões).")
-
-        if st.button("📦 Confirmar Baixa em Lote", key="btn_confirmar_baixa_lote_corte"):
-            sucessos = 0
-            falhas = []
-
-            for label_sel in selecao_lote:
-                linha_lote = fila_corte[
-                    fila_corte["LABEL_BAIXA_CORTE"] == label_sel
-                ].iloc[0]
-
-                registro_lote = {
-                    "PV": str(linha_lote.get("PV", "")).strip(),
-                    "Cliente": str(linha_lote.get("Cliente", "")).strip(),
-                    "CODIGO_PV": str(linha_lote.get("CODIGO_PV", "")).strip(),
-                    "Processo": str(linha_lote.get("Processo", "")).strip(),
-                    "Horas": pd.to_numeric(linha_lote.get("Horas", 0), errors="coerce"),
-                    "Data_Baixa": pd.Timestamp.now(),
-                    "Usuario": "APS - BAIXA EM LOTE CORTE",
-                    "Observacao": str(obs_lote).strip(),
-                    "Status_Baixa": "ATIVA",
-                    "Data_Estorno": "",
-                    "Motivo_Estorno": ""
-                }
-
-                try:
-                    df_baixas_result = salvar_baixa_operacional(BASE_PATH, registro_lote)
-
-                    chave_teste = (
-                        str(registro_lote["PV"]).strip().upper() + "||" +
-                        str(registro_lote["Processo"]).strip().upper() + "||" +
-                        str(registro_lote["CODIGO_PV"]).strip().upper()
-                    )
-
-                    df_validacao = historico_baixas_completo(df_baixas_result)
-
-                    if not df_validacao.empty and "CHAVE_OPERACAO" in df_validacao.columns:
-                        existe = df_validacao["CHAVE_OPERACAO"].astype(str).str.strip().str.upper().eq(chave_teste).any()
-                    else:
-                        existe = False
-
-                    if existe:
-                        sucessos += 1
-                    else:
-                        falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']}")
-
-                except Exception as e:
-                    falhas.append(f"{registro_lote['PV']} | {registro_lote['Processo']} ({e})")
-
-            if sucessos > 0:
-                st.success(f"Baixa em lote concluída com sucesso para {sucessos} operação(ões).")
-
-            if falhas:
-                st.warning("Algumas operações não puderam ser validadas após a baixa:")
-                for f in falhas:
-                    st.caption(f"• {f}")
-
-            if sucessos > 0:
-                st.cache_data.clear()
-                st.rerun()
-
-    else:
-        st.info("Selecione uma ou mais operações para habilitar a baixa em lote.")
-
-else:
-    st.info("Nenhuma operação de corte disponível para baixa rápida ou em lote no filtro atual.")
-
-# =========================================================
-# ESTORNO DE BAIXA DE CORTE
-# =========================================================
-st.divider()
-st.markdown("### 🔄 Estorno de Baixa de Corte")
-
-if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
-    hist_corte = df_baixas_historico.copy()
-
-    hist_corte["PROC_UPPER"] = hist_corte["Processo"].astype(str).str.strip().str.upper()
-    hist_corte["STATUS_UPPER"] = hist_corte["Status_Baixa"].astype(str).str.strip().str.upper()
-
-    hist_corte = hist_corte[
-        (
-            hist_corte["PROC_UPPER"].str.contains("SERRA", na=False) |
-            hist_corte["PROC_UPPER"].str.contains("LASER", na=False) |
-            hist_corte["PROC_UPPER"].str.contains("PLASMA", na=False)
-        ) &
-        (hist_corte["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"]))
-    ].copy()
-
-    if not hist_corte.empty:
-        hist_corte["Horas"] = pd.to_numeric(hist_corte["Horas"], errors="coerce").fillna(0).round(1)
-
-        hist_corte["LABEL_ESTORNO_CORTE"] = (
-            "PV " + hist_corte["PV"].astype(str).str.strip() +
-            " | " + hist_corte["Processo"].astype(str).str.strip() +
-            " | " + hist_corte["CODIGO_PV"].astype(str).str.strip() +
-            " | " + hist_corte["Horas"].astype(str) + " h"
-        )
-
-        opcoes_estorno = hist_corte["LABEL_ESTORNO_CORTE"].tolist()
-
-        col_est1, col_est2 = st.columns([3, 2])
-
-        estorno_sel = col_est1.selectbox(
-            "Selecione a baixa de corte para estornar",
-            opcoes_estorno,
-            key="select_estorno_corte"
-        )
-
-        motivo_estorno_corte = col_est2.text_input(
-            "Motivo do estorno",
-            key="motivo_estorno_corte"
-        )
-
-        linha_estorno = hist_corte[
-            hist_corte["LABEL_ESTORNO_CORTE"] == estorno_sel
-        ].iloc[0]
-
-        st.warning(
-            f"Você está prestes a estornar a operação "
-            f"**{linha_estorno['Processo']}** da PV **{linha_estorno['PV']}**."
-        )
-
-        if st.button("🔄 Confirmar Estorno de Corte", key="btn_estorno_corte"):
-            if not str(motivo_estorno_corte).strip():
-                st.error("Informe o motivo do estorno antes de continuar.")
-            else:
-                chave_estorno = str(linha_estorno.get("CHAVE_OPERACAO", "")).strip()
-
-                caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-                df_baixas_raw = pd.read_excel(caminho_baixas, dtype=str)
-                df_baixas_raw = _padronizar_df_baixas(df_baixas_raw)
-
-                if "CHAVE_OPERACAO" in df_baixas_raw.columns:
-                    mask_estorno = (
-                        df_baixas_raw["CHAVE_OPERACAO"].astype(str).str.strip().str.upper() ==
-                        chave_estorno.upper()
-                    ) & (
-                        df_baixas_raw["Status_Baixa"].astype(str).str.strip().str.upper().isin(["ATIVA", "TERCEIRIZADA"])
-                    )
-
-                    if mask_estorno.any():
-                        df_baixas_raw.loc[mask_estorno, "Status_Baixa"] = "ESTORNADA"
-                        df_baixas_raw.loc[mask_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-                        df_baixas_raw.loc[mask_estorno, "Motivo_Estorno"] = str(motivo_estorno_corte).strip()
-
-                        colunas_salvar = [c for c in COLUNAS_BAIXAS if c in df_baixas_raw.columns]
-                        df_baixas_raw[colunas_salvar].to_excel(caminho_baixas, index=False)
-
-                        st.success("Estorno de corte registrado com sucesso.")
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error("Não foi encontrada uma baixa ativa/terceirizada válida para estorno.")
-                else:
-                    st.error("CHAVE_OPERACAO não encontrada no histórico físico de baixas.")
-    else:
-        st.info("Nenhuma baixa de corte ativa disponível para estorno.")
-else:
-    st.info("Ainda não há histórico de baixas de corte para estorno.")
-
-st.divider()
-
 
 # ============================================================
 # MINI DASHBOARD POR GARGALO 
-# LOCAL: ÁREA VISUAL DO DASHBOARD PRINCIPAL
-# SUBSTITUIR TODO O BLOCO VISUAL ANTIGO
 # ============================================================
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
+
+# 🔒 GARANTIA ABSOLUTA
+if (
+    "df_baixas_ativas" not in locals()
+    or df_baixas_ativas is None
+    or not isinstance(df_baixas_ativas, pd.DataFrame)
+):
+    df_baixas_ativas = pd.DataFrame()
 
 df_mini_gargalos = montar_mini_dashboard_gargalos(
     fila=fila,
     df_baixas_ativas=df_baixas_ativas
 )
 
+# 🔒 GARANTIA DE ORDENAÇÃO (CRÍTICO)
+df_mini_gargalos = df_mini_gargalos.sort_values(
+    by=["Score", "Horas_Fila", "Qtd_Fila"],
+    ascending=[False, False, False]
+).reset_index(drop=True)
+
+df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+
 cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
 
 if df_mini_gargalos.empty:
     st.info("Nenhum dado disponível para análise de gargalos.")
 else:
+
     # ------------------------------------------------------------
-    # CARDS GERAIS
+    # FUNÇÕES VISUAIS
+    # ------------------------------------------------------------
+    def semaforo_status(status):
+        if status == "CRITICO":
+            return "🔴"
+        elif status == "ATENCAO":
+            return "🟡"
+        else:
+            return "🟢"
+
+    def classificacao_texto(score):
+        if score >= 80:
+            return "CRÍTICO"
+        elif score >= 30:
+            return "ATENÇÃO"
+        else:
+            return "CONTROLADO"
+
+    # ------------------------------------------------------------
+    # CARDS PRINCIPAIS
     # ------------------------------------------------------------
     col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
 
@@ -3084,8 +2845,11 @@ else:
         st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
 
     with col_g5:
-        st.metric("Gargalo Crítico", cards_gargalos["gargalo_critico"])
+        st.metric("Gargalo Crítico", f"🔴 {cards_gargalos['gargalo_critico']}")
 
+    # ------------------------------------------------------------
+    # CLASSIFICAÇÃO
+    # ------------------------------------------------------------
     st.markdown("### 🚨 Classificação dos Gargalos")
 
     col_s1, col_s2, col_s3 = st.columns(3)
@@ -3100,7 +2864,7 @@ else:
         st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
 
     # ------------------------------------------------------------
-    # TOP 3 GARGALOS MAIS CRÍTICOS
+    # TOP 3 GARGALOS
     # ------------------------------------------------------------
     st.markdown("### 🔥 Top 3 Gargalos Prioritários")
 
@@ -3112,32 +2876,33 @@ else:
             if i < len(top3):
                 row = top3.iloc[i]
 
-                status = row["Status_Gargalo"]
-
-                if status == "CRITICO":
-                    emoji = "🔴"
-                elif status == "ATENCAO":
-                    emoji = "🟡"
-                else:
-                    emoji = "🟢"
+                emoji = semaforo_status(row["Status_Gargalo"])
 
                 st.metric(
                     label=f"{emoji} {row['Processo']}",
                     value=f"{int(row['Qtd_Fila'])} itens",
                     delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
                 )
+
+                st.caption(
+                    f"Status: {classificacao_texto(row['Score'])} | "
+                    f"Carga Total: {row['Carga_Total']}"
+                )
             else:
                 st.metric(label="-", value="-", delta="-")
 
     # ------------------------------------------------------------
-    # TABELA FINAL DE RANKING
+    # TABELA DE RANKING
     # ------------------------------------------------------------
     st.markdown("### 📊 Ranking Inteligente de Gargalos")
 
     df_exibicao_gargalos = df_mini_gargalos.copy()
 
+    df_exibicao_gargalos["Semaforo"] = df_exibicao_gargalos["Status_Gargalo"].apply(semaforo_status)
+
     colunas_exibicao = [
         "Ranking",
+        "Semaforo",
         "Processo",
         "Status_Gargalo",
         "Qtd_Fila",
@@ -3171,10 +2936,17 @@ else:
         hide_index=True
     )
 
-# ---------------------------------------
-# FILA ATUAL DE CORTE
-# ---------------------------------------
+# ------------------------------------------------------------
+# FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
+# ------------------------------------------------------------
 st.markdown("### 🧾 Fila Atual de Corte")
+
+if (
+    "fila_corte_dash" not in locals()
+    or fila_corte_dash is None
+    or not isinstance(fila_corte_dash, pd.DataFrame)
+):
+    fila_corte_dash = pd.DataFrame()
 
 if not fila_corte_dash.empty:
 
@@ -3196,16 +2968,14 @@ if not fila_corte_dash.empty:
         "CODIGO_PV",
         "Processo",
         "Horas",
-        "Dias para Entrega",  # mantido, mas protegido abaixo
+        "Dias para Entrega",
         "ENTREGA"
     ]
 
-    # mantém só colunas existentes (proteção contra KeyError)
     colunas_corte_fila = [
         c for c in colunas_corte_fila if c in fila_corte_exib.columns
     ]
 
-    # ordenação segura (só usa ENTREGA se existir)
     if "ENTREGA" in fila_corte_exib.columns:
         df_exib = fila_corte_exib[colunas_corte_fila] \
             .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
