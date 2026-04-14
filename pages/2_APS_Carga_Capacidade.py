@@ -3230,7 +3230,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
+        # BAIXA / TERCEIRIZAÇÃO / LOTE
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
@@ -3248,12 +3248,13 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
+            # 🔹 UNITÁRIO
             st.markdown("#### 🔹 Ação Unitária")
 
             col_bx1, col_bx2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
-            observacao_baixa = col_bx2.text_input("Observação")
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa, key="select_unitario")
+            observacao_baixa = col_bx2.text_input("Observação", key="obs_unitario")
 
             registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
@@ -3277,6 +3278,10 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Motivo_Estorno": ""
                     }
                     salvar_baixa_operacional(BASE_PATH, registro)
+
+                    st.session_state["select_unitario"] = None
+                    st.session_state["obs_unitario"] = ""
+
                     st.cache_data.clear()
                     st.rerun()
 
@@ -3295,14 +3300,23 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Motivo_Estorno": ""
                     }
                     salvar_baixa_operacional(BASE_PATH, registro)
+
+                    st.session_state["select_unitario"] = None
+                    st.session_state["obs_unitario"] = ""
+
                     st.cache_data.clear()
                     st.rerun()
 
             st.divider()
 
+            # 📦 LOTE
             st.markdown("#### 📦 Ação em Lote")
 
-            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
+            selecao_lote = st.multiselect(
+                "Selecionar lote",
+                opcoes_baixa,
+                key="lote_select"
+            )
 
             if selecao_lote:
                 if st.button("📦 Baixar Lote"):
@@ -3324,6 +3338,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         }
 
                         salvar_baixa_operacional(BASE_PATH, registro)
+
+                    st.session_state["lote_select"] = []
 
                     st.cache_data.clear()
                     st.rerun()
