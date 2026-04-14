@@ -2941,7 +2941,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "Motivo_Estorno": ""
                         })
 
-                    st.session_state["lote_select"] = []
+                    st.session_state.pop("lote_select", None)
                     st.cache_data.clear()
                     st.rerun()
 
