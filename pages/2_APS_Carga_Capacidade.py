@@ -3059,6 +3059,20 @@ df_baixas_historico = carregar_baixas_operacionais(
     file_mtime_baixas
 )
 
+
+# =========================================================
+# CARREGAMENTO GLOBAL DE BAIXAS (OBRIGATÓRIO)
+# =========================================================
+
+try:
+    df_baixas_historico = carregar_baixas_operacionais(BASE_PATH)
+except:
+    df_baixas_historico = pd.DataFrame()
+
+if df_baixas_historico is None:
+    df_baixas_historico = pd.DataFrame()
+
+
 # --------------------------------------------------------
 # HISTÓRICO PREMIUM DE BAIXA
 # --------------------------------------------------------
