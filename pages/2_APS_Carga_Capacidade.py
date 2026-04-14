@@ -255,19 +255,23 @@ if df_baixas is None:
 
 
 # =========================================================
-# GARANTE BASE DA FILA (OBRIGATÓRIO)
+# ⚠️ AQUI É O AJUSTE IMPORTANTE
 # =========================================================
-if "fila" not in locals() or fila is None:
+# 👉 GARANTE QUE FILA VEM DO SEU DATAFRAME REAL
+# (AJUSTE O NOME SE NECESSÁRIO)
+
+if "df" in locals():
+    fila = df.copy()
+elif "df_programacao" in locals():
+    fila = df_programacao.copy()
+else:
+    st.error("ERRO: variável de fila não encontrada (df ou df_programacao)")
     fila = pd.DataFrame()
 
 
 # =========================================================
-# MINI DASHBOARD POR GARGALO (VERSÃO FINAL LIMPA)
+# FUNÇÃO GARGALOS
 # =========================================================
-
-# =====================================================
-# FUNÇÃO (TEM QUE VIR PRIMEIRO)
-# =====================================================
 def montar_mini_dashboard_gargalos(fila, df_baixas=None):
 
     if fila is None or fila.empty:
@@ -283,7 +287,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
             .str.replace("CENTRO DE USINAGEM", "USINAGEM", regex=False)
         )
 
-    # FILA
     fila_tmp = fila.copy()
     fila_tmp["Processo"] = normalizar_processo(fila_tmp["Processo"])
     fila_tmp["Horas"] = pd.to_numeric(
@@ -299,7 +302,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
         .reset_index()
     )
 
-    # BAIXAS
     if df_baixas is None or df_baixas.empty:
         resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
     else:
@@ -326,7 +328,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
             .reset_index()
         )
 
-    # CONSOLIDAÇÃO
     df_dash = resumo_fila.merge(
         resumo_baixas,
         on="Processo",
@@ -365,9 +366,9 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
     return df_dash
 
 
-# =====================================================
-# DASHBOARD (DEPOIS DA FUNÇÃO)
-# =====================================================
+# =========================================================
+# DASHBOARD
+# =========================================================
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
 df_mini_gargalos = montar_mini_dashboard_gargalos(
@@ -375,13 +376,14 @@ df_mini_gargalos = montar_mini_dashboard_gargalos(
     df_baixas=df_baixas
 )
 
-# DEBUG (pode remover depois)
 st.write("GARGALOS SHAPE:", df_mini_gargalos.shape)
 
 if df_mini_gargalos.empty:
-    st.info("Nenhum gargalo identificado.")
+    st.warning("Fila vazia ou sem dados para análise.")
 else:
     st.dataframe(df_mini_gargalos, use_container_width=True)
+
+
 
 # ===============================
 # CSS VISUAL PREMIUM APS
