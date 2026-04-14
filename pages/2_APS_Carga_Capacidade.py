@@ -2214,12 +2214,6 @@ df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
-st.write("DEBUG FILA:", fila.shape)
-st.write("DEBUG BAIXAS:", df_baixas.shape)
-st.write("DEBUG GARGALOS:", df_mini_gargalos.shape)
-
-st.dataframe(df_mini_gargalos)
-
 # 🔥 BASE ÚNICA DE BAIXAS
 try:
     df_baixas = carregar_baixas_operacionais(BASE_PATH)
@@ -2234,13 +2228,20 @@ if "Processo" not in df_baixas.columns:
 
 df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
 
-# 🔥 EXECUTA FUNÇÃO
+# 🔥 EXECUTA FUNÇÃO (TEM QUE VIR ANTES DO DEBUG)
 df_mini_gargalos = montar_mini_dashboard_gargalos(
     fila=fila,
     df_baixas=df_baixas
 )
 
-# 🔥 GARANTE ESTRUTURA (ESSA É A CORREÇÃO)
+# 🔍 DEBUG (AGORA NA ORDEM CORRETA)
+st.write("DEBUG FILA:", fila.shape)
+st.write("DEBUG BAIXAS:", df_baixas.shape)
+st.write("DEBUG GARGALOS:", df_mini_gargalos.shape)
+
+st.dataframe(df_mini_gargalos)
+
+# 🔥 GARANTE ESTRUTURA
 colunas_necessarias = [
     "Processo", "Qtd_Fila", "Horas_Fila",
     "Qtd_Baixas_Ativas", "Carga_Total",
@@ -2261,6 +2262,7 @@ df_mini_gargalos = df_mini_gargalos.sort_values(
 ).reset_index(drop=True)
 
 df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+
 
 
 # ------------------------------------------------------------
