@@ -2369,7 +2369,6 @@ fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
 st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
-
 # ============================================================
 # MINI DASHBOARD POR GARGALO 
 # ============================================================
@@ -2397,7 +2396,22 @@ df_mini_gargalos = df_mini_gargalos.sort_values(
 
 df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
 
-cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
+# ============================================================
+# 🔥 CARDS (CORREÇÃO AQUI)
+# ============================================================
+cards_gargalos = {
+    "total_processos": len(df_mini_gargalos),
+    "total_itens_fila": int(df_mini_gargalos["Qtd_Fila"].sum()) if not df_mini_gargalos.empty else 0,
+    "total_horas_fila": float(df_mini_gargalos["Horas_Fila"].sum()) if not df_mini_gargalos.empty else 0.0,
+    "total_baixas_ativas": int(df_mini_gargalos["Qtd_Baixas_Ativas"].sum()) if not df_mini_gargalos.empty else 0,
+    "gargalo_critico": (
+        df_mini_gargalos.iloc[0]["Processo"]
+        if not df_mini_gargalos.empty else "-"
+    ),
+    "qtd_criticos": int((df_mini_gargalos["Status_Gargalo"] == "CRITICO").sum()),
+    "qtd_atencao": int((df_mini_gargalos["Status_Gargalo"] == "ATENCAO").sum()),
+    "qtd_controlados": int((df_mini_gargalos["Status_Gargalo"] == "CONTROLADO").sum())
+}
 
 if df_mini_gargalos.empty:
     st.info("Nenhum dado disponível para análise de gargalos.")
@@ -2530,7 +2544,6 @@ else:
         use_container_width=True,
         hide_index=True
     )
-
 # ------------------------------------------------------------
 # FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
 # ------------------------------------------------------------
