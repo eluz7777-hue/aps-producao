@@ -18,20 +18,17 @@ import time
 import holidays
 import math
 import shutil
-import pytz
 
 from datetime import datetime
 
 st.set_page_config(layout="wide")
 
 # ============================================================
-# 🇧🇷 TIMEZONE OFICIAL BRASIL (APS)
+# 🇧🇷 TIMEZONE BRASIL (SEM DEPENDÊNCIA EXTERNA)
 # ============================================================
 
-TZ_BR = pytz.timezone("America/Sao_Paulo")
-
 def agora_brasil():
-    return pd.Timestamp.now(tz=TZ_BR)
+    return pd.Timestamp.now(tz="America/Sao_Paulo")
 
 def hoje_brasil():
     return agora_brasil().normalize()
