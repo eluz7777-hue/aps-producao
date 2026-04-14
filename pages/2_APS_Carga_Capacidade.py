@@ -2886,7 +2886,14 @@ if not fila_corte.empty:
     # ===============================
     # 🔹 BAIXA UNITÁRIA
     # ===============================
-    escolha = st.selectbox("Operação", opcoes, key="corte_unitario_select")
+    if "reset_unitario" not in st.session_state:
+        st.session_state["reset_unitario"] = 0
+
+    escolha = st.selectbox(
+        "Operação",
+        opcoes,
+        key=f"corte_unitario_select_{st.session_state['reset_unitario']}"
+    )
 
     linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
 
@@ -2903,9 +2910,8 @@ if not fila_corte.empty:
                 "Status_Baixa": "ATIVA"
             })
 
-            # limpa select
-            if "corte_unitario_select" in st.session_state:
-                del st.session_state["corte_unitario_select"]
+            # 🔥 RESET REAL
+            st.session_state["reset_unitario"] += 1
 
             st.success("Baixa registrada")
             st.rerun()
@@ -2917,17 +2923,21 @@ if not fila_corte.empty:
     # ===============================
     st.markdown("#### 📦 Baixa em Lote - Corte")
 
+    # 🔥 CONTROLE DE RESET
+    if "reset_lote_corte" not in st.session_state:
+        st.session_state["reset_lote_corte"] = 0
+
     selecao_lote_corte = st.multiselect(
         "Selecionar operações",
         opcoes,
-        key="lote_corte_select"
+        key=f"lote_corte_select_{st.session_state['reset_lote_corte']}"
     )
 
     tipo_lote_corte = st.radio(
         "Tipo de baixa",
         ["Baixa Normal", "Terceirizar"],
         horizontal=True,
-        key="tipo_lote_corte"
+        key=f"tipo_lote_corte_{st.session_state['reset_lote_corte']}"
     )
 
     if selecao_lote_corte:
@@ -2946,12 +2956,8 @@ if not fila_corte.empty:
                     "Status_Baixa": status
                 })
 
-            # 🔥 limpeza correta (SEM erro Streamlit)
-            if "lote_corte_select" in st.session_state:
-                del st.session_state["lote_corte_select"]
-
-            if "tipo_lote_corte" in st.session_state:
-                del st.session_state["tipo_lote_corte"]
+            # 🔥 RESET REAL DO WIDGET
+            st.session_state["reset_lote_corte"] += 1
 
             st.success("Lote de corte executado")
             st.rerun()
