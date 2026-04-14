@@ -3046,19 +3046,6 @@ def resumo_cards_gargalos(df_dash):
         "qtd_controlados": int((df_dash["Status_Gargalo"] == "CONTROLADO").sum())
     }
 
-# ============================================================
-# CARREGA HISTÓRICO REAL
-# ============================================================
-base_path = "."  # ou seu caminho real
-
-caminho = caminho_arquivo_baixas(base_path)
-file_mtime_baixas = os.path.getmtime(caminho) if os.path.exists(caminho) else 0
-
-df_baixas_historico = carregar_baixas_operacionais(
-    base_path,
-    file_mtime_baixas
-)
-
 
 # =========================================================
 # CARREGAMENTO GLOBAL DE BAIXAS (OBRIGATÓRIO)
