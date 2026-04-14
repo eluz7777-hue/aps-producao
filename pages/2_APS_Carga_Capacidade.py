@@ -2658,7 +2658,10 @@ if not fila_corte.empty:
 
     opcoes = fila_corte["LABEL"].tolist()
 
-    escolha = st.selectbox("Operação", opcoes)
+    # ===============================
+    # 🔹 BAIXA UNITÁRIA
+    # ===============================
+    escolha = st.selectbox("Operação", opcoes, key="corte_unitario_select")
 
     linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
 
@@ -2666,6 +2669,7 @@ if not fila_corte.empty:
         linha = linha_sel.iloc[0]
 
         if st.button("Confirmar Baixa"):
+
             salvar_baixa_operacional(BASE_PATH, {
                 "PV": linha.get("PV"),
                 "Processo": linha.get("Processo"),
@@ -2674,13 +2678,17 @@ if not fila_corte.empty:
                 "Status_Baixa": "ATIVA"
             })
 
+            # limpa select
+            if "corte_unitario_select" in st.session_state:
+                del st.session_state["corte_unitario_select"]
+
             st.success("Baixa registrada")
             st.rerun()
 
     st.divider()
 
     # ===============================
-    # 📦 LOTE DE CORTE (NOVO)
+    # 📦 LOTE DE CORTE
     # ===============================
     st.markdown("#### 📦 Baixa em Lote - Corte")
 
@@ -2713,10 +2721,19 @@ if not fila_corte.empty:
                     "Status_Baixa": status
                 })
 
-            st.session_state["lote_corte_select"] = []
+            # 🔥 limpeza correta (SEM erro Streamlit)
+            if "lote_corte_select" in st.session_state:
+                del st.session_state["lote_corte_select"]
+
+            if "tipo_lote_corte" in st.session_state:
+                del st.session_state["tipo_lote_corte"]
 
             st.success("Lote de corte executado")
             st.rerun()
+
+else:
+    st.info("Nenhuma operação de corte disponível.")
+
 
 # ============================================================
 # MINI DASHBOARD POR GARGALO 
