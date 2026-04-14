@@ -2209,60 +2209,121 @@ df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0
 
 
 # =========================================================
-# MINI DASHBOARD POR GARGALO 
+# MINI DASHBOARD POR GARGALO (VERSÃO FINAL LIMPA)
 # =========================================================
+def montar_mini_dashboard_gargalos(fila, df_baixas=None):
 
-st.markdown("## 🔥 Mini Dashboard por Gargalo")
+    if fila is None or fila.empty:
+        return pd.DataFrame()
 
-# 🔥 BASE ÚNICA DE BAIXAS
-try:
-    df_baixas = carregar_baixas_operacionais(BASE_PATH)
-except:
-    df_baixas = pd.DataFrame()
+    # =====================================================
+    # NORMALIZAÇÃO PADRÃO DE PROCESSOS (FINAL)
+    # =====================================================
+    def normalizar_processo(col):
+        return (
+            col.astype(str)
+            .str.strip()
+            .str.upper()
+            .str.replace("CORTE - ", "", regex=False)
+            .str.replace("CORTE-", "", regex=False)
+            .str.replace("CENTRO DE USINAGEM", "USINAGEM", regex=False)
+        )
 
-if df_baixas is None:
-    df_baixas = pd.DataFrame()
+    # =====================================================
+    # FILA
+    # =====================================================
+    fila_tmp = fila.copy()
+    fila_tmp["Processo"] = normalizar_processo(fila_tmp["Processo"])
+    fila_tmp["Horas"] = pd.to_numeric(
+        fila_tmp.get("Horas", 0), errors="coerce"
+    ).fillna(0)
 
-if "Processo" not in df_baixas.columns:
-    df_baixas["Processo"] = ""
+    resumo_fila = (
+        fila_tmp.groupby("Processo")
+        .agg(
+            Qtd_Fila=("Processo", "size"),
+            Horas_Fila=("Horas", "sum")
+        )
+        .reset_index()
+    )
 
-df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
+    # =====================================================
+    # BAIXAS
+    # =====================================================
+    if df_baixas is None or df_baixas.empty:
+        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
+    else:
+        baixas_tmp = df_baixas.copy()
+        baixas_tmp["Processo"] = normalizar_processo(baixas_tmp["Processo"])
 
-# 🔥 EXECUTA FUNÇÃO (TEM QUE VIR ANTES DO DEBUG)
-df_mini_gargalos = montar_mini_dashboard_gargalos(
-    fila=fila,
-    df_baixas=df_baixas
-)
+        if "Status_Baixa" in baixas_tmp.columns:
+            baixas_tmp["Status_Baixa"] = (
+                baixas_tmp["Status_Baixa"]
+                .astype(str)
+                .str.upper()
+                .str.strip()
+            )
 
-# 🔍 DEBUG (AGORA NA ORDEM CORRETA)
-st.write("DEBUG FILA:", fila.shape)
-st.write("DEBUG BAIXAS:", df_baixas.shape)
-st.write("DEBUG GARGALOS:", df_mini_gargalos.shape)
+            baixas_tmp = baixas_tmp[
+                baixas_tmp["Status_Baixa"].isin(
+                    ["ATIVA", "TERCEIRIZADA", "BAIXADA"]
+                )
+            ]
 
-st.dataframe(df_mini_gargalos)
+        resumo_baixas = (
+            baixas_tmp.groupby("Processo")
+            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
+            .reset_index()
+        )
 
-# 🔥 GARANTE ESTRUTURA
-colunas_necessarias = [
-    "Processo", "Qtd_Fila", "Horas_Fila",
-    "Qtd_Baixas_Ativas", "Carga_Total",
-    "Score", "Status_Gargalo"
-]
+    # =====================================================
+    # CONSOLIDAÇÃO
+    # =====================================================
+    df_dash = resumo_fila.merge(
+        resumo_baixas,
+        on="Processo",
+        how="left"
+    )
 
-for col in colunas_necessarias:
-    if col not in df_mini_gargalos.columns:
-        if col == "Processo":
-            df_mini_gargalos[col] = ""
+    df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0)
+
+    # =====================================================
+    # SCORE
+    # =====================================================
+    df_dash["Carga_Total"] = (
+        df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
+    )
+
+    df_dash["Score"] = (
+        (df_dash["Horas_Fila"] * 1.2) +
+        (df_dash["Qtd_Fila"] * 1.0) +
+        (df_dash["Qtd_Baixas_Ativas"] * 0.8)
+    )
+
+    # =====================================================
+    # CLASSIFICAÇÃO
+    # =====================================================
+    def classificar(score):
+        if score >= 300:
+            return "CRITICO"
+        elif score >= 120:
+            return "ATENCAO"
         else:
-            df_mini_gargalos[col] = 0
+            return "CONTROLADO"
 
-# 🔒 ORDENAÇÃO SEGURA
-df_mini_gargalos = df_mini_gargalos.sort_values(
-    by=["Score", "Horas_Fila", "Qtd_Fila"],
-    ascending=[False, False, False]
-).reset_index(drop=True)
+    df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar)
 
-df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+    # =====================================================
+    # ORDENAÇÃO
+    # =====================================================
+    df_dash = df_dash.sort_values(
+        by=["Score", "Horas_Fila"],
+        ascending=[False, False]
+    ).reset_index(drop=True)
 
+    df_dash["Ranking"] = df_dash.index + 1
+
+    return df_dash
 
 
 # ------------------------------------------------------------
