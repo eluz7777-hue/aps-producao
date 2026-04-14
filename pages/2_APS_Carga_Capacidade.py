@@ -2967,7 +2967,7 @@ else:
 
 
 # =========================================================
-# DASHBOARD DO CORTE (VERSÃO BLINDADA)
+# DASHBOARD DO CORTE (VERSÃO FINAL CORRIGIDA)
 # =========================================================
 st.markdown("## 📊 Dashboard do Corte")
 st.caption("Indicadores operacionais e gerenciais do setor de corte.")
@@ -2984,7 +2984,6 @@ fila_corte_dash = fila_corte_dash[
     fila_corte_dash["PROC_UPPER"].apply(lambda x: any(p in x for p in PROCESSOS_CORTE))
 ].copy()
 
-# garante coluna horas
 if "Horas" not in fila_corte_dash.columns:
     fila_corte_dash["Horas"] = 0
 
@@ -3001,42 +3000,45 @@ except:
 if df_baixas is None:
     df_baixas = pd.DataFrame()
 
-hist_corte_dash = pd.DataFrame()
+# 🔥 GARANTE ESTRUTURA MESMO VAZIO
+hist_corte_dash = pd.DataFrame(columns=["Processo", "Horas"])
 
 if not df_baixas.empty:
 
-    hist_corte_dash = df_baixas.copy()
+    hist_tmp = df_baixas.copy()
 
-    # normaliza processo
-    if "Processo" not in hist_corte_dash.columns:
-        hist_corte_dash["Processo"] = ""
+    if "Processo" not in hist_tmp.columns:
+        hist_tmp["Processo"] = ""
 
-    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
+    hist_tmp["PROC_UPPER"] = hist_tmp["Processo"].astype(str).str.strip().str.upper()
 
-    hist_corte_dash = hist_corte_dash[
-        hist_corte_dash["PROC_UPPER"].apply(lambda x: any(p in x for p in PROCESSOS_CORTE))
+    hist_tmp = hist_tmp[
+        hist_tmp["PROC_UPPER"].apply(lambda x: any(p in x for p in PROCESSOS_CORTE))
     ].copy()
 
-    # 🔥 GARANTE COLUNA HORAS (BLINDAGEM)
-    if "Horas" not in hist_corte_dash.columns:
-        # tenta alternativas comuns
+    # 🔥 GARANTE COLUNA HORAS
+    if "Horas" not in hist_tmp.columns:
         for alt in ["horas", "HRS", "Qtd Horas", "Tempo"]:
-            if alt in hist_corte_dash.columns:
-                hist_corte_dash["Horas"] = hist_corte_dash[alt]
+            if alt in hist_tmp.columns:
+                hist_tmp["Horas"] = hist_tmp[alt]
                 break
         else:
-            hist_corte_dash["Horas"] = 0
+            hist_tmp["Horas"] = 0
 
-    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
+    hist_tmp["Horas"] = pd.to_numeric(hist_tmp["Horas"], errors="coerce").fillna(0)
+
+    hist_corte_dash = hist_tmp.copy()
 
 # ---------------------------------------
-# KPIs
+# KPIs (AGORA 100% SEGURO)
 # ---------------------------------------
 ops_fila_corte = len(fila_corte_dash)
 horas_fila_corte = fila_corte_dash["Horas"].sum()
 
 qtd_baixadas_corte = len(hist_corte_dash)
-horas_baixadas_corte = hist_corte_dash["Horas"].sum()
+
+# 🔥 NUNCA MAIS QUEBRA
+horas_baixadas_corte = hist_corte_dash["Horas"].sum() if "Horas" in hist_corte_dash.columns else 0
 
 qtd_estornadas_corte = 0
 
@@ -3050,7 +3052,6 @@ col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
 col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
 col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
 col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
-
 
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
