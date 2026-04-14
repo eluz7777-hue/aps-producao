@@ -255,6 +255,13 @@ if df_baixas is None:
 
 
 # =========================================================
+# GARANTE BASE DA FILA (OBRIGATÓRIO)
+# =========================================================
+if "fila" not in locals() or fila is None:
+    fila = pd.DataFrame()
+
+
+# =========================================================
 # MINI DASHBOARD POR GARGALO (VERSÃO FINAL LIMPA)
 # =========================================================
 
