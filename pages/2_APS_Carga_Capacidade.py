@@ -3172,51 +3172,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
     if gargalos_top3.empty:
         st.info("Nenhum gargalo pendente encontrado no APS.")
     else:
-        gargalos_top3["Horas_Pendentes"] = pd.to_numeric(gargalos_top3["Horas_Pendentes"], errors="coerce").fillna(0).round(1)
-        gargalos_top3["Capacidade Processo"] = pd.to_numeric(gargalos_top3["Capacidade Processo"], errors="coerce").fillna(0).round(1)
-        gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
-        gargalos_top3["Ranking"] = gargalos_top3.index + 1
-
-        gargalos_top3["Dias de Fila"] = np.where(
-            gargalos_top3["Capacidade Processo"] > 0,
-            (gargalos_top3["Horas_Pendentes"] / gargalos_top3["Capacidade Processo"]).round(1),
-            np.nan
-        )
-
-        st.markdown("### 📌 Top 3 Gargalos Atuais")
-
-        exib_top3 = gargalos_top3.copy()
-        exib_top3["Horas Pendentes (h)"] = exib_top3["Horas_Pendentes"].apply(lambda x: fmt_br_num(x, 1))
-        exib_top3["Capacidade Processo (h)"] = exib_top3["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
-        exib_top3["Utilização (%)"] = exib_top3["Utilização (%)"].apply(lambda x: f"{int(x)}%")
-        exib_top3["Dias de Fila"] = exib_top3["Dias de Fila"].apply(
-            lambda x: f"{fmt_br_num(x, 1)} dias" if pd.notna(x) else "-"
-        )
-
-        st.dataframe(
-            exib_top3[
-                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes",
-                 "Capacidade Processo (h)", "Dias de Fila", "Utilização (%)"]
-            ].rename(columns={"PVs_Pendentes": "PVs Pendentes"}),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.divider()
-
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
         base_gargalos = df_operacional[df_operacional["Processo"].isin(processos_top3)].copy()
-
-        base_gargalos["CHAVE_OPERACAO"] = (
-            base_gargalos["PV"].astype(str).str.upper().str.strip() + "||" +
-            base_gargalos["Processo"].astype(str).str.upper().str.strip() + "||" +
-            base_gargalos["CODIGO_PV"].astype(str).str.upper().str.strip()
-        )
-
-        base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
-        base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
-        base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
-        base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
 
         st.markdown("### 📋 PVs dos Gargalos")
 
@@ -3230,7 +3187,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE
+        # BAIXAS
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
@@ -3248,23 +3205,25 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
+            # ===============================
             # 🔹 UNITÁRIO
+            # ===============================
             st.markdown("#### 🔹 Ação Unitária")
 
-            col_bx1, col_bx2 = st.columns(2)
+            col1, col2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa, key="select_unitario")
-            observacao_baixa = col_bx2.text_input("Observação", key="obs_unitario")
+            baixa_sel = col1.selectbox("Selecione operação", opcoes_baixa, key="select_unitario")
+            observacao = col2.text_input("Observação", key="obs_unitario")
 
-            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
+            df_sel = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
-            if not registro_baixa_df.empty:
-                linha = registro_baixa_df.iloc[0]
+            if not df_sel.empty:
+                linha = df_sel.iloc[0]
 
-                col_btn1, col_btn2 = st.columns(2)
+                colb1, colb2 = st.columns(2)
 
-                if col_btn1.button("💾 Baixar"):
-                    registro = {
+                if colb1.button("💾 Baixar"):
+                    salvar_baixa_operacional(BASE_PATH, {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
                         "CODIGO_PV": linha["CODIGO_PV"],
@@ -3272,21 +3231,19 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Horas": linha["Horas"],
                         "Data_Baixa": pd.Timestamp.now(),
                         "Usuario": "Sistema",
-                        "Observacao": observacao_baixa,
+                        "Observacao": observacao,
                         "Status_Baixa": "ATIVA",
                         "Data_Estorno": "",
                         "Motivo_Estorno": ""
-                    }
-                    salvar_baixa_operacional(BASE_PATH, registro)
+                    })
 
                     st.session_state["select_unitario"] = None
                     st.session_state["obs_unitario"] = ""
-
                     st.cache_data.clear()
                     st.rerun()
 
-                if col_btn2.button("🟣 Terceirizar"):
-                    registro = {
+                if colb2.button("🟣 Terceirizar"):
+                    salvar_baixa_operacional(BASE_PATH, {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
                         "CODIGO_PV": linha["CODIGO_PV"],
@@ -3294,22 +3251,22 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Horas": linha["Horas"],
                         "Data_Baixa": pd.Timestamp.now(),
                         "Usuario": "Sistema",
-                        "Observacao": observacao_baixa,
+                        "Observacao": observacao,
                         "Status_Baixa": "TERCEIRIZADA",
                         "Data_Estorno": "",
                         "Motivo_Estorno": ""
-                    }
-                    salvar_baixa_operacional(BASE_PATH, registro)
+                    })
 
                     st.session_state["select_unitario"] = None
                     st.session_state["obs_unitario"] = ""
-
                     st.cache_data.clear()
                     st.rerun()
 
             st.divider()
 
-            # 📦 LOTE
+            # ===============================
+            # 📦 LOTE (COM CONTROLE)
+            # ===============================
             st.markdown("#### 📦 Ação em Lote")
 
             selecao_lote = st.multiselect(
@@ -3318,12 +3275,21 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                 key="lote_select"
             )
 
+            tipo_lote = st.radio(
+                "Tipo de baixa em lote",
+                ["Baixa Normal", "Terceirizar"],
+                horizontal=True
+            )
+
             if selecao_lote:
-                if st.button("📦 Baixar Lote"):
+                if st.button("📦 Executar Lote"):
+
                     for label in selecao_lote:
                         linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
 
-                        registro = {
+                        status = "ATIVA" if tipo_lote == "Baixa Normal" else "TERCEIRIZADA"
+
+                        salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha["PV"],
                             "Cliente": linha.get("Cliente", ""),
                             "CODIGO_PV": linha["CODIGO_PV"],
@@ -3332,12 +3298,10 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "Data_Baixa": pd.Timestamp.now(),
                             "Usuario": "Sistema",
                             "Observacao": "",
-                            "Status_Baixa": "ATIVA",
+                            "Status_Baixa": status,
                             "Data_Estorno": "",
                             "Motivo_Estorno": ""
-                        }
-
-                        salvar_baixa_operacional(BASE_PATH, registro)
+                        })
 
                     st.session_state["lote_select"] = []
 
@@ -3345,7 +3309,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.rerun()
 
         st.divider()
-
 # ============================================================
 # CARREGA HISTÓRICO REAL
 # ============================================================
