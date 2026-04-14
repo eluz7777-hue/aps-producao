@@ -2943,6 +2943,9 @@ if not fila_corte.empty:
                 "Status_Baixa": "ATIVA"
             })
 
+            # 🔥 CORREÇÃO CRÍTICA (CACHE)
+            st.cache_data.clear()
+
             # 🔥 RESET REAL
             st.session_state["reset_unitario"] += 1
 
@@ -2989,7 +2992,10 @@ if not fila_corte.empty:
                     "Status_Baixa": status
                 })
 
-            # 🔥 RESET REAL DO WIDGET
+            # 🔥 CORREÇÃO CRÍTICA (CACHE)
+            st.cache_data.clear()
+
+            # 🔥 RESET REAL
             st.session_state["reset_lote_corte"] += 1
 
             st.success("Lote de corte executado")
@@ -2997,7 +3003,6 @@ if not fila_corte.empty:
 
 else:
     st.info("Nenhuma operação de corte disponível.")
-
 
 # =========================================================
 # DASHBOARD DO CORTE (VERSÃO FINAL CORRIGIDA)
