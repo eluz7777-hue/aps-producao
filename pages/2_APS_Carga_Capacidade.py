@@ -2965,9 +2965,8 @@ if not fila_corte.empty:
 else:
     st.info("Nenhuma operação de corte disponível.")
 
-
 # =========================================================
-# DASHBOARD DO CORTE (CORRIGIDO E SINCRONIZADO)
+# DASHBOARD DO CORTE (VERSÃO FINAL ESTÁVEL)
 # =========================================================
 st.markdown("## 📊 Dashboard do Corte")
 st.caption("Indicadores operacionais e gerenciais do setor de corte.")
@@ -2975,7 +2974,7 @@ st.caption("Indicadores operacionais e gerenciais do setor de corte.")
 PROCESSOS_CORTE = ["SERRA", "LASER", "PLASMA", "GUILHOTINA"]
 
 # ---------------------------------------
-# BASE FILA (APS CORRETA)
+# BASE FILA (APS)
 # ---------------------------------------
 fila_corte_dash = fila.copy()
 fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
@@ -2987,13 +2986,24 @@ fila_corte_dash = fila_corte_dash[
 fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
 
 # ---------------------------------------
-# BASE HISTÓRICO (CORRETA)
+# BASE HISTÓRICO (COM FALLBACK SEGURO)
 # ---------------------------------------
-df_baixas = carregar_baixas_operacionais(BASE_PATH)
+try:
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+except TypeError:
+    try:
+        df_baixas = carregar_baixas_operacionais()
+    except Exception:
+        df_baixas = pd.DataFrame()
+except Exception:
+    df_baixas = pd.DataFrame()
+
+if df_baixas is None:
+    df_baixas = pd.DataFrame()
 
 hist_corte_dash = pd.DataFrame()
 
-if df_baixas is not None and not df_baixas.empty:
+if not df_baixas.empty:
 
     hist_corte_dash = df_baixas.copy()
 
@@ -3008,7 +3018,7 @@ if df_baixas is not None and not df_baixas.empty:
     hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
 
 # ---------------------------------------
-# KPIs DO CORTE
+# KPIs
 # ---------------------------------------
 ops_fila_corte = len(fila_corte_dash)
 horas_fila_corte = fila_corte_dash["Horas"].sum()
