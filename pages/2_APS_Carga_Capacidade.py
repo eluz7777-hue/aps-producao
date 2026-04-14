@@ -2967,7 +2967,7 @@ else:
 
 
 # =========================================================
-# DASHBOARD DO CORTE (CORRIGIDO DEFINITIVO)
+# DASHBOARD DO CORTE (VERSÃO BLINDADA)
 # =========================================================
 st.markdown("## 📊 Dashboard do Corte")
 st.caption("Indicadores operacionais e gerenciais do setor de corte.")
@@ -2983,6 +2983,10 @@ fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.stri
 fila_corte_dash = fila_corte_dash[
     fila_corte_dash["PROC_UPPER"].apply(lambda x: any(p in x for p in PROCESSOS_CORTE))
 ].copy()
+
+# garante coluna horas
+if "Horas" not in fila_corte_dash.columns:
+    fila_corte_dash["Horas"] = 0
 
 fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
 
@@ -3003,16 +3007,30 @@ if not df_baixas.empty:
 
     hist_corte_dash = df_baixas.copy()
 
+    # normaliza processo
+    if "Processo" not in hist_corte_dash.columns:
+        hist_corte_dash["Processo"] = ""
+
     hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
 
     hist_corte_dash = hist_corte_dash[
         hist_corte_dash["PROC_UPPER"].apply(lambda x: any(p in x for p in PROCESSOS_CORTE))
     ].copy()
 
+    # 🔥 GARANTE COLUNA HORAS (BLINDAGEM)
+    if "Horas" not in hist_corte_dash.columns:
+        # tenta alternativas comuns
+        for alt in ["horas", "HRS", "Qtd Horas", "Tempo"]:
+            if alt in hist_corte_dash.columns:
+                hist_corte_dash["Horas"] = hist_corte_dash[alt]
+                break
+        else:
+            hist_corte_dash["Horas"] = 0
+
     hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
 
 # ---------------------------------------
-# KPIs (SEM DEPENDER DE STATUS)
+# KPIs
 # ---------------------------------------
 ops_fila_corte = len(fila_corte_dash)
 horas_fila_corte = fila_corte_dash["Horas"].sum()
@@ -3020,7 +3038,6 @@ horas_fila_corte = fila_corte_dash["Horas"].sum()
 qtd_baixadas_corte = len(hist_corte_dash)
 horas_baixadas_corte = hist_corte_dash["Horas"].sum()
 
-# Se quiser manter estorno depois, a gente trata separado
 qtd_estornadas_corte = 0
 
 # ---------------------------------------
