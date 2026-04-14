@@ -18,12 +18,11 @@ import time
 import holidays
 import math
 import shutil
+import pytz
+
 from datetime import datetime
 
 st.set_page_config(layout="wide")
-
-import pytz
-import pandas as pd
 
 # ============================================================
 # 🇧🇷 TIMEZONE OFICIAL BRASIL (APS)
@@ -32,15 +31,9 @@ import pandas as pd
 TZ_BR = pytz.timezone("America/Sao_Paulo")
 
 def agora_brasil():
-    """
-    Retorna timestamp atual no fuso horário do Brasil
-    """
     return pd.Timestamp.now(tz=TZ_BR)
 
 def hoje_brasil():
-    """
-    Retorna data de hoje no Brasil (00:00)
-    """
     return agora_brasil().normalize()
 
 # ============================================================
