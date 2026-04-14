@@ -3194,6 +3194,90 @@ else:
 
 
 
+# =========================================================
+# CONTROLE DOS 3 PRINCIPAIS GARGALOS
+# =========================================================
+st.markdown("### ⚙️ Controle dos 3 Principais Gargalos")
+
+top3 = df_mini_gargalos.head(3)
+
+if top3.empty:
+    st.info("Sem gargalos disponíveis.")
+else:
+
+    processos_top3 = top3["Processo"].tolist()
+
+    processo_sel = st.selectbox(
+        "Selecione o gargalo",
+        processos_top3
+    )
+
+    fila_gargalo = fila[
+        fila["Processo"].astype(str).str.upper().str.contains(processo_sel)
+    ].copy()
+
+    if fila_gargalo.empty:
+        st.info("Nenhuma operação encontrada para este gargalo.")
+    else:
+
+        fila_gargalo["Horas"] = pd.to_numeric(
+            fila_gargalo["Horas"], errors="coerce"
+        ).fillna(0)
+
+        fila_gargalo["LABEL"] = (
+            "PV " + fila_gargalo["PV"].astype(str) +
+            " | " + fila_gargalo["CODIGO_PV"].astype(str) +
+            " | " + fila_gargalo["Horas"].astype(str) + "h"
+        )
+
+        opcoes = fila_gargalo["LABEL"].tolist()
+
+        # 🔹 BAIXA UNITÁRIA
+        st.markdown("#### 🔹 Baixa Unitária")
+
+        escolha = st.selectbox("Operação", opcoes)
+
+        if st.button("Confirmar Baixa Gargalo"):
+            linha = fila_gargalo[fila_gargalo["LABEL"] == escolha].iloc[0]
+
+            salvar_baixa_operacional(BASE_PATH, {
+                "PV": linha.get("PV"),
+                "Processo": linha.get("Processo"),
+                "Horas": linha.get("Horas"),
+                "Data_Baixa": pd.Timestamp.now(),
+                "Status_Baixa": "ATIVA"
+            })
+
+            st.success("Baixa realizada")
+            st.rerun()
+
+        st.divider()
+
+        # 📦 LOTE
+        st.markdown("#### 📦 Baixa em Lote")
+
+        selecao_lote = st.multiselect("Selecionar operações", opcoes)
+
+        if selecao_lote:
+            if st.button("Executar Lote Gargalo"):
+
+                for label in selecao_lote:
+                    linha = fila_gargalo[
+                        fila_gargalo["LABEL"] == label
+                    ].iloc[0]
+
+                    salvar_baixa_operacional(BASE_PATH, {
+                        "PV": linha.get("PV"),
+                        "Processo": linha.get("Processo"),
+                        "Horas": linha.get("Horas"),
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Status_Baixa": "ATIVA"
+                    })
+
+                st.success("Lote executado")
+                st.rerun()
+
+
 # ============================================================
 # ===================== PAINEL OPERACIONAL ===================
 # ============================================================
