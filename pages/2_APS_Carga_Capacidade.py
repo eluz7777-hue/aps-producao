@@ -28,7 +28,7 @@ st.set_page_config(layout="wide")
 # ============================================================
 
 def agora_brasil():
-    return pd.Timestamp.now(tz="America/Sao_Paulo")
+    return pd.Timestamp.now(tz="America/Sao_Paulo").tz_localize(None)
 
 def hoje_brasil():
     return agora_brasil().normalize()
