@@ -241,6 +241,19 @@ def carregar_dados(arquivo_pv, file_mtime):
     df = pd.read_excel(arquivo_pv)
     return df
 
+
+# =========================================================
+# BASE GLOBAL DE BAIXAS (ÚNICA FONTE)
+# =========================================================
+try:
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+except:
+    df_baixas = pd.DataFrame()
+
+if df_baixas is None:
+    df_baixas = pd.DataFrame()
+
+
 # =========================================================
 # MINI DASHBOARD POR GARGALO (VERSÃO FINAL LIMPA)
 # =========================================================
