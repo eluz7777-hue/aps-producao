@@ -3127,6 +3127,73 @@ else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
 
 
+# =========================================================
+# DASHBOARD COMPLETO DE GARGALOS
+# =========================================================
+st.markdown("## 🔥 Mini Dashboard por Gargalo")
+
+df_mini_gargalos = montar_mini_dashboard_gargalos(
+    fila=fila,
+    df_baixas=df_baixas
+)
+
+if df_mini_gargalos.empty:
+    st.warning("Fila vazia ou sem dados para análise.")
+else:
+
+    # ------------------------------------------------------------
+    # TOP 3 GARGALOS
+    # ------------------------------------------------------------
+    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
+
+    top3 = df_mini_gargalos.head(3)
+    col1, col2, col3 = st.columns(3)
+
+    cols = [col1, col2, col3]
+
+    for i in range(3):
+        with cols[i]:
+            if i < len(top3):
+                row = top3.iloc[i]
+
+                st.metric(
+                    label=f"{row['Processo']}",
+                    value=f"{int(row['Qtd_Fila'])} itens",
+                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
+                )
+            else:
+                st.metric(label="-", value="-")
+
+    st.divider()
+
+    # ------------------------------------------------------------
+    # RESUMO
+    # ------------------------------------------------------------
+    total_fila = df_mini_gargalos["Qtd_Fila"].sum()
+    total_horas = df_mini_gargalos["Horas_Fila"].sum()
+    total_baixas = df_mini_gargalos["Qtd_Baixas_Ativas"].sum()
+
+    col_r1, col_r2, col_r3 = st.columns(3)
+
+    col_r1.metric("Itens na Fila", int(total_fila))
+    col_r2.metric("Horas Totais", f"{total_horas:.1f} h")
+    col_r3.metric("Baixas Ativas", int(total_baixas))
+
+    st.divider()
+
+    # ------------------------------------------------------------
+    # TABELA COMPLETA
+    # ------------------------------------------------------------
+    st.markdown("### 📊 Ranking de Gargalos")
+
+    st.dataframe(
+        df_mini_gargalos,
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+
 # ============================================================
 # ===================== PAINEL OPERACIONAL ===================
 # ============================================================
