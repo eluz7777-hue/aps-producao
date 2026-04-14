@@ -245,6 +245,7 @@ def carregar_dados(arquivo_pv, file_mtime):
 # =========================================================
 # BASE GLOBAL DE BAIXAS (ÚNICA FONTE)
 # =========================================================
+
 try:
     df_baixas = carregar_baixas_operacionais(BASE_PATH)
 except:
@@ -255,18 +256,32 @@ if df_baixas is None:
 
 
 # =========================================================
-# ⚠️ AQUI É O AJUSTE IMPORTANTE
+# BASE DA FILA (OBRIGATÓRIO PARA GARGALOS)
 # =========================================================
-# 👉 GARANTE QUE FILA VEM DO SEU DATAFRAME REAL
-# (AJUSTE O NOME SE NECESSÁRIO)
 
-if "df" in locals():
-    fila = df.copy()
-elif "df_programacao" in locals():
+# 🔥 AJUSTE AQUI SE O NOME FOR DIFERENTE
+if "df_programacao" in locals() and not df_programacao.empty:
     fila = df_programacao.copy()
+
+elif "df" in locals() and not df.empty:
+    fila = df.copy()
+
 else:
-    st.error("ERRO: variável de fila não encontrada (df ou df_programacao)")
+    st.error("ERRO: Não foi encontrada base de fila (df ou df_programacao)")
     fila = pd.DataFrame()
+
+
+# 🔥 GARANTE COLUNA PROCESSO
+if not fila.empty and "Processo" not in fila.columns:
+    for col in fila.columns:
+        if "process" in col.lower():
+            fila["Processo"] = fila[col]
+            break
+
+
+# 🔍 DEBUG (REMOVER DEPOIS)
+st.write("FILA SHAPE:", fila.shape)
+st.write("COLUNAS FILA:", list(fila.columns))
 
 
 # =========================================================
