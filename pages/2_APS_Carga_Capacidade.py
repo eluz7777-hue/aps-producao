@@ -3265,9 +3265,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             st.divider()
 
             # ===============================
-            # 📦 LOTE (COM CONTROLE)
+            # 📦 LOTE (COM CONTROLE)  ← CORRIGIDO AQUI
             # ===============================
             st.markdown("#### 📦 Ação em Lote")
+
+            PROCESSOS_CORTE = ["SERRA", "LASER", "PLASMA", "GUILHOTINA"]
 
             selecao_lote = st.multiselect(
                 "Selecionar lote",
@@ -3284,10 +3286,24 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             if selecao_lote:
                 if st.button("📦 Executar Lote"):
 
-                    for label in selecao_lote:
-                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
+                    base_exec = base_baixa[
+                        base_baixa["ROTULO_BAIXA"].isin(selecao_lote)
+                    ].copy()
+
+                    # 🔥 PRIORIZA CORTE
+                    def prioridade(proc):
+                        proc = str(proc).upper()
+                        return 0 if any(p in proc for p in PROCESSOS_CORTE) else 1
+
+                    base_exec["PRIORIDADE"] = base_exec["Processo"].apply(prioridade)
+                    base_exec = base_exec.sort_values("PRIORIDADE")
+
+                    for _, linha in base_exec.iterrows():
 
                         status = "ATIVA" if tipo_lote == "Baixa Normal" else "TERCEIRIZADA"
+
+                        processo = str(linha["Processo"]).upper()
+                        is_corte = any(p in processo for p in PROCESSOS_CORTE)
 
                         salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha["PV"],
@@ -3297,7 +3313,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "Horas": linha["Horas"],
                             "Data_Baixa": pd.Timestamp.now(),
                             "Usuario": "Sistema",
-                            "Observacao": "",
+                            "Observacao": "LOTE CORTE" if is_corte else "",
                             "Status_Baixa": status,
                             "Data_Estorno": "",
                             "Motivo_Estorno": ""
@@ -3309,6 +3325,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.rerun()
 
         st.divider()
+
 # ============================================================
 # CARREGA HISTÓRICO REAL
 # ============================================================
