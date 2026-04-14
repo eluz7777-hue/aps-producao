@@ -2414,10 +2414,10 @@ if "Processo" not in df_baixas.columns:
 
 df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
 
-# 🔥 AGORA SIM: GARGALOS COM BASE REAL
+# 🔥 CORREÇÃO AQUI (NOME DO PARÂMETRO)
 df_mini_gargalos = montar_mini_dashboard_gargalos(
     fila=fila,
-    df_baixas_ativas=df_baixas
+    df_baixas=df_baixas
 )
 
 # 🔒 ORDENAÇÃO
@@ -2427,7 +2427,6 @@ df_mini_gargalos = df_mini_gargalos.sort_values(
 ).reset_index(drop=True)
 
 df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
-
 
 # ============================================================
 # 🔥 CARDS (CORREÇÃO AQUI)
