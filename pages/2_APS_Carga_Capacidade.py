@@ -2633,106 +2633,6 @@ fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
 
 st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
-# =========================================================
-# BAIXAS DE CORTE
-# =========================================================
-st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
-
-fila_corte = fila.copy()
-proc_upper = fila_corte["Processo"].astype(str).str.strip().str.upper()
-
-fila_corte = fila_corte[
-    proc_upper.str.contains("SERRA|LASER|PLASMA|GUILHOTINA", na=False)
-].copy()
-
-if not fila_corte.empty:
-
-    fila_corte["Horas"] = pd.to_numeric(fila_corte["Horas"], errors="coerce").fillna(0).round(1)
-
-    fila_corte["LABEL"] = (
-        "PV " + fila_corte["PV"].astype(str) +
-        " | " + fila_corte["Processo"].astype(str) +
-        " | " + fila_corte["CODIGO_PV"].astype(str) +
-        " | " + fila_corte["Horas"].astype(str) + " h"
-    )
-
-    opcoes = fila_corte["LABEL"].tolist()
-
-    # ===============================
-    # 🔹 BAIXA UNITÁRIA
-    # ===============================
-    escolha = st.selectbox("Operação", opcoes, key="corte_unitario_select")
-
-    linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
-
-    if not linha_sel.empty:
-        linha = linha_sel.iloc[0]
-
-        if st.button("Confirmar Baixa"):
-
-            salvar_baixa_operacional(BASE_PATH, {
-                "PV": linha.get("PV"),
-                "Processo": linha.get("Processo"),
-                "Horas": linha.get("Horas"),
-                "Data_Baixa": pd.Timestamp.now(),
-                "Status_Baixa": "ATIVA"
-            })
-
-            # limpa select
-            if "corte_unitario_select" in st.session_state:
-                del st.session_state["corte_unitario_select"]
-
-            st.success("Baixa registrada")
-            st.rerun()
-
-    st.divider()
-
-    # ===============================
-    # 📦 LOTE DE CORTE
-    # ===============================
-    st.markdown("#### 📦 Baixa em Lote - Corte")
-
-    selecao_lote_corte = st.multiselect(
-        "Selecionar operações",
-        opcoes,
-        key="lote_corte_select"
-    )
-
-    tipo_lote_corte = st.radio(
-        "Tipo de baixa",
-        ["Baixa Normal", "Terceirizar"],
-        horizontal=True,
-        key="tipo_lote_corte"
-    )
-
-    if selecao_lote_corte:
-        if st.button("📦 Executar Lote Corte"):
-
-            for label in selecao_lote_corte:
-                linha_lote = fila_corte[fila_corte["LABEL"] == label].iloc[0]
-
-                status = "ATIVA" if tipo_lote_corte == "Baixa Normal" else "TERCEIRIZADA"
-
-                salvar_baixa_operacional(BASE_PATH, {
-                    "PV": linha_lote.get("PV"),
-                    "Processo": linha_lote.get("Processo"),
-                    "Horas": linha_lote.get("Horas"),
-                    "Data_Baixa": pd.Timestamp.now(),
-                    "Status_Baixa": status
-                })
-
-            # 🔥 limpeza correta (SEM erro Streamlit)
-            if "lote_corte_select" in st.session_state:
-                del st.session_state["lote_corte_select"]
-
-            if "tipo_lote_corte" in st.session_state:
-                del st.session_state["tipo_lote_corte"]
-
-            st.success("Lote de corte executado")
-            st.rerun()
-
-else:
-    st.info("Nenhuma operação de corte disponível.")
 
 
 # ============================================================
@@ -3209,6 +3109,108 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
             file_name="roteiro_fabricacao.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+# =========================================================
+# BAIXAS DE CORTE
+# =========================================================
+st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
+
+fila_corte = fila.copy()
+proc_upper = fila_corte["Processo"].astype(str).str.strip().str.upper()
+
+fila_corte = fila_corte[
+    proc_upper.str.contains("SERRA|LASER|PLASMA|GUILHOTINA", na=False)
+].copy()
+
+if not fila_corte.empty:
+
+    fila_corte["Horas"] = pd.to_numeric(fila_corte["Horas"], errors="coerce").fillna(0).round(1)
+
+    fila_corte["LABEL"] = (
+        "PV " + fila_corte["PV"].astype(str) +
+        " | " + fila_corte["Processo"].astype(str) +
+        " | " + fila_corte["CODIGO_PV"].astype(str) +
+        " | " + fila_corte["Horas"].astype(str) + " h"
+    )
+
+    opcoes = fila_corte["LABEL"].tolist()
+
+    # ===============================
+    # 🔹 BAIXA UNITÁRIA
+    # ===============================
+    escolha = st.selectbox("Operação", opcoes, key="corte_unitario_select")
+
+    linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
+
+    if not linha_sel.empty:
+        linha = linha_sel.iloc[0]
+
+        if st.button("Confirmar Baixa"):
+
+            salvar_baixa_operacional(BASE_PATH, {
+                "PV": linha.get("PV"),
+                "Processo": linha.get("Processo"),
+                "Horas": linha.get("Horas"),
+                "Data_Baixa": pd.Timestamp.now(),
+                "Status_Baixa": "ATIVA"
+            })
+
+            # limpa select
+            if "corte_unitario_select" in st.session_state:
+                del st.session_state["corte_unitario_select"]
+
+            st.success("Baixa registrada")
+            st.rerun()
+
+    st.divider()
+
+    # ===============================
+    # 📦 LOTE DE CORTE
+    # ===============================
+    st.markdown("#### 📦 Baixa em Lote - Corte")
+
+    selecao_lote_corte = st.multiselect(
+        "Selecionar operações",
+        opcoes,
+        key="lote_corte_select"
+    )
+
+    tipo_lote_corte = st.radio(
+        "Tipo de baixa",
+        ["Baixa Normal", "Terceirizar"],
+        horizontal=True,
+        key="tipo_lote_corte"
+    )
+
+    if selecao_lote_corte:
+        if st.button("📦 Executar Lote Corte"):
+
+            for label in selecao_lote_corte:
+                linha_lote = fila_corte[fila_corte["LABEL"] == label].iloc[0]
+
+                status = "ATIVA" if tipo_lote_corte == "Baixa Normal" else "TERCEIRIZADA"
+
+                salvar_baixa_operacional(BASE_PATH, {
+                    "PV": linha_lote.get("PV"),
+                    "Processo": linha_lote.get("Processo"),
+                    "Horas": linha_lote.get("Horas"),
+                    "Data_Baixa": pd.Timestamp.now(),
+                    "Status_Baixa": status
+                })
+
+            # 🔥 limpeza correta (SEM erro Streamlit)
+            if "lote_corte_select" in st.session_state:
+                del st.session_state["lote_corte_select"]
+
+            if "tipo_lote_corte" in st.session_state:
+                del st.session_state["tipo_lote_corte"]
+
+            st.success("Lote de corte executado")
+            st.rerun()
+
+else:
+    st.info("Nenhuma operação de corte disponível.")
+
 
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
