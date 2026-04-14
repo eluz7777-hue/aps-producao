@@ -2369,32 +2369,65 @@ fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
 st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
-# ============================================================
+# =========================================================
+# BASE ÚNICA DE BAIXAS (PADRÃO APS)
+# =========================================================
+try:
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+except:
+    df_baixas = pd.DataFrame()
+
+if df_baixas is None:
+    df_baixas = pd.DataFrame()
+
+# 🔒 GARANTE COLUNAS PADRÃO
+if "Processo" not in df_baixas.columns:
+    df_baixas["Processo"] = ""
+
+if "Horas" not in df_baixas.columns:
+    df_baixas["Horas"] = 0
+
+df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
+df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+
+
+
+
+
+# =========================================================
 # MINI DASHBOARD POR GARGALO 
-# ============================================================
+# =========================================================
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
-# 🔒 GARANTIA ABSOLUTA
-if (
-    "df_baixas_ativas" not in locals()
-    or df_baixas_ativas is None
-    or not isinstance(df_baixas_ativas, pd.DataFrame)
-):
-    df_baixas_ativas = pd.DataFrame()
+# 🔥 BASE ÚNICA DE BAIXAS (OBRIGATÓRIA)
+try:
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+except:
+    df_baixas = pd.DataFrame()
 
+if df_baixas is None:
+    df_baixas = pd.DataFrame()
+
+if "Processo" not in df_baixas.columns:
+    df_baixas["Processo"] = ""
+
+df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
+
+# 🔥 AGORA SIM: GARGALOS COM BASE REAL
 df_mini_gargalos = montar_mini_dashboard_gargalos(
     fila=fila,
-    df_baixas_ativas=df_baixas_ativas
+    df_baixas_ativas=df_baixas
 )
 
-# 🔒 GARANTIA DE ORDENAÇÃO (CRÍTICO)
+# 🔒 ORDENAÇÃO
 df_mini_gargalos = df_mini_gargalos.sort_values(
     by=["Score", "Horas_Fila", "Qtd_Fila"],
     ascending=[False, False, False]
 ).reset_index(drop=True)
 
 df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+
 
 # ============================================================
 # 🔥 CARDS (CORREÇÃO AQUI)
