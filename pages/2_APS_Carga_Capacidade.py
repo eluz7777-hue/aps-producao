@@ -2400,7 +2400,7 @@ df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
-# 🔥 BASE ÚNICA DE BAIXAS (OBRIGATÓRIA)
+# 🔥 BASE ÚNICA DE BAIXAS
 try:
     df_baixas = carregar_baixas_operacionais(BASE_PATH)
 except:
@@ -2414,13 +2414,27 @@ if "Processo" not in df_baixas.columns:
 
 df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
 
-# 🔥 CORREÇÃO AQUI (NOME DO PARÂMETRO)
+# 🔥 EXECUTA FUNÇÃO
 df_mini_gargalos = montar_mini_dashboard_gargalos(
     fila=fila,
     df_baixas=df_baixas
 )
 
-# 🔒 ORDENAÇÃO
+# 🔥 GARANTE ESTRUTURA (ESSA É A CORREÇÃO)
+colunas_necessarias = [
+    "Processo", "Qtd_Fila", "Horas_Fila",
+    "Qtd_Baixas_Ativas", "Carga_Total",
+    "Score", "Status_Gargalo"
+]
+
+for col in colunas_necessarias:
+    if col not in df_mini_gargalos.columns:
+        if col == "Processo":
+            df_mini_gargalos[col] = ""
+        else:
+            df_mini_gargalos[col] = 0
+
+# 🔒 ORDENAÇÃO SEGURA
 df_mini_gargalos = df_mini_gargalos.sort_values(
     by=["Score", "Horas_Fila", "Qtd_Fila"],
     ascending=[False, False, False]
@@ -2428,154 +2442,7 @@ df_mini_gargalos = df_mini_gargalos.sort_values(
 
 df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
 
-# ============================================================
-# 🔥 CARDS (CORREÇÃO AQUI)
-# ============================================================
-cards_gargalos = {
-    "total_processos": len(df_mini_gargalos),
-    "total_itens_fila": int(df_mini_gargalos["Qtd_Fila"].sum()) if not df_mini_gargalos.empty else 0,
-    "total_horas_fila": float(df_mini_gargalos["Horas_Fila"].sum()) if not df_mini_gargalos.empty else 0.0,
-    "total_baixas_ativas": int(df_mini_gargalos["Qtd_Baixas_Ativas"].sum()) if not df_mini_gargalos.empty else 0,
-    "gargalo_critico": (
-        df_mini_gargalos.iloc[0]["Processo"]
-        if not df_mini_gargalos.empty else "-"
-    ),
-    "qtd_criticos": int((df_mini_gargalos["Status_Gargalo"] == "CRITICO").sum()),
-    "qtd_atencao": int((df_mini_gargalos["Status_Gargalo"] == "ATENCAO").sum()),
-    "qtd_controlados": int((df_mini_gargalos["Status_Gargalo"] == "CONTROLADO").sum())
-}
 
-if df_mini_gargalos.empty:
-    st.info("Nenhum dado disponível para análise de gargalos.")
-else:
-
-    # ------------------------------------------------------------
-    # FUNÇÕES VISUAIS
-    # ------------------------------------------------------------
-    def semaforo_status(status):
-        if status == "CRITICO":
-            return "🔴"
-        elif status == "ATENCAO":
-            return "🟡"
-        else:
-            return "🟢"
-
-    def classificacao_texto(score):
-        if score >= 80:
-            return "CRÍTICO"
-        elif score >= 30:
-            return "ATENÇÃO"
-        else:
-            return "CONTROLADO"
-
-    # ------------------------------------------------------------
-    # CARDS PRINCIPAIS
-    # ------------------------------------------------------------
-    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
-
-    with col_g1:
-        st.metric("Processos", cards_gargalos["total_processos"])
-
-    with col_g2:
-        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
-
-    with col_g3:
-        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
-
-    with col_g4:
-        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
-
-    with col_g5:
-        st.metric("Gargalo Crítico", f"🔴 {cards_gargalos['gargalo_critico']}")
-
-    # ------------------------------------------------------------
-    # CLASSIFICAÇÃO
-    # ------------------------------------------------------------
-    st.markdown("### 🚨 Classificação dos Gargalos")
-
-    col_s1, col_s2, col_s3 = st.columns(3)
-
-    with col_s1:
-        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
-
-    with col_s2:
-        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
-
-    with col_s3:
-        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
-
-    # ------------------------------------------------------------
-    # TOP 3 GARGALOS
-    # ------------------------------------------------------------
-    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
-
-    top3 = df_mini_gargalos.head(3)
-    top3_cols = st.columns(3)
-
-    for i in range(3):
-        with top3_cols[i]:
-            if i < len(top3):
-                row = top3.iloc[i]
-
-                emoji = semaforo_status(row["Status_Gargalo"])
-
-                st.metric(
-                    label=f"{emoji} {row['Processo']}",
-                    value=f"{int(row['Qtd_Fila'])} itens",
-                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
-                )
-
-                st.caption(
-                    f"Status: {classificacao_texto(row['Score'])} | "
-                    f"Carga Total: {row['Carga_Total']}"
-                )
-            else:
-                st.metric(label="-", value="-", delta="-")
-
-    # ------------------------------------------------------------
-    # TABELA DE RANKING
-    # ------------------------------------------------------------
-    st.markdown("### 📊 Ranking Inteligente de Gargalos")
-
-    df_exibicao_gargalos = df_mini_gargalos.copy()
-
-    df_exibicao_gargalos["Semaforo"] = df_exibicao_gargalos["Status_Gargalo"].apply(semaforo_status)
-
-    colunas_exibicao = [
-        "Ranking",
-        "Semaforo",
-        "Processo",
-        "Status_Gargalo",
-        "Qtd_Fila",
-        "Horas_Fila",
-        "Qtd_Baixas_Ativas",
-        "Carga_Total",
-        "Score"
-    ]
-
-    for col in colunas_exibicao:
-        if col not in df_exibicao_gargalos.columns:
-            df_exibicao_gargalos[col] = None
-
-    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
-
-    df_exibicao_gargalos["Horas_Fila"] = (
-        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    df_exibicao_gargalos["Score"] = (
-        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    st.dataframe(
-        df_exibicao_gargalos,
-        use_container_width=True,
-        hide_index=True
-    )
 # ------------------------------------------------------------
 # FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
 # ------------------------------------------------------------
