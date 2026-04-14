@@ -330,7 +330,12 @@ if st.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
 
-st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
+agora = pd.Timestamp.now(tz="America/Sao_Paulo")
+
+st.write(
+    "Última atualização:",
+    agora.strftime("%d/%m/%Y %H:%M:%S")
+)
 
 # ===============================
 # LEITURA
