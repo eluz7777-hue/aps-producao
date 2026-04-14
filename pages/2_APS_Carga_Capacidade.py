@@ -1654,10 +1654,6 @@ def caminho_arquivo_baixas(base_path):
     return os.path.join(base_path, ARQUIVO_BAIXAS)
 
 def garantir_arquivo_baixas(base_path):
-    """
-    Garante que o arquivo físico de baixas exista com a estrutura correta.
-    NUNCA apaga histórico existente.
-    """
     os.makedirs(base_path, exist_ok=True)
     caminho = caminho_arquivo_baixas(base_path)
 
@@ -1668,10 +1664,7 @@ def garantir_arquivo_baixas(base_path):
     return caminho
 
 def _padronizar_df_baixas(df_baixas):
-    """
-    Padroniza a estrutura e os tipos do histórico de baixas operacionais.
-    Mantém histórico completo (ativas + terceirizadas + estornadas).
-    """
+
     if df_baixas is None or df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
@@ -1692,9 +1685,9 @@ def _padronizar_df_baixas(df_baixas):
     for col in colunas_texto:
         df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
-    df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip().str.upper()
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
-    df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
+    df_baixas["PV"] = df_baixas["PV"].str.upper()
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].str.upper()
+    df_baixas["Processo"] = df_baixas["Processo"].str.upper()
     df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
 
     df_baixas["Status_Baixa"] = (
@@ -1710,9 +1703,9 @@ def _padronizar_df_baixas(df_baixas):
     df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
 
     df_baixas["CHAVE_OPERACAO"] = (
-        df_baixas["PV"].astype(str).str.strip().str.upper() + "||" +
-        df_baixas["Processo"].astype(str).str.strip().str.upper() + "||" +
-        df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
+        df_baixas["PV"] + "||" +
+        df_baixas["Processo"] + "||" +
+        df_baixas["CODIGO_PV"]
     )
 
     df_baixas = df_baixas.sort_values(
@@ -1722,26 +1715,22 @@ def _padronizar_df_baixas(df_baixas):
 
     return df_baixas
 
-@st.cache_data(ttl=0)
-def carregar_baixas_operacionais(base_path, file_mtime_baixas):
-    """
-    Leitura cacheada do histórico de baixas, invalidada pela modificação do arquivo físico.
-    """
+
+# 🚨 CORREÇÃO CRÍTICA: REMOVIDO CACHE
+def carregar_baixas_operacionais(base_path):
+
     caminho = garantir_arquivo_baixas(base_path)
 
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
         return _padronizar_df_baixas(df_baixas)
     except Exception as e:
-        st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
+        st.warning(f"Erro ao ler baixas: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
+
 def salvar_baixa_operacional(base_path, registro_baixa):
-    """
-    Salva uma nova baixa operacional SEM apagar histórico anterior.
-    Também evita duplicidade ativa/terceirizada da mesma operação.
-    Agora com BACKUP AUTOMÁTICO do histórico após gravação bem-sucedida.
-    """
+
     caminho = garantir_arquivo_baixas(base_path)
 
     try:
@@ -1764,210 +1753,41 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     chave_nova = novo_registro["CHAVE_OPERACAO"].iloc[0]
 
-    # impede duplicidade ativa/terceirizada da mesma operação
-    duplicado_ativo = df_existente[
+    duplicado = df_existente[
         (df_existente["CHAVE_OPERACAO"] == chave_nova) &
         (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-    ].copy()
+    ]
 
-    if not duplicado_ativo.empty:
+    if not duplicado.empty:
         return df_existente
 
     df_final = pd.concat([df_existente, novo_registro], ignore_index=True)
     df_final = _padronizar_df_baixas(df_final)
 
-    # gravação blindada
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
         df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
 
-    # backup automático do histórico
-    try:
-        _criar_backup()
-    except Exception:
-        pass
+    return df_final
 
-    # releitura REAL do arquivo salvo (fonte da verdade)
-    try:
-        df_reloaded = pd.read_excel(caminho, dtype=str)
-        df_reloaded = _padronizar_df_baixas(df_reloaded)
-        return df_reloaded
-    except Exception:
-        return df_final
-
-def historico_baixas_completo(df_baixas):
-    if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    return _padronizar_df_baixas(df_baixas)
 
 def historico_baixas_ativas(df_baixas):
+
     if df_baixas is None or df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
     df_tmp = _padronizar_df_baixas(df_baixas)
-    return df_tmp[df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])].copy()
 
-def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
-    """
-    Marca a baixa como ESTORNADA sem apagar histórico.
-    Agora com BACKUP AUTOMÁTICO do histórico após gravação bem-sucedida.
-    """
-    caminho = garantir_arquivo_baixas(base_path)
-
-    try:
-        df_baixas = pd.read_excel(caminho, dtype=str)
-    except Exception as e:
-        return False, f"Não foi possível abrir o histórico de baixas: {e}"
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    chave_estorno = (
-        str(pv).strip().upper() + "||" +
-        str(processo).strip().upper() + "||" +
-        str(codigo_pv).strip().upper()
-    )
-
-    filtro = (
-        (df_baixas["CHAVE_OPERACAO"] == chave_estorno) &
-        (df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-    )
-
-    if not filtro.any():
-        return False, "Nenhuma baixa ativa encontrada para estorno."
-
-    idx = df_baixas[filtro].index[0]
-
-    df_baixas.at[idx, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")
-    df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
-
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_baixas[COLUNAS_BAIXAS].to_excel(writer, index=False)
-
-    # backup automático do histórico
-    try:
-        _criar_backup()
-    except Exception:
-        pass
-
-    return True, "Baixa estornada com sucesso."
-    # --------------------------------------------
-    # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
-    # --------------------------------------------
-    if not df_existente.empty:
-        chave_nova = str(novo_registro.iloc[0]["CHAVE_OPERACAO"]).strip().upper()
-
-        duplicado = df_existente[
-            (df_existente["CHAVE_OPERACAO"].astype(str).str.strip().str.upper() == chave_nova) &
-            (
-                df_existente["Status_Baixa"]
-                .astype(str)
-                .str.strip()
-                .str.upper()
-                .isin(["ATIVA", "TERCEIRIZADA"])
-            )
-        ]
-
-        if not duplicado.empty:
-            print("⚠️ DUPLICIDADE DETECTADA - BAIXA NÃO SALVA")
-            print(duplicado[["PV", "Processo", "CODIGO_PV", "Status_Baixa"]].to_dict(orient="records"))
-            return df_existente
-
-    # --------------------------------------------
-    # CONCATENA E SALVA
-    # --------------------------------------------
-    df_final = pd.concat(
-        [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
-        ignore_index=True
-    )
-
-    df_final = _padronizar_df_baixas(df_final)
-
-    print("💾 TOTAL DE REGISTROS APÓS CONCATENAR:", len(df_final))
-
-    # Persistência física garantida
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_final.to_excel(writer, index=False)
-
-    print("✅ ARQUIVO SALVO COM SUCESSO:", caminho)
-
-    st.cache_data.clear()
-
-    return df_final
-
-def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
-    """
-    Estorna a última baixa ATIVA ou TERCEIRIZADA daquela operação sem apagar histórico.
-    """
-    caminho = garantir_arquivo_baixas(base_path)
-
-    try:
-        df_baixas = pd.read_excel(caminho, dtype=str)
-    except Exception as e:
-        return False, f"Erro ao ler arquivo de baixas: {e}"
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    if df_baixas.empty:
-        return False, "Nenhuma baixa operacional encontrada."
-
-    pv = str(pv).strip().upper()
-    processo = str(processo).strip().upper()
-    codigo_pv = str(codigo_pv).strip().upper()
-
-    filtro = (
-        (df_baixas["PV"].astype(str).str.strip().str.upper() == pv) &
-        (df_baixas["Processo"].astype(str).str.strip().str.upper() == processo) &
-        (df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper() == codigo_pv) &
-        (
-            df_baixas["Status_Baixa"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .isin(["ATIVA", "TERCEIRIZADA"])
-        )
-    )
-
-    if not filtro.any():
-        return False, "Nenhuma baixa ativa encontrada para estorno."
-
-    idx_estorno = df_baixas.loc[filtro].sort_values("Data_Baixa", ascending=False).index[0]
-
-    df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M:%S")
-    df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    # Persistência física garantida
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_baixas.to_excel(writer, index=False)
-
-    st.cache_data.clear()
-
-    return True, "Baixa operacional estornada com sucesso."
-
-def historico_baixas_ativas(df_baixas):
-    """
-    Retorna apenas as operações que devem sair da fila operacional:
-    ATIVA + TERCEIRIZADA
-    """
-    if df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    return df_baixas[
-        df_baixas["Status_Baixa"].astype(str).str.strip().str.upper().isin(["ATIVA", "TERCEIRIZADA"])
+    return df_tmp[
+        df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
     ].copy()
 
+
 def historico_baixas_completo(df_baixas):
-    """
-    Retorna o histórico completo consolidado (ativas + terceirizadas + estornadas).
-    """
-    if df_baixas.empty:
+
+    if df_baixas is None or df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
-    return _padronizar_df_baixas(df_baixas.copy())
+    return _padronizar_df_baixas(df_baixas)
 
 
 # ===============================
