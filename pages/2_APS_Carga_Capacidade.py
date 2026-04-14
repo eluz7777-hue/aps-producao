@@ -2897,7 +2897,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             # ===============================
             st.markdown("#### 📦 Ação em Lote")
 
-            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa, key="lote_select")
+            selecao_lote = st.multiselect(
+                "Selecionar lote",
+                opcoes_baixa,
+                key=f"lote_select_{st.session_state['reset_lote']}"
+            )
 
             # 🔥 USINAGEM → ESCOLHA GLOBAL
             if "USINAGEM" in processo_baixa_sel.upper():
@@ -2941,7 +2945,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "Motivo_Estorno": ""
                         })
 
-                    st.session_state.pop("lote_select", None)
+                    st.session_state["reset_lote"] += 1
                     st.cache_data.clear()
                     st.rerun()
 
