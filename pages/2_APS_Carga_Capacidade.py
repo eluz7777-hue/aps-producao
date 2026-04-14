@@ -257,26 +257,26 @@ if df_baixas is None:
 # =========================================================
 # MINI DASHBOARD POR GARGALO (VERSÃO FINAL LIMPA)
 # =========================================================
+
+# =====================================================
+# FUNÇÃO (TEM QUE VIR PRIMEIRO)
+# =====================================================
 def montar_mini_dashboard_gargalos(fila, df_baixas=None):
 
     if fila is None or fila.empty:
         return pd.DataFrame()
 
-    # =====================================================
-    # NORMALIZAÇÃO PADRÃO DE PROCESSOS
-    # =====================================================
     def normalizar_processo(col):
         return (
             col.astype(str)
             .str.strip()
             .str.upper()
             .str.replace("CORTE - ", "", regex=False)
+            .str.replace("CORTE-", "", regex=False)
             .str.replace("CENTRO DE USINAGEM", "USINAGEM", regex=False)
         )
 
-    # =====================================================
     # FILA
-    # =====================================================
     fila_tmp = fila.copy()
     fila_tmp["Processo"] = normalizar_processo(fila_tmp["Processo"])
     fila_tmp["Horas"] = pd.to_numeric(
@@ -292,9 +292,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
         .reset_index()
     )
 
-    # =====================================================
     # BAIXAS
-    # =====================================================
     if df_baixas is None or df_baixas.empty:
         resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
     else:
@@ -305,8 +303,8 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
             baixas_tmp["Status_Baixa"] = (
                 baixas_tmp["Status_Baixa"]
                 .astype(str)
-                .str.upper()
                 .str.strip()
+                .str.upper()
             )
 
             baixas_tmp = baixas_tmp[
@@ -321,9 +319,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
             .reset_index()
         )
 
-    # =====================================================
     # CONSOLIDAÇÃO
-    # =====================================================
     df_dash = resumo_fila.merge(
         resumo_baixas,
         on="Processo",
@@ -332,9 +328,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
 
     df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0)
 
-    # =====================================================
-    # SCORE
-    # =====================================================
     df_dash["Carga_Total"] = (
         df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
     )
@@ -345,9 +338,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
         (df_dash["Qtd_Baixas_Ativas"] * 0.8)
     )
 
-    # =====================================================
-    # CLASSIFICAÇÃO
-    # =====================================================
     def classificar(score):
         if score >= 300:
             return "CRITICO"
@@ -358,9 +348,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
 
     df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar)
 
-    # =====================================================
-    # ORDENAÇÃO
-    # =====================================================
     df_dash = df_dash.sort_values(
         by=["Score", "Horas_Fila"],
         ascending=[False, False]
@@ -370,6 +357,24 @@ def montar_mini_dashboard_gargalos(fila, df_baixas=None):
 
     return df_dash
 
+
+# =====================================================
+# DASHBOARD (DEPOIS DA FUNÇÃO)
+# =====================================================
+st.markdown("## 🔥 Mini Dashboard por Gargalo")
+
+df_mini_gargalos = montar_mini_dashboard_gargalos(
+    fila=fila,
+    df_baixas=df_baixas
+)
+
+# DEBUG (pode remover depois)
+st.write("GARGALOS SHAPE:", df_mini_gargalos.shape)
+
+if df_mini_gargalos.empty:
+    st.info("Nenhum gargalo identificado.")
+else:
+    st.dataframe(df_mini_gargalos, use_container_width=True)
 
 # ===============================
 # CSS VISUAL PREMIUM APS
