@@ -2965,8 +2965,9 @@ if not fila_corte.empty:
 else:
     st.info("Nenhuma operação de corte disponível.")
 
+
 # =========================================================
-# DASHBOARD DO CORTE (VERSÃO FINAL ESTÁVEL)
+# DASHBOARD DO CORTE (CORRIGIDO DEFINITIVO)
 # =========================================================
 st.markdown("## 📊 Dashboard do Corte")
 st.caption("Indicadores operacionais e gerenciais do setor de corte.")
@@ -2974,7 +2975,7 @@ st.caption("Indicadores operacionais e gerenciais do setor de corte.")
 PROCESSOS_CORTE = ["SERRA", "LASER", "PLASMA", "GUILHOTINA"]
 
 # ---------------------------------------
-# BASE FILA (APS)
+# FILA
 # ---------------------------------------
 fila_corte_dash = fila.copy()
 fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
@@ -2986,16 +2987,11 @@ fila_corte_dash = fila_corte_dash[
 fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
 
 # ---------------------------------------
-# BASE HISTÓRICO (COM FALLBACK SEGURO)
+# HISTÓRICO
 # ---------------------------------------
 try:
     df_baixas = carregar_baixas_operacionais(BASE_PATH)
-except TypeError:
-    try:
-        df_baixas = carregar_baixas_operacionais()
-    except Exception:
-        df_baixas = pd.DataFrame()
-except Exception:
+except:
     df_baixas = pd.DataFrame()
 
 if df_baixas is None:
@@ -3008,39 +3004,24 @@ if not df_baixas.empty:
     hist_corte_dash = df_baixas.copy()
 
     hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
-    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
 
     hist_corte_dash = hist_corte_dash[
         hist_corte_dash["PROC_UPPER"].apply(lambda x: any(p in x for p in PROCESSOS_CORTE))
     ].copy()
 
     hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
-    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
 
 # ---------------------------------------
-# KPIs
+# KPIs (SEM DEPENDER DE STATUS)
 # ---------------------------------------
 ops_fila_corte = len(fila_corte_dash)
 horas_fila_corte = fila_corte_dash["Horas"].sum()
 
-if not hist_corte_dash.empty:
+qtd_baixadas_corte = len(hist_corte_dash)
+horas_baixadas_corte = hist_corte_dash["Horas"].sum()
 
-    baixas_ativas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    baixas_estornadas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
-    ].copy()
-
-    qtd_baixadas_corte = len(baixas_ativas_corte)
-    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
-    qtd_estornadas_corte = len(baixas_estornadas_corte)
-
-else:
-    qtd_baixadas_corte = 0
-    horas_baixadas_corte = 0
-    qtd_estornadas_corte = 0
+# Se quiser manter estorno depois, a gente trata separado
+qtd_estornadas_corte = 0
 
 # ---------------------------------------
 # CARDS
@@ -3052,6 +3033,7 @@ col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
 col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
 col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
 col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
+
 
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
