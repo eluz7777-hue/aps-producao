@@ -2743,6 +2743,8 @@ col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
 col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
 col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 
+
+
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
 # ============================================================
@@ -2810,91 +2812,22 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             if not df_sel.empty:
                 linha = df_sel.iloc[0]
+                processo = str(linha["Processo"]).upper()
 
                 colb1, colb2 = st.columns(2)
 
-                if colb1.button("💾 Baixar"):
-                    salvar_baixa_operacional(BASE_PATH, {
-                        "PV": linha["PV"],
-                        "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": linha["CODIGO_PV"],
-                        "Processo": linha["Processo"],
-                        "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "Sistema",
-                        "Observacao": observacao,
-                        "Status_Baixa": "ATIVA",
-                        "Data_Estorno": "",
-                        "Motivo_Estorno": ""
-                    })
+                # 🔥 USINAGEM → ESCOLHA
+                if "USINAGEM" in processo:
 
-                    st.session_state["select_unitario"] = None
-                    st.session_state["obs_unitario"] = ""
-                    st.cache_data.clear()
-                    st.rerun()
+                    tipo_usinagem = st.radio(
+                        "Tipo de baixa (Usinagem)",
+                        ["ATIVA", "TERCEIRIZADA"],
+                        horizontal=True,
+                        key="tipo_usinagem_unit"
+                    )
 
-                if colb2.button("🟣 Terceirizar"):
-                    salvar_baixa_operacional(BASE_PATH, {
-                        "PV": linha["PV"],
-                        "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": linha["CODIGO_PV"],
-                        "Processo": linha["Processo"],
-                        "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "Sistema",
-                        "Observacao": observacao,
-                        "Status_Baixa": "TERCEIRIZADA",
-                        "Data_Estorno": "",
-                        "Motivo_Estorno": ""
-                    })
-
-                    st.session_state["select_unitario"] = None
-                    st.session_state["obs_unitario"] = ""
-                    st.cache_data.clear()
-                    st.rerun()
-
-            st.divider()
-
-            # ===============================
-            # 📦 LOTE (COM CONTROLE)  ← CORRIGIDO AQUI
-            # ===============================
-            st.markdown("#### 📦 Ação em Lote")
-
-            PROCESSOS_CORTE = ["SERRA", "LASER", "PLASMA", "GUILHOTINA"]
-
-            selecao_lote = st.multiselect(
-                "Selecionar lote",
-                opcoes_baixa,
-                key="lote_select"
-            )
-
-            tipo_lote = st.radio(
-                "Tipo de baixa em lote",
-                ["Baixa Normal", "Terceirizar"],
-                horizontal=True
-            )
-
-            if selecao_lote:
-                if st.button("📦 Executar Lote"):
-
-                    base_exec = base_baixa[
-                        base_baixa["ROTULO_BAIXA"].isin(selecao_lote)
-                    ].copy()
-
-                    # 🔥 PRIORIZA CORTE
-                    def prioridade(proc):
-                        proc = str(proc).upper()
-                        return 0 if any(p in proc for p in PROCESSOS_CORTE) else 1
-
-                    base_exec["PRIORIDADE"] = base_exec["Processo"].apply(prioridade)
-                    base_exec = base_exec.sort_values("PRIORIDADE")
-
-                    for _, linha in base_exec.iterrows():
-
-                        status = "ATIVA" if tipo_lote == "Baixa Normal" else "TERCEIRIZADA"
-
-                        processo = str(linha["Processo"]).upper()
-                        is_corte = any(p in processo for p in PROCESSOS_CORTE)
+                    if colb1.button("💾 Executar Baixa"):
+                        status = tipo_usinagem
 
                         salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha["PV"],
@@ -2904,18 +2837,116 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "Horas": linha["Horas"],
                             "Data_Baixa": pd.Timestamp.now(),
                             "Usuario": "Sistema",
-                            "Observacao": "LOTE CORTE" if is_corte else "",
+                            "Observacao": observacao,
+                            "Status_Baixa": status,
+                            "Data_Estorno": "",
+                            "Motivo_Estorno": ""
+                        })
+
+                        st.session_state["select_unitario"] = None
+                        st.session_state["obs_unitario"] = ""
+                        st.cache_data.clear()
+                        st.rerun()
+
+                else:
+                    # 🔥 PROCESSOS NORMAIS (MANTÉM SUA LÓGICA)
+                    if colb1.button("💾 Baixar"):
+                        salvar_baixa_operacional(BASE_PATH, {
+                            "PV": linha["PV"],
+                            "Cliente": linha.get("Cliente", ""),
+                            "CODIGO_PV": linha["CODIGO_PV"],
+                            "Processo": linha["Processo"],
+                            "Horas": linha["Horas"],
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "Sistema",
+                            "Observacao": observacao,
+                            "Status_Baixa": "ATIVA",
+                            "Data_Estorno": "",
+                            "Motivo_Estorno": ""
+                        })
+
+                        st.session_state["select_unitario"] = None
+                        st.session_state["obs_unitario"] = ""
+                        st.cache_data.clear()
+                        st.rerun()
+
+                    if colb2.button("🟣 Terceirizar"):
+                        salvar_baixa_operacional(BASE_PATH, {
+                            "PV": linha["PV"],
+                            "Cliente": linha.get("Cliente", ""),
+                            "CODIGO_PV": linha["CODIGO_PV"],
+                            "Processo": linha["Processo"],
+                            "Horas": linha["Horas"],
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "Sistema",
+                            "Observacao": observacao,
+                            "Status_Baixa": "TERCEIRIZADA",
+                            "Data_Estorno": "",
+                            "Motivo_Estorno": ""
+                        })
+
+                        st.session_state["select_unitario"] = None
+                        st.session_state["obs_unitario"] = ""
+                        st.cache_data.clear()
+                        st.rerun()
+
+            st.divider()
+
+            # ===============================
+            # 📦 LOTE
+            # ===============================
+            st.markdown("#### 📦 Ação em Lote")
+
+            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa, key="lote_select")
+
+            # 🔥 USINAGEM → ESCOLHA GLOBAL
+            if "USINAGEM" in processo_baixa_sel.upper():
+                tipo_lote = st.radio(
+                    "Tipo de baixa em lote",
+                    ["ATIVA", "TERCEIRIZADA"],
+                    horizontal=True
+                )
+            else:
+                tipo_lote = st.radio(
+                    "Tipo de baixa em lote",
+                    ["Baixa Normal", "Terceirizar"],
+                    horizontal=True
+                )
+
+            if selecao_lote:
+                if st.button("📦 Executar Lote"):
+
+                    base_exec = base_baixa[
+                        base_baixa["ROTULO_BAIXA"].isin(selecao_lote)
+                    ].copy()
+
+                    for _, linha in base_exec.iterrows():
+
+                        if "USINAGEM" in processo_baixa_sel.upper():
+                            status = tipo_lote
+                        else:
+                            status = "ATIVA" if tipo_lote == "Baixa Normal" else "TERCEIRIZADA"
+
+                        salvar_baixa_operacional(BASE_PATH, {
+                            "PV": linha["PV"],
+                            "Cliente": linha.get("Cliente", ""),
+                            "CODIGO_PV": linha["CODIGO_PV"],
+                            "Processo": linha["Processo"],
+                            "Horas": linha["Horas"],
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "Sistema",
+                            "Observacao": "LOTE",
                             "Status_Baixa": status,
                             "Data_Estorno": "",
                             "Motivo_Estorno": ""
                         })
 
                     st.session_state["lote_select"] = []
-
                     st.cache_data.clear()
                     st.rerun()
 
         st.divider()
+
 
 
 # ============================================================
