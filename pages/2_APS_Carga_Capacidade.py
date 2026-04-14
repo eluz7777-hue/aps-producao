@@ -2816,7 +2816,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
                 colb1, colb2 = st.columns(2)
 
-                # 🔥 USINAGEM → ESCOLHA
+                # 🔥 USINAGEM
                 if "USINAGEM" in processo:
 
                     tipo_usinagem = st.radio(
@@ -2849,7 +2849,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         st.rerun()
 
                 else:
-                    # 🔥 PROCESSOS NORMAIS (MANTÉM SUA LÓGICA)
                     if colb1.button("💾 Baixar"):
                         salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha["PV"],
@@ -2897,24 +2896,30 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             # ===============================
             st.markdown("#### 📦 Ação em Lote")
 
+            # 🔥 GARANTE RESET
+            if "reset_lote" not in st.session_state:
+                st.session_state["reset_lote"] = 0
+
             selecao_lote = st.multiselect(
                 "Selecionar lote",
                 opcoes_baixa,
                 key=f"lote_select_{st.session_state['reset_lote']}"
             )
 
-            # 🔥 USINAGEM → ESCOLHA GLOBAL
+            # 🔥 RADIO COM RESET TAMBÉM
             if "USINAGEM" in processo_baixa_sel.upper():
                 tipo_lote = st.radio(
                     "Tipo de baixa em lote",
                     ["ATIVA", "TERCEIRIZADA"],
-                    horizontal=True
+                    horizontal=True,
+                    key=f"tipo_lote_{st.session_state['reset_lote']}"
                 )
             else:
                 tipo_lote = st.radio(
                     "Tipo de baixa em lote",
                     ["Baixa Normal", "Terceirizar"],
-                    horizontal=True
+                    horizontal=True,
+                    key=f"tipo_lote_{st.session_state['reset_lote']}"
                 )
 
             if selecao_lote:
@@ -2950,7 +2955,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.rerun()
 
         st.divider()
-
 
 
 # ============================================================
