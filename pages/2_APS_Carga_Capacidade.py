@@ -2662,49 +2662,6 @@ fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
 
 st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
-# =========================================================
-# BAIXAS DE CORTE
-# =========================================================
-st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
-
-fila_corte = fila.copy()
-proc_upper = fila_corte["Processo"].astype(str).str.strip().str.upper()
-
-fila_corte = fila_corte[
-    proc_upper.str.contains("SERRA|LASER|PLASMA", na=False)
-].copy()
-
-if not fila_corte.empty:
-
-    fila_corte["Horas"] = pd.to_numeric(fila_corte["Horas"], errors="coerce").fillna(0).round(1)
-
-    fila_corte["LABEL"] = (
-        "PV " + fila_corte["PV"].astype(str) +
-        " | " + fila_corte["Processo"].astype(str) +
-        " | " + fila_corte["CODIGO_PV"].astype(str) +
-        " | " + fila_corte["Horas"].astype(str) + " h"
-    )
-
-    opcoes = fila_corte["LABEL"].tolist()
-
-    escolha = st.selectbox("Operação", opcoes)
-
-    linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
-
-    if not linha_sel.empty:
-        linha = linha_sel.iloc[0]
-
-        if st.button("Confirmar Baixa"):
-            salvar_baixa_operacional(BASE_PATH, {
-                "PV": linha.get("PV"),
-                "Processo": linha.get("Processo"),
-                "Horas": linha.get("Horas"),
-                "Data_Baixa": pd.Timestamp.now(),
-                "Status_Baixa": "ATIVA"
-            })
-
-            st.success("Baixa registrada")
-            st.rerun()
 
 # ============================================================
 # ✂️ BAIXAS DE CORTE (UNITÁRIO + LOTE CORRIGIDO)
@@ -3182,8 +3139,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     }
                     salvar_baixa_operacional(BASE_PATH, registro)
 
-                    st.session_state["select_unitario"] = None
-                    st.session_state["obs_unitario"] = ""
+                    st.session_state.pop("select_unitario", None)
+                    st.session_state.pop("obs_unitario", None)
 
                     st.cache_data.clear()
                     st.rerun()
@@ -3204,8 +3161,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     }
                     salvar_baixa_operacional(BASE_PATH, registro)
 
-                    st.session_state["select_unitario"] = None
-                    st.session_state["obs_unitario"] = ""
+                    st.session_state.pop("select_unitario", None)
+                    st.session_state.pop("obs_unitario", None)
 
                     st.cache_data.clear()
                     st.rerun()
