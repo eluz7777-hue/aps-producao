@@ -3569,12 +3569,17 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
-        base_gargalos = df_operacional[df_operacional["Processo"].isin(processos_top3)].copy()
+
+        base_gargalos = df_operacional[
+            df_operacional["Processo"].astype(str).str.upper().isin(processos_top3)
+        ].copy()
 
         for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Status Operacional"]:
             if col not in base_gargalos.columns:
                 base_gargalos[col] = ""
             base_gargalos[col] = base_gargalos[col].fillna("").astype(str).str.strip()
+
+        base_gargalos["Processo"] = base_gargalos["Processo"].str.upper()
 
         base_gargalos["CHAVE_OPERACAO"] = (
             base_gargalos["PV"].str.upper().str.strip() + "||" +
@@ -3591,7 +3596,9 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
 
-        fila_gargalo = base_gargalos[base_gargalos["Processo"] == processo_baixa_sel].copy()
+        fila_gargalo = base_gargalos[
+            base_gargalos["Processo"] == str(processo_baixa_sel).upper()
+        ].copy()
 
         fila_gargalo = fila_gargalo.sort_values(
             ["Status Operacional", "Dias para Entrega", "Horas", "PV"],
@@ -3607,14 +3614,16 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
+        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO COMPLETO)
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
         if fila_gargalo_pendente.empty:
             st.info("Nenhuma PV pendente disponível.")
         else:
-            base_baixa = fila_gargalo_pendente.copy()
+            base_baixa = fila_gargalo_pendente.copy().reset_index(drop=True)
+
+            base_baixa["ID_UNICO"] = base_baixa.index.astype(str)
 
             base_baixa["ROTULO_BAIXA"] = (
                 "PV " + base_baixa["PV"] +
@@ -3623,9 +3632,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                 " | " + base_baixa["Horas"].astype(str) + " h"
             )
 
+            mapa_linhas = dict(zip(base_baixa["ROTULO_BAIXA"], base_baixa["ID_UNICO"]))
+
             opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
-            # 🔹 UNITÁRIO
+            # UNITÁRIO
             st.markdown("#### 🔹 Ação Unitária")
 
             col_bx1, col_bx2 = st.columns(2)
@@ -3633,26 +3644,30 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
             observacao_baixa = col_bx2.text_input("Observação")
 
-            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
+            if baixa_sel:
+                idx = mapa_linhas.get(baixa_sel)
+                registro_df = base_baixa[base_baixa["ID_UNICO"] == idx]
 
-            if not registro_baixa_df.empty:
-                linha_baixa = registro_baixa_df.iloc[0]
+                if not registro_df.empty:
+                    linha = registro_df.iloc[0]
 
-                col_btn1, col_btn2 = st.columns(2)
+                    col_btn1, col_btn2 = st.columns(2)
 
-                if col_btn1.button("💾 Baixar"):
-                    salvar_baixa_operacional(BASE_PATH, linha_baixa.to_dict())
-                    st.cache_data.clear()
-                    st.rerun()
+                    if col_btn1.button("💾 Baixar"):
+                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
+                        st.cache_data.clear()
+                        st.rerun()
 
-                if col_btn2.button("🟣 Terceirizar"):
-                    salvar_baixa_operacional(BASE_PATH, linha_baixa.to_dict())
-                    st.cache_data.clear()
-                    st.rerun()
+                    if col_btn2.button("🟣 Terceirizar"):
+                        registro = linha.to_dict()
+                        registro["Status_Baixa"] = "TERCEIRIZADA"
+                        salvar_baixa_operacional(BASE_PATH, registro)
+                        st.cache_data.clear()
+                        st.rerun()
 
             st.divider()
 
-            # 📦 LOTE
+            # LOTE
             st.markdown("#### 📦 Ação em Lote")
 
             selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
@@ -3660,13 +3675,18 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             if selecao_lote:
                 if st.button("📦 Baixar Lote"):
                     for label in selecao_lote:
-                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
-                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
+                        idx = mapa_linhas.get(label)
+                        linha_df = base_baixa[base_baixa["ID_UNICO"] == idx]
+
+                        if not linha_df.empty:
+                            linha = linha_df.iloc[0]
+                            salvar_baixa_operacional(BASE_PATH, linha.to_dict())
 
                     st.cache_data.clear()
                     st.rerun()
 
         st.divider()
+
         
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
