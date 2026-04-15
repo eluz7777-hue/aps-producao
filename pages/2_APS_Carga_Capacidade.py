@@ -1656,66 +1656,94 @@ fig_status = px.pie(
 st.plotly_chart(fig_status, use_container_width=True)
 
 # ===============================
-# 7) COMPARAÇÃO CARGA x CAPACIDADE
+# 7) COMPARAÇÃO CARGA x CAPACIDADE (PROFISSIONAL)
 # ===============================
 st.subheader("📊 Carga x Capacidade por Processo")
 
 base = dem_proc.copy()
-
-# 🔥 GARANTE PROCESSO
 base["Processo"] = base["Processo"].astype(str).str.upper()
 
+# ===============================
 # 🔥 PREPARA BAIXAS
+# ===============================
 if df_baixas is not None and not df_baixas.empty:
 
     baixas_tmp = df_baixas.copy()
-    baixas_tmp["Processo"] = baixas_tmp["Processo"].astype(str).str.upper()
-    baixas_tmp["Horas"] = pd.to_numeric(baixas_tmp["Horas"], errors="coerce").fillna(0)
 
-    # 🔥 SOMA BAIXAS
-    baixas_agg = (
-        baixas_tmp.groupby("Processo")["Horas"]
-        .sum()
-        .reset_index()
-        .rename(columns={"Horas": "Horas_Baixadas"})
+    baixas_tmp["Processo"] = (
+        baixas_tmp["Processo"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+        .str.replace("CORTE - ", "", regex=False)
+        .str.replace("CENTRO DE USINAGEM", "USINAGEM", regex=False)
     )
 
-    # 🔥 MERGE COM BASE
-    base = base.merge(baixas_agg, on="Processo", how="left")
-    base["Horas_Baixadas"] = base["Horas_Baixadas"].fillna(0)
+    baixas_tmp["Horas"] = pd.to_numeric(
+        baixas_tmp["Horas"], errors="coerce"
+    ).fillna(0)
 
-    # 🔥 DESCONTO REAL
-    base["Horas"] = base["Horas"] - base["Horas_Baixadas"]
-    base["Horas"] = base["Horas"].clip(lower=0)
+    # 🔥 SEPARAÇÃO INTELIGENTE
+    baixas_agg = (
+        baixas_tmp.groupby(["Processo", "Status_Baixa"])["Horas"]
+        .sum()
+        .unstack(fill_value=0)
+        .reset_index()
+    )
+
+    # garante colunas
+    if "ATIVA" not in baixas_agg.columns:
+        baixas_agg["ATIVA"] = 0
+    if "TERCEIRIZADA" not in baixas_agg.columns:
+        baixas_agg["TERCEIRIZADA"] = 0
+
+    baixas_agg = baixas_agg.rename(columns={
+        "ATIVA": "Horas_Baixadas_Ativas",
+        "TERCEIRIZADA": "Horas_Terceirizadas"
+    })
+
+    base = base.merge(baixas_agg, on="Processo", how="left")
 
 else:
-    base["Horas_Baixadas"] = 0
+    base["Horas_Baixadas_Ativas"] = 0
+    base["Horas_Terceirizadas"] = 0
 
-# segurança numérica
-for col in ["Horas", "Capacidade Processo"]:
+# ===============================
+# 🔧 TRATAMENTO
+# ===============================
+base["Horas_Baixadas_Ativas"] = base["Horas_Baixadas_Ativas"].fillna(0)
+base["Horas_Terceirizadas"] = base["Horas_Terceirizadas"].fillna(0)
+
+base["Horas"] = pd.to_numeric(base["Horas"], errors="coerce").fillna(0)
+
+# 🔥 CARGA REAL
+base["Carga_Interna"] = base["Horas"] - base["Horas_Baixadas_Ativas"] - base["Horas_Terceirizadas"]
+base["Carga_Interna"] = base["Carga_Interna"].clip(lower=0)
+
+# ===============================
+# SEGURANÇA
+# ===============================
+for col in ["Capacidade Processo"]:
     if col not in base.columns:
         base[col] = 0
 
     base[col] = pd.to_numeric(base[col], errors="coerce").fillna(0)
 
+# ===============================
+# 🎯 GRÁFICO
+# ===============================
 fig_comp = px.bar(
-    base.sort_values("Horas", ascending=False),
+    base.sort_values("Carga_Interna", ascending=False),
     x="Processo",
-    y=["Horas", "Capacidade Processo"],
+    y=["Carga_Interna", "Horas_Terceirizadas", "Capacidade Processo"],
     barmode="group",
     text_auto=True
 )
 
-# cores corretas
-fig_comp.update_traces(
-    selector=dict(name="Horas"),
-    marker_color="#FF7A00"
-)
-
-fig_comp.update_traces(
-    selector=dict(name="Capacidade Processo"),
-    marker_color="#1f77b4"
-)
+# 🎨 CORES PROFISSIONAIS
+fig_comp.update_traces(selector=dict(name="Carga_Interna"), marker_color="#FF7A00")  # laranja
+fig_comp.update_traces(selector=dict(name="Horas_Terceirizadas"), marker_color="#9B59B6")  # roxo
+fig_comp.update_traces(selector=dict(name="Capacidade Processo"), marker_color="#1f77b4")  # azul
 
 fig_comp.update_traces(textposition="outside")
 
@@ -1724,7 +1752,8 @@ fig_comp.update_layout(
     height=550,
     xaxis_title="Processo",
     uniformtext_minsize=8,
-    uniformtext_mode="hide"
+    uniformtext_mode="hide",
+    legend_title="Tipo de Carga"
 )
 
 st.plotly_chart(fig_comp, use_container_width=True)
