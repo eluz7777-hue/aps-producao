@@ -2029,10 +2029,16 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
         st.warning(f"Erro ao ler baixas: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
+# ============================================================
+# SALVAR BAIXA OPERACIONAL (CORRIGIDO - SEM BLOQUEIO)
+# ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
     caminho = garantir_arquivo_baixas(base_path)
 
+    # ------------------------------------------------------------
+    # CARREGA BASE EXISTENTE
+    # ------------------------------------------------------------
     try:
         df_existente = pd.read_excel(caminho, dtype=str)
     except Exception:
@@ -2040,39 +2046,42 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     df_existente = _padronizar_df_baixas(df_existente)
 
-    novo_registro = pd.DataFrame([registro_baixa])
+    # ------------------------------------------------------------
+    # NOVO REGISTRO
+    # ------------------------------------------------------------
+    novo = pd.DataFrame([registro_baixa])
 
+    # garante todas as colunas
     for col in COLUNAS_BAIXAS:
-        if col not in novo_registro.columns:
-            novo_registro[col] = None
+        if col not in novo.columns:
+            novo[col] = ""
 
-    if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
-        novo_registro["Data_Baixa"] = pd.Timestamp.now()
+    # garante data
+    if "Data_Baixa" not in novo.columns or pd.isna(novo["Data_Baixa"].iloc[0]):
+        novo["Data_Baixa"] = pd.Timestamp.now()
 
-    novo_registro = _padronizar_df_baixas(novo_registro)
+    novo = _padronizar_df_baixas(novo)
 
-    chave_nova = novo_registro["CHAVE_OPERACAO"].iloc[0]
+    # ------------------------------------------------------------
+    # 🔥 CONCATENA SEM BLOQUEIO (ESSA É A CORREÇÃO)
+    # ------------------------------------------------------------
+    df_final = pd.concat([df_existente, novo], ignore_index=True)
 
-    duplicado = df_existente[
-        (df_existente["CHAVE_OPERACAO"] == chave_nova) &
-        (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-    ]
-
-    if not duplicado.empty:
-        return df_existente
-
-    df_final = pd.concat([df_existente, novo_registro], ignore_index=True)
     df_final = _padronizar_df_baixas(df_final)
 
+    # ------------------------------------------------------------
+    # SALVA NO EXCEL
+    # ------------------------------------------------------------
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
         df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
 
-    try:
-        _criar_backup()
-    except Exception:
-        pass
+    # ------------------------------------------------------------
+    # LIMPA CACHE
+    # ------------------------------------------------------------
+    st.cache_data.clear()
 
     return df_final
+
 
 def historico_baixas_completo(df_baixas):
 
