@@ -645,14 +645,16 @@ if not df_original.empty:
 
 
 # ============================================================
-# BASE OPERACIONAL VISUAL (VERSÃO CORRIGIDA DEFINITIVA)
+# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
 # ============================================================
 
 df_operacional = df_original.copy()
 
-# ------------------------------------------------------------
-# FUNÇÃO PADRÃO DE CHAVE
-# ------------------------------------------------------------
+
+
+# --------------------------------------------
+# FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE
+# --------------------------------------------
 def normalizar_chave_operacao(pv, processo, codigo):
     return (
         str(pv).strip().upper() + "||" +
@@ -660,85 +662,75 @@ def normalizar_chave_operacao(pv, processo, codigo):
         str(codigo).strip().upper()
     )
 
-# ------------------------------------------------------------
-# GARANTE COLUNAS PADRÃO
-# ------------------------------------------------------------
-for col in ["PV", "Processo", "CODIGO_PV"]:
-    if col not in df_operacional.columns:
-        df_operacional[col] = ""
-
-    df_operacional[col] = (
-        df_operacional[col]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-# ------------------------------------------------------------
-# CRIA CHAVE OPERACIONAL
-# ------------------------------------------------------------
-df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
-    lambda r: normalizar_chave_operacao(r["PV"], r["Processo"], r["CODIGO_PV"]),
-    axis=1
-)
-
-# ------------------------------------------------------------
-# CARREGA BAIXAS
-# ------------------------------------------------------------
-try:
-    caminho = garantir_arquivo_baixas(BASE_PATH)
-    df_baixas = pd.read_excel(caminho, dtype=str)
-except:
-    df_baixas = pd.DataFrame()
-
-df_baixas = _padronizar_df_baixas(df_baixas)
-
-# ------------------------------------------------------------
-# FILTRA ATIVAS / TERCEIRIZADAS
-# ------------------------------------------------------------
-df_baixas_ativas = df_baixas[
-    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-].copy()
-
-# ------------------------------------------------------------
-# PREPARA BASE DE STATUS
-# ------------------------------------------------------------
-if not df_baixas_ativas.empty:
-
+# --------------------------------------------
+# GARANTE CHAVE PADRÃO NA BASE OPERACIONAL
+# --------------------------------------------
+if not df_operacional.empty:
     for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col not in df_baixas_ativas.columns:
-            df_baixas_ativas[col] = ""
+        if col not in df_operacional.columns:
+            df_operacional[col] = ""
 
-        df_baixas_ativas[col] = (
-            df_baixas_ativas[col]
+        df_operacional[col] = (
+            df_operacional[col]
             .fillna("")
             .astype(str)
             .str.strip()
             .str.upper()
         )
 
-    df_baixas_ativas["CHAVE_OPERACAO"] = df_baixas_ativas.apply(
+    df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
+        lambda r: normalizar_chave_operacao(r["PV"], r["Processo"], r["CODIGO_PV"]),
+        axis=1
+    )
+else:
+    df_operacional["CHAVE_OPERACAO"] = ""
+
+# --------------------------------------------
+# BASE OFICIAL PARA TIRAR DA FILA
+# SOMENTE BAIXAS ATIVAS / TERCEIRIZADAS
+# --------------------------------------------
+if "df_baixas_ativas" in locals() and df_baixas_ativas is not None and not df_baixas_ativas.empty:
+    df_baixas_status = df_baixas_ativas.copy()
+
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col not in df_baixas_status.columns:
+            df_baixas_status[col] = ""
+
+        df_baixas_status[col] = (
+            df_baixas_status[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+    df_baixas_status["CHAVE_OPERACAO"] = df_baixas_status.apply(
         lambda r: normalizar_chave_operacao(r["PV"], r["Processo"], r["CODIGO_PV"]),
         axis=1
     )
 
-    chaves_baixadas_ativas = set(df_baixas_ativas["CHAVE_OPERACAO"])
+    chaves_baixadas_ativas = set(
+        df_baixas_status["CHAVE_OPERACAO"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        .unique()
+    )
 
     mapa_status_operacao = (
-        df_baixas_ativas
+        df_baixas_status
         .groupby("CHAVE_OPERACAO")["Status_Baixa"]
         .last()
         .to_dict()
     )
-
 else:
     chaves_baixadas_ativas = set()
     mapa_status_operacao = {}
 
-# ------------------------------------------------------------
-# CLASSIFICA STATUS
-# ------------------------------------------------------------
+# --------------------------------------------
+# CLASSIFICAÇÃO FINAL OFICIAL
+# --------------------------------------------
 def classificar_status_operacional(chave):
     chave = str(chave).strip().upper()
 
@@ -752,21 +744,103 @@ def classificar_status_operacional(chave):
     else:
         return "✅ Baixado"
 
-# ------------------------------------------------------------
-# APLICA STATUS
-# ------------------------------------------------------------
-df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
-    classificar_status_operacional
-)
+# --------------------------------------------
+# APLICA STATUS OPERACIONAL
+# --------------------------------------------
+if not df_operacional.empty:
+    df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
+        classificar_status_operacional
+    )
+else:
+    df_operacional["Status Operacional"] = ""
 
-# ------------------------------------------------------------
-# BASE FINAL (APS)
-# ------------------------------------------------------------
-df = df_operacional[
-    df_operacional["Status Operacional"] == "⏳ Pendente"
-].copy()
-
+# ============================================================
+# BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
+# ============================================================
+df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
 df = df.reset_index(drop=True)
+# DataFrames auxiliares
+df_excluidas = pd.DataFrame(pvs_excluidas)
+df_sem_carga = pd.DataFrame(pvs_sem_carga)
+df_auditoria_pv = pd.DataFrame(auditoria_pv)
+
+# Blindagem dos auxiliares
+for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
+    if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
+        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
+            _df_aux["DATA_ENTREGA_APS"],
+            errors="coerce",
+            dayfirst=True
+        )
+
+# -------------------------------
+# Garantia de rastreabilidade
+# -------------------------------
+pvs_auditadas_set = set(df_auditoria_pv["PV"].astype(str).str.strip().unique()) if not df_auditoria_pv.empty else set()
+pvs_nao_auditadas = pvs_excel_set - pvs_auditadas_set
+
+for pv_faltante in pvs_nao_auditadas:
+    linha_pv = df_pv[df_pv["PV"].astype(str).str.strip() == pv_faltante]
+
+    if not linha_pv.empty:
+        row = linha_pv.iloc[0]
+
+        registro = {
+            "PV": str(row["PV"]).strip(),
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO_PV"],
+            "CODIGO_PV": row["CODIGO_PV"],
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
+            "Motivo": "PV não auditada por falha de processamento"
+        }
+
+        pvs_excluidas.append(registro)
+        pvs_sem_carga.append(registro)
+
+        auditoria_pv.append({
+            "PV": str(row["PV"]).strip(),
+            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+            "CODIGO": row["CODIGO_PV"],
+            "CODIGO_PV": row["CODIGO_PV"],
+            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
+            "Status": "Falha de processamento",
+            "Qtd": row["QTD"],
+            "Total Processos Válidos": 0,
+            "Horas Totais": 0,
+            "Motivo": "PV não auditada por falha de processamento"
+        })
+
+df_excluidas = pd.DataFrame(pvs_excluidas)
+df_sem_carga = pd.DataFrame(pvs_sem_carga)
+df_auditoria_pv = pd.DataFrame(auditoria_pv)
+
+for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
+    if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
+        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
+            _df_aux["DATA_ENTREGA_APS"],
+            errors="coerce",
+            dayfirst=True
+        )
+
+if df.empty:
+    st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
+
+    st.markdown("### 🔎 Diagnóstico da expansão da base")
+
+    st.write("**Total de linhas em df_pv:**", len(df_pv))
+    st.write("**Total de PVs únicas no Excel:**", df_pv["PV"].astype(str).str.strip().nunique())
+
+    if "ENTREGA" in df_pv.columns:
+        st.write("**Linhas com ENTREGA válida:**", df_pv["ENTREGA"].notna().sum())
+
+    if "QTD" in df_pv.columns:
+        st.write("**Linhas com QTD > 0:**", (pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0) > 0).sum())
+
+    st.markdown("### 📋 Prévia da base lida")
+    st.dataframe(df_pv.head(20), use_container_width=True)
+
+    st.stop()
+
 
 
  
