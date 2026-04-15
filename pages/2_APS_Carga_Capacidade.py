@@ -2648,79 +2648,118 @@ if not fila_corte.empty:
             st.rerun()
 
 # ============================================================
-# ✂️ BAIXA EM LOTE - OPERAÇÕES DE CORTE
+# ✂️ BAIXAS DE CORTE (UNITÁRIO + LOTE CORRIGIDO)
 # ============================================================
 
-with st.expander("✂️ Baixa em Lote - Corte", expanded=False):
+st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
 
-    st.subheader("Operações de Corte Pendentes")
+# ------------------------------------------------------------
+# BASE DE CORTE
+# ------------------------------------------------------------
+base_corte = df_operacional.copy()
 
-    base_corte = df_operacional.copy()
+base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
 
-    # 🔥 FILTRA SOMENTE CORTE
+base_corte = base_corte[
+    base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
+].copy()
+
+if base_corte.empty:
+    st.info("Nenhuma operação de corte encontrada.")
+else:
+
+    base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
+
+    # 🔥 SOMENTE PENDENTES
     base_corte = base_corte[
-        base_corte["Processo"].astype(str).str.upper().str.contains("CORTE", na=False)
+        base_corte["Status Operacional"] == "⏳ Pendente"
     ].copy()
 
-    # 🔥 PADRONIZA
-    base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
-
     if base_corte.empty:
-        st.info("Nenhuma operação de corte encontrada.")
+        st.info("Nenhuma operação pendente de corte.")
     else:
 
-        # 🔹 SELECT PROCESSO DE CORTE
-        processos_corte = sorted(base_corte["Processo"].unique().tolist())
+        base_corte = base_corte.reset_index(drop=True)
+        base_corte["ID_UNICO"] = base_corte.index.astype(str)
 
-        processo_sel = st.selectbox("Selecione o processo de corte", processos_corte)
+        base_corte["LABEL"] = (
+            "PV " + base_corte["PV"].astype(str) +
+            " | " + base_corte["Processo"].astype(str) +
+            " | " + base_corte["CODIGO_PV"].astype(str) +
+            " | " + base_corte["Horas"].astype(str) + " h"
+        )
 
-        base_filtrada = base_corte[
-            base_corte["Processo"] == processo_sel
-        ].copy()
+        mapa = dict(zip(base_corte["LABEL"], base_corte["ID_UNICO"]))
+        opcoes = base_corte["LABEL"].tolist()
 
-        base_filtrada = base_filtrada[
-            base_filtrada["Status Operacional"] == "⏳ Pendente"
-        ].copy()
+        # ------------------------------------------------------------
+        # UNITÁRIO
+        # ------------------------------------------------------------
+        st.markdown("#### 🔹 Baixa Unitária")
 
-        if base_filtrada.empty:
-            st.info("Nenhuma PV pendente para este corte.")
-        else:
+        escolha = st.selectbox("Operação", opcoes)
 
-            base_filtrada = base_filtrada.reset_index(drop=True)
-            base_filtrada["ID_UNICO"] = base_filtrada.index.astype(str)
+        linha_sel = base_corte[base_corte["LABEL"] == escolha]
 
-            base_filtrada["ROTULO"] = (
-                "PV " + base_filtrada["PV"] +
-                " | " + base_filtrada["CODIGO_PV"] +
-                " | " + base_filtrada["Horas"].astype(str) + "h"
-            )
+        if not linha_sel.empty:
+            linha = linha_sel.iloc[0]
 
-            mapa = dict(zip(base_filtrada["ROTULO"], base_filtrada["ID_UNICO"]))
+            if st.button("💾 Confirmar Baixa"):
 
-            opcoes = base_filtrada["ROTULO"].tolist()
+                salvar_baixa_operacional(BASE_PATH, {
+                    "PV": linha.get("PV"),
+                    "Cliente": linha.get("Cliente", ""),
+                    "CODIGO_PV": linha.get("CODIGO_PV"),
+                    "Processo": linha.get("Processo"),
+                    "Horas": linha.get("Horas"),
+                    "Data_Baixa": pd.Timestamp.now(),
+                    "Usuario": "Sistema",
+                    "Observacao": "UNITARIO_CORTE",
+                    "Status_Baixa": "ATIVA",
+                    "Data_Estorno": "",
+                    "Motivo_Estorno": ""
+                })
 
-            st.dataframe(base_filtrada, use_container_width=True)
+                st.success("Baixa registrada")
+                st.cache_data.clear()
+                st.rerun()
 
-            st.divider()
+        st.divider()
 
-            st.markdown("### 📦 Baixa em Lote")
+        # ------------------------------------------------------------
+        # LOTE
+        # ------------------------------------------------------------
+        st.markdown("#### 📦 Baixa em Lote")
 
-            selecao = st.multiselect("Selecionar operações", opcoes)
+        selecao = st.multiselect("Selecionar operações", opcoes)
 
-            if selecao:
-                if st.button("📦 Baixar Corte em Lote"):
+        if selecao:
+            if st.button("📦 Baixar Corte em Lote"):
 
-                    for label in selecao:
-                        idx = mapa.get(label)
-                        linha_df = base_filtrada[base_filtrada["ID_UNICO"] == idx]
+                for label in selecao:
+                    idx = mapa.get(label)
+                    linha_df = base_corte[base_corte["ID_UNICO"] == idx]
 
-                        if not linha_df.empty:
-                            linha = linha_df.iloc[0]
-                            salvar_baixa_operacional(BASE_PATH, linha.to_dict())
+                    if not linha_df.empty:
+                        linha = linha_df.iloc[0]
 
-                    st.cache_data.clear()
-                    st.rerun()
+                        salvar_baixa_operacional(BASE_PATH, {
+                            "PV": linha.get("PV"),
+                            "Cliente": linha.get("Cliente", ""),
+                            "CODIGO_PV": linha.get("CODIGO_PV"),
+                            "Processo": linha.get("Processo"),
+                            "Horas": linha.get("Horas"),
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "Sistema",
+                            "Observacao": "LOTE_CORTE",
+                            "Status_Baixa": "ATIVA",
+                            "Data_Estorno": "",
+                            "Motivo_Estorno": ""
+                        })
 
+                st.success("Lote de corte baixado com sucesso")
+                st.cache_data.clear()
+                st.rerun()
 
 # =========================================================
 # DASHBOARD DO CORTE
