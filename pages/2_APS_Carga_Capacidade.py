@@ -259,27 +259,36 @@ if df_baixas is None:
 # BASE DA FILA (OBRIGATÓRIO PARA GARGALOS)
 # =========================================================
 
-# 🔥 AJUSTE AQUI SE O NOME FOR DIFERENTE
-if "df_programacao" in locals() and not df_programacao.empty:
+fila = pd.DataFrame()
+
+# 🔥 PRIORIDADE 1
+if "df_programacao" in locals() and isinstance(df_programacao, pd.DataFrame) and not df_programacao.empty:
     fila = df_programacao.copy()
 
-elif "df" in locals() and not df.empty:
+# 🔥 PRIORIDADE 2
+elif "df" in locals() and isinstance(df, pd.DataFrame) and not df.empty:
     fila = df.copy()
 
-else:
-    st.error("ERRO: Não foi encontrada base de fila (df ou df_programacao)")
-    fila = pd.DataFrame()
+# 🔥 PRIORIDADE 3 (ESSA É A QUE VAI RESOLVER O SEU CASO)
+elif "df_operacional" in locals() and isinstance(df_operacional, pd.DataFrame) and not df_operacional.empty:
+    fila = df_operacional.copy()
 
+# 🔥 ERRO CONTROLADO
+if fila.empty:
+    st.error("ERRO: Não foi encontrada base de fila (df, df_programacao ou df_operacional)")
 
-# 🔥 GARANTE COLUNA PROCESSO
+# =========================================================
+# GARANTE COLUNA PROCESSO
+# =========================================================
 if not fila.empty and "Processo" not in fila.columns:
     for col in fila.columns:
         if "process" in col.lower():
             fila["Processo"] = fila[col]
             break
 
-
-# 🔍 DEBUG (REMOVER DEPOIS)
+# =========================================================
+# DEBUG (REMOVER DEPOIS)
+# =========================================================
 st.write("FILA SHAPE:", fila.shape)
 st.write("COLUNAS FILA:", list(fila.columns))
 
