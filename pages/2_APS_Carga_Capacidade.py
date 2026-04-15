@@ -2747,16 +2747,13 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 # ============================================================
-# ✂️ BAIXAS DE CORTE (UNITÁRIO + LOTE CORRIGIDO)
+# ✂️ BAIXAS DE CORTE (VERSÃO DEFINITIVA FUNCIONAL)
 # ============================================================
 
 st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
 
-# ------------------------------------------------------------
-# BASE DE CORTE
-# ------------------------------------------------------------
+# BASE
 base_corte = df_operacional.copy()
-
 base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
 
 base_corte = base_corte[
@@ -2787,33 +2784,14 @@ else:
         st.info("Nenhuma operação pendente de corte.")
     else:
 
-        mapa = dict(zip(base_corte_pendente["LABEL"], base_corte_pendente["ID_UNICO"]))
         opcoes = base_corte_pendente["LABEL"].tolist()
-
-        # ------------------------------------------------------------
-        # RESET CONTROLADO
-        # ------------------------------------------------------------
-        if "reset_corte_unitario" not in st.session_state:
-            st.session_state["reset_corte_unitario"] = False
-
-        if "reset_corte_lote" not in st.session_state:
-            st.session_state["reset_corte_lote"] = False
-
-        if st.session_state["reset_corte_unitario"]:
-            if opcoes:
-                st.session_state["corte_unitario"] = opcoes[0]
-            st.session_state["reset_corte_unitario"] = False
-
-        if st.session_state["reset_corte_lote"]:
-            st.session_state["corte_lote"] = []
-            st.session_state["reset_corte_lote"] = False
 
         # ------------------------------------------------------------
         # UNITÁRIO
         # ------------------------------------------------------------
         st.markdown("#### 🔹 Baixa Unitária")
 
-        escolha = st.selectbox("Operação", opcoes, key="corte_unitario")
+        escolha = st.selectbox("Operação", opcoes)
 
         linha_sel = base_corte_pendente[
             base_corte_pendente["LABEL"] == escolha
@@ -2822,14 +2800,14 @@ else:
         if not linha_sel.empty:
             linha = linha_sel.iloc[0]
 
-            if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
+            if st.button("💾 Confirmar Baixa"):
 
                 resultado = salvar_baixa_operacional(BASE_PATH, {
-                    "PV": linha.get("PV"),
+                    "PV": linha["PV"],
                     "Cliente": linha.get("Cliente", ""),
-                    "CODIGO_PV": f"{linha.get('CODIGO_PV')}_{pd.Timestamp.now().timestamp()}",
-                    "Processo": linha.get("Processo"),
-                    "Horas": linha.get("Horas"),
+                    "CODIGO_PV": linha["CODIGO_PV"],  # 🔴 VOLTA ORIGINAL
+                    "Processo": linha["Processo"],
+                    "Horas": linha["Horas"],
                     "Data_Baixa": pd.Timestamp.now(),
                     "Usuario": "Sistema",
                     "Observacao": "UNITARIO_CORTE",
@@ -2839,12 +2817,10 @@ else:
                 })
 
                 if resultado.get("ok"):
-                    st.session_state["reset_corte_unitario"] = True
                     st.success("Baixa registrada com sucesso")
                     st.cache_data.clear()
-                    st.rerun()
                 else:
-                    st.error(resultado.get("erro", "Erro ao registrar baixa"))
+                    st.error(resultado.get("erro", "Erro ao registrar"))
 
         st.divider()
 
@@ -2853,52 +2829,47 @@ else:
         # ------------------------------------------------------------
         st.markdown("#### 📦 Baixa em Lote")
 
-        selecao = st.multiselect("Selecionar operações", opcoes, key="corte_lote")
+        selecao = st.multiselect("Selecionar operações", opcoes)
 
         if selecao:
-            if st.button("📦 Baixar Corte em Lote", key="btn_corte_lote"):
+            if st.button("📦 Baixar Corte em Lote"):
 
-                erros = []
                 sucessos = 0
+                erros = 0
 
                 for label in selecao:
-                    idx = mapa.get(label)
+                    linha = base_corte_pendente[
+                        base_corte_pendente["LABEL"] == label
+                    ].iloc[0]
 
-                    linha_df = base_corte_pendente[
-                        base_corte_pendente["ID_UNICO"] == idx
-                    ]
+                    resultado = salvar_baixa_operacional(BASE_PATH, {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Usuario": "Sistema",
+                        "Observacao": "LOTE_CORTE",
+                        "Status_Baixa": "ATIVA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    })
 
-                    if not linha_df.empty:
-                        linha = linha_df.iloc[0]
+                    if resultado.get("ok"):
+                        sucessos += 1
+                    else:
+                        erros += 1
 
-                        resultado = salvar_baixa_operacional(BASE_PATH, {
-                            "PV": linha.get("PV"),
-                            "Cliente": linha.get("Cliente", ""),
-                            "CODIGO_PV": linha.get("CODIGO_PV"),
-                            "Processo": linha.get("Processo"),
-                            "Horas": linha.get("Horas"),
-                            "Data_Baixa": pd.Timestamp.now(),
-                            "Usuario": "Sistema",
-                            "Observacao": "LOTE_CORTE",
-                            "Status_Baixa": "ATIVA",
-                            "Data_Estorno": "",
-                            "Motivo_Estorno": ""
-                        })
-
-                        if resultado.get("ok"):
-                            sucessos += 1
-                        else:
-                            erros.append(resultado.get("erro", "Erro"))
-
-                if sucessos > 0:
-                    st.session_state["reset_corte_lote"] = True
-                    st.success(f"{sucessos} operações baixadas com sucesso")
+                if sucessos:
+                    st.success(f"{sucessos} baixadas com sucesso")
 
                 if erros:
-                    st.warning(f"{len(erros)} operações não foram baixadas (duplicidade ou erro)")
+                    st.warning(f"{erros} não foram baixadas")
 
                 st.cache_data.clear()
-                st.rerun()
+
+
 
 # =========================================================
 # DASHBOARD DO CORTE
