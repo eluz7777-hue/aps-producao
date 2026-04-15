@@ -933,13 +933,17 @@ st.write("COLUNAS FILA:", list(fila.columns))
 
 
 # =========================================================
-# GARANTE COLUNA PROCESSO
+# GARANTE COLUNA PROCESSO (SEGURO)
 # =========================================================
-if not fila.empty and "Processo" not in fila.columns:
-    for col in fila.columns:
-        if "process" in col.lower():
-            fila["Processo"] = fila[col]
-            break
+
+if "fila" in locals() and isinstance(fila, pd.DataFrame) and not fila.empty:
+
+    if "Processo" not in fila.columns:
+        for col in fila.columns:
+            if "process" in col.lower():
+                fila["Processo"] = fila[col]
+                break
+
 
 # =========================================================
 # DEBUG
