@@ -797,8 +797,83 @@ if not df_original.empty:
 # BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
 # ============================================================
 
-df_operacional = df_original.copy()
+# ============================================================
+# 🔹 CARREGAMENTO PRINCIPAL (GARANTE BASE ORIGINAL)
+# ============================================================
 
+# 🔥 AJUSTE AQUI se o seu arquivo for outro
+try:
+    df_original = carregar_dados(ARQUIVO_PV, file_mtime)
+except:
+    df_original = pd.DataFrame()
+
+if df_original is None:
+    df_original = pd.DataFrame()
+
+# 🔍 DEBUG
+st.write("DF ORIGINAL SHAPE:", df_original.shape)
+
+
+# ============================================================
+# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
+# ============================================================
+
+if not df_original.empty:
+    df_operacional = df_original.copy()
+else:
+    df_operacional = pd.DataFrame()
+
+# 🔍 DEBUG
+st.write("DF OPERACIONAL SHAPE:", df_operacional.shape)
+
+
+# =========================================================
+# BASE GLOBAL DE BAIXAS (ÚNICA FONTE)
+# =========================================================
+
+try:
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+except:
+    df_baixas = pd.DataFrame()
+
+if df_baixas is None:
+    df_baixas = pd.DataFrame()
+
+
+# =========================================================
+# BASE DA FILA (OBRIGATÓRIO PARA GARGALOS)
+# =========================================================
+
+fila = pd.DataFrame()
+
+if not df_operacional.empty:
+    fila = df_operacional.copy()
+
+# fallback extra (caso exista outro fluxo)
+elif "df" in locals() and isinstance(df, pd.DataFrame) and not df.empty:
+    fila = df.copy()
+
+elif "df_programacao" in locals() and isinstance(df_programacao, pd.DataFrame) and not df_programacao.empty:
+    fila = df_programacao.copy()
+
+# erro controlado
+if fila.empty:
+    st.error("ERRO: Não foi encontrada base de fila")
+
+# =========================================================
+# GARANTE COLUNA PROCESSO
+# =========================================================
+if not fila.empty and "Processo" not in fila.columns:
+    for col in fila.columns:
+        if "process" in col.lower():
+            fila["Processo"] = fila[col]
+            break
+
+# =========================================================
+# DEBUG
+# =========================================================
+st.write("FILA SHAPE:", fila.shape)
+st.write("COLUNAS FILA:", list(fila.columns))
 # --------------------------------------------
 # FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE
 # --------------------------------------------
