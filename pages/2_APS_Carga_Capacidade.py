@@ -2035,7 +2035,7 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL COM AUDITORIA)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL CORRIGIDA REAL)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
@@ -2091,7 +2091,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # VERIFICA DUPLICIDADE
+    # 🔴 VALIDAÇÃO CORRETA
     # ------------------------------------------------------------
     if not df_existente.empty:
 
@@ -2101,42 +2101,36 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             df_existente["CODIGO_PV"].astype(str).str.strip().str.upper()
         )
 
-        registros_existentes = df_existente[
+        registros = df_existente[
             df_existente["CHAVE_OPERACAO"] == chave_nova
         ]
 
-        if not registros_existentes.empty:
+        if not registros.empty:
 
-            status_ultimo = (
-                registros_existentes["Status_Baixa"]
-                .astype(str)
-                .str.strip()
-                .str.upper()
-                .iloc[-1]
-            )
+            # 🔥 AQUI ESTÁ A CORREÇÃO REAL
+            registros_ativos = registros[
+                registros["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+            ]
 
-            if status_ultimo in ["ATIVA", "TERCEIRIZADA"]:
+            if not registros_ativos.empty:
 
-                # ------------------------------------------------------------
-                # 🔴 LOG DE TENTATIVA (AUDITORIA)
-                # ------------------------------------------------------------
+                # LOG DE TENTATIVA
                 log = novo.copy()
                 log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
                 log["Motivo_Estorno"] = "Tentativa de baixa duplicada bloqueada"
                 log["Data_Baixa"] = pd.Timestamp.now()
 
                 df_existente = pd.concat([df_existente, log], ignore_index=True)
-
                 df_existente.to_excel(caminho, index=False)
 
                 return {
                     "ok": False,
-                    "erro": "Operação já foi baixada anteriormente",
+                    "erro": "Operação já possui baixa ativa",
                     "tipo": "duplicidade"
                 }
 
     # ------------------------------------------------------------
-    # SALVAMENTO NORMAL
+    # SALVA NORMAL
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
