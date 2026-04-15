@@ -1370,6 +1370,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     return df_dash
 
 
+
 # ============================================================
 # RESUMO DOS CARDS
 # ============================================================
@@ -2031,16 +2032,15 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
         st.warning(f"Erro ao ler baixas: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
+
+
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO DEFINITIVA CORRIGIDA)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL COM AUDITORIA)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
     caminho = garantir_arquivo_baixas(base_path)
 
-    # ------------------------------------------------------------
-    # CARREGA BASE
-    # ------------------------------------------------------------
     try:
         df_existente = pd.read_excel(caminho, dtype=str)
     except Exception:
@@ -2048,48 +2048,39 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     df_existente = _padronizar_df_baixas(df_existente)
 
-    # ------------------------------------------------------------
-    # NOVO REGISTRO
-    # ------------------------------------------------------------
     novo = pd.DataFrame([registro_baixa])
 
-    # garante colunas
     for col in COLUNAS_BAIXAS:
         if col not in novo.columns:
             novo[col] = ""
 
     # ------------------------------------------------------------
-    # 🔥 PADRONIZA CAMPOS CRÍTICOS
+    # PADRONIZAÇÃO
     # ------------------------------------------------------------
-    novo["PV"] = novo["PV"].astype(str).str.strip().str.upper()
-    novo["CODIGO_PV"] = novo["CODIGO_PV"].astype(str).str.strip().str.upper()
-    novo["Processo"] = novo["Processo"].astype(str).str.strip().str.upper()
+    for col in ["PV", "CODIGO_PV", "Processo"]:
+        novo[col] = (
+            novo[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
     novo["Cliente"] = novo["Cliente"].fillna("").astype(str).str.strip()
-    novo["Cliente"] = novo["Cliente"].replace("", "SEM CLIENTE")
+
+    novo["Status_Baixa"] = (
+        novo["Status_Baixa"]
+        .fillna("ATIVA")
+        .astype(str)
+        .str.upper()
+    )
 
     novo["Horas"] = pd.to_numeric(novo["Horas"], errors="coerce").fillna(0)
 
-    # ------------------------------------------------------------
-    # 🔥 STATUS FORÇADO (CRÍTICO)
-    # ------------------------------------------------------------
-    status = str(novo.get("Status_Baixa", "ATIVA")).upper().strip()
-
-    if status not in ["ATIVA", "TERCEIRIZADA"]:
-        status = "ATIVA"
-
-    novo["Status_Baixa"] = status
+    novo["Data_Baixa"] = pd.to_datetime(novo["Data_Baixa"], errors="coerce")
 
     # ------------------------------------------------------------
-    # 🔥 DATA
-    # ------------------------------------------------------------
-    novo["Data_Baixa"] = pd.Timestamp.now()
-
-    novo["Data_Estorno"] = ""
-    novo["Motivo_Estorno"] = ""
-
-    # ------------------------------------------------------------
-    # 🔥 CHAVE OPERACIONAL (CRÍTICO)
+    # CHAVE
     # ------------------------------------------------------------
     novo["CHAVE_OPERACAO"] = (
         novo["PV"] + "||" +
@@ -2097,29 +2088,69 @@ def salvar_baixa_operacional(base_path, registro_baixa):
         novo["CODIGO_PV"]
     )
 
-    # ------------------------------------------------------------
-    # 🚨 NÃO PADRONIZAR O NOVO AQUI (EVITA PERDA DE CHAVE)
-    # ------------------------------------------------------------
+    chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # CONCATENA
+    # VERIFICA DUPLICIDADE
+    # ------------------------------------------------------------
+    if not df_existente.empty:
+
+        df_existente["CHAVE_OPERACAO"] = (
+            df_existente["PV"].astype(str).str.strip().str.upper() + "||" +
+            df_existente["Processo"].astype(str).str.strip().str.upper() + "||" +
+            df_existente["CODIGO_PV"].astype(str).str.strip().str.upper()
+        )
+
+        registros_existentes = df_existente[
+            df_existente["CHAVE_OPERACAO"] == chave_nova
+        ]
+
+        if not registros_existentes.empty:
+
+            status_ultimo = (
+                registros_existentes["Status_Baixa"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .iloc[-1]
+            )
+
+            if status_ultimo in ["ATIVA", "TERCEIRIZADA"]:
+
+                # ------------------------------------------------------------
+                # 🔴 LOG DE TENTATIVA (AUDITORIA)
+                # ------------------------------------------------------------
+                log = novo.copy()
+                log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
+                log["Motivo_Estorno"] = "Tentativa de baixa duplicada bloqueada"
+                log["Data_Baixa"] = pd.Timestamp.now()
+
+                df_existente = pd.concat([df_existente, log], ignore_index=True)
+
+                df_existente.to_excel(caminho, index=False)
+
+                return {
+                    "ok": False,
+                    "erro": "Operação já foi baixada anteriormente",
+                    "tipo": "duplicidade"
+                }
+
+    # ------------------------------------------------------------
+    # SALVAMENTO NORMAL
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
-    df_final = _padronizar_df_baixas(df_final)
+    try:
+        df_final.to_excel(caminho, index=False)
+        return {"ok": True}
 
-    # ------------------------------------------------------------
-    # SALVA
-    # ------------------------------------------------------------
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
+    except Exception as e:
+        return {
+            "ok": False,
+            "erro": str(e),
+            "tipo": "erro_gravacao"
+        }
 
-    # ------------------------------------------------------------
-    # LIMPA CACHE
-    # ------------------------------------------------------------
-    st.cache_data.clear()
-
-    return df_final
 
 
 # ============================================================
@@ -2190,6 +2221,8 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
         pass
 
     return True, "Baixa estornada com sucesso."
+
+
 # ============================================================
 # HISTÓRICO (SEM DUPLICAÇÃO DE FUNÇÕES)
 # ============================================================
@@ -2686,7 +2719,6 @@ else:
 
     base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
 
-    # 🔥 RESET E ID (ANTES DE FILTRAR)
     base_corte = base_corte.reset_index(drop=True)
     base_corte["ID_UNICO"] = base_corte.index.astype(str)
 
@@ -2697,7 +2729,6 @@ else:
         " | " + base_corte["Horas"].astype(str) + " h"
     )
 
-    # 🔥 FILTRA PENDENTES NO MOMENTO CERTO
     base_corte_pendente = base_corte[
         base_corte["Status Operacional"] == "⏳ Pendente"
     ].copy()
@@ -2710,20 +2741,40 @@ else:
         opcoes = base_corte_pendente["LABEL"].tolist()
 
         # ------------------------------------------------------------
+        # RESET CONTROLADO
+        # ------------------------------------------------------------
+        if "reset_corte_unitario" not in st.session_state:
+            st.session_state["reset_corte_unitario"] = False
+
+        if "reset_corte_lote" not in st.session_state:
+            st.session_state["reset_corte_lote"] = False
+
+        if st.session_state["reset_corte_unitario"]:
+            if opcoes:
+                st.session_state["corte_unitario"] = opcoes[0]
+            st.session_state["reset_corte_unitario"] = False
+
+        if st.session_state["reset_corte_lote"]:
+            st.session_state["corte_lote"] = []
+            st.session_state["reset_corte_lote"] = False
+
+        # ------------------------------------------------------------
         # UNITÁRIO
         # ------------------------------------------------------------
         st.markdown("#### 🔹 Baixa Unitária")
 
-        escolha = st.selectbox("Operação", opcoes)
+        escolha = st.selectbox("Operação", opcoes, key="corte_unitario")
 
-        linha_sel = base_corte_pendente[base_corte_pendente["LABEL"] == escolha]
+        linha_sel = base_corte_pendente[
+            base_corte_pendente["LABEL"] == escolha
+        ]
 
         if not linha_sel.empty:
             linha = linha_sel.iloc[0]
 
-            if st.button("💾 Confirmar Baixa"):
+            if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
 
-                salvar_baixa_operacional(BASE_PATH, {
+                resultado = salvar_baixa_operacional(BASE_PATH, {
                     "PV": linha.get("PV"),
                     "Cliente": linha.get("Cliente", ""),
                     "CODIGO_PV": linha.get("CODIGO_PV"),
@@ -2737,9 +2788,13 @@ else:
                     "Motivo_Estorno": ""
                 })
 
-                st.success("Baixa registrada")
-                st.cache_data.clear()
-                st.rerun()
+                if resultado.get("ok"):
+                    st.session_state["reset_corte_unitario"] = True
+                    st.success("Baixa registrada com sucesso")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error(resultado.get("erro", "Erro ao registrar baixa"))
 
         st.divider()
 
@@ -2748,19 +2803,25 @@ else:
         # ------------------------------------------------------------
         st.markdown("#### 📦 Baixa em Lote")
 
-        selecao = st.multiselect("Selecionar operações", opcoes)
+        selecao = st.multiselect("Selecionar operações", opcoes, key="corte_lote")
 
         if selecao:
-            if st.button("📦 Baixar Corte em Lote"):
+            if st.button("📦 Baixar Corte em Lote", key="btn_corte_lote"):
+
+                erros = []
+                sucessos = 0
 
                 for label in selecao:
                     idx = mapa.get(label)
-                    linha_df = base_corte_pendente[base_corte_pendente["ID_UNICO"] == idx]
+
+                    linha_df = base_corte_pendente[
+                        base_corte_pendente["ID_UNICO"] == idx
+                    ]
 
                     if not linha_df.empty:
                         linha = linha_df.iloc[0]
 
-                        salvar_baixa_operacional(BASE_PATH, {
+                        resultado = salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha.get("PV"),
                             "Cliente": linha.get("Cliente", ""),
                             "CODIGO_PV": linha.get("CODIGO_PV"),
@@ -2774,7 +2835,18 @@ else:
                             "Motivo_Estorno": ""
                         })
 
-                st.success("Lote de corte baixado com sucesso")
+                        if resultado.get("ok"):
+                            sucessos += 1
+                        else:
+                            erros.append(resultado.get("erro", "Erro"))
+
+                if sucessos > 0:
+                    st.session_state["reset_corte_lote"] = True
+                    st.success(f"{sucessos} operações baixadas com sucesso")
+
+                if erros:
+                    st.warning(f"{len(erros)} operações não foram baixadas (possível duplicidade)")
+
                 st.cache_data.clear()
                 st.rerun()
 
@@ -3090,7 +3162,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE
+        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
@@ -3113,8 +3185,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             col_bx1, col_bx2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa, key="select_unitario")
-            observacao_baixa = col_bx2.text_input("Observação", key="obs_unitario")
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            observacao_baixa = col_bx2.text_input("Observação")
 
             registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
@@ -3124,7 +3196,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                 col_btn1, col_btn2 = st.columns(2)
 
                 if col_btn1.button("💾 Baixar"):
-                    registro = {
+                    salvar_baixa_operacional(BASE_PATH, {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
                         "CODIGO_PV": linha["CODIGO_PV"],
@@ -3136,17 +3208,12 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Status_Baixa": "ATIVA",
                         "Data_Estorno": "",
                         "Motivo_Estorno": ""
-                    }
-                    salvar_baixa_operacional(BASE_PATH, registro)
-
-                    st.session_state.pop("select_unitario", None)
-                    st.session_state.pop("obs_unitario", None)
-
+                    })
                     st.cache_data.clear()
                     st.rerun()
 
                 if col_btn2.button("🟣 Terceirizar"):
-                    registro = {
+                    salvar_baixa_operacional(BASE_PATH, {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
                         "CODIGO_PV": linha["CODIGO_PV"],
@@ -3158,12 +3225,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "Status_Baixa": "TERCEIRIZADA",
                         "Data_Estorno": "",
                         "Motivo_Estorno": ""
-                    }
-                    salvar_baixa_operacional(BASE_PATH, registro)
-
-                    st.session_state.pop("select_unitario", None)
-                    st.session_state.pop("obs_unitario", None)
-
+                    })
                     st.cache_data.clear()
                     st.rerun()
 
@@ -3172,18 +3234,14 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             # 📦 LOTE
             st.markdown("#### 📦 Ação em Lote")
 
-            selecao_lote = st.multiselect(
-                "Selecionar lote",
-                opcoes_baixa,
-                key="lote_select"
-            )
+            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
 
             if selecao_lote:
                 if st.button("📦 Baixar Lote"):
                     for label in selecao_lote:
                         linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
 
-                        registro = {
+                        salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha["PV"],
                             "Cliente": linha.get("Cliente", ""),
                             "CODIGO_PV": linha["CODIGO_PV"],
@@ -3195,11 +3253,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "Status_Baixa": "ATIVA",
                             "Data_Estorno": "",
                             "Motivo_Estorno": ""
-                        }
-
-                        salvar_baixa_operacional(BASE_PATH, registro)
-
-                    st.session_state["lote_select"] = []
+                        })
 
                     st.cache_data.clear()
                     st.rerun()
@@ -3214,26 +3268,29 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
-# 🔒 GARANTIA ABSOLUTA
-if (
-    "df_baixas_ativas" not in locals()
-    or df_baixas_ativas is None
-    or not isinstance(df_baixas_ativas, pd.DataFrame)
-):
+# 🔒 GARANTIA ABSOLUTA DA BASE DE BAIXAS
+if "df_baixas_ativas" not in st.session_state:
     df_baixas_ativas = pd.DataFrame()
+else:
+    df_baixas_ativas = st.session_state["df_baixas_ativas"]
 
-df_mini_gargalos = montar_mini_dashboard_gargalos(
-    fila=fila,
-    df_baixas_ativas=df_baixas_ativas
-)
+# 🔒 GARANTIA DA FILA (USA df — BASE REAL DO APS)
+if df is None or df.empty:
+    df_mini_gargalos = pd.DataFrame()
+else:
+    df_mini_gargalos = montar_mini_dashboard_gargalos(
+        fila=df,
+        df_baixas_ativas=df_baixas_ativas
+    )
 
-# 🔒 GARANTIA DE ORDENAÇÃO (CRÍTICO)
-df_mini_gargalos = df_mini_gargalos.sort_values(
-    by=["Score", "Horas_Fila", "Qtd_Fila"],
-    ascending=[False, False, False]
-).reset_index(drop=True)
+# 🔒 GARANTIA DE ORDENAÇÃO
+if not df_mini_gargalos.empty:
+    df_mini_gargalos = df_mini_gargalos.sort_values(
+        by=["Score", "Horas_Fila", "Qtd_Fila"],
+        ascending=[False, False, False]
+    ).reset_index(drop=True)
 
-df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+    df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
 
 cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
 
@@ -3241,24 +3298,44 @@ if df_mini_gargalos.empty:
     st.info("Nenhum dado disponível para análise de gargalos.")
 else:
 
-    # ------------------------------------------------------------
-    # FUNÇÕES VISUAIS
-    # ------------------------------------------------------------
-    def semaforo_status(status):
-        if status == "CRITICO":
-            return "🔴"
-        elif status == "ATENCAO":
-            return "🟡"
-        else:
-            return "🟢"
+    # ============================================================
+    # 🚨 ALERTA INTELIGENTE DE GARGALO
+    # ============================================================
 
-    def classificacao_texto(score):
-        if score >= 80:
-            return "CRÍTICO"
-        elif score >= 30:
-            return "ATENÇÃO"
-        else:
-            return "CONTROLADO"
+    st.markdown("## 🚨 Alerta Inteligente de Produção")
+
+    gargalo_top = df_mini_gargalos.iloc[0]
+
+    processo = gargalo_top.get("Processo", "N/A")
+    horas = float(gargalo_top.get("Horas_Fila", 0))
+    qtd = int(gargalo_top.get("Qtd_Fila", 0))
+    score = float(gargalo_top.get("Score", 0))
+
+    col_a1, col_a2, col_a3 = st.columns(3)
+
+    col_a1.metric("Processo Crítico", f"🔴 {processo}")
+    col_a2.metric("Horas Acumuladas", f"{horas:.1f} h")
+    col_a3.metric("Itens na Fila", qtd)
+
+    st.divider()
+
+    # CLASSIFICAÇÃO
+    if score >= 80:
+        st.error("🚨 AÇÃO IMEDIATA: Gargalo crítico impactando diretamente os prazos.")
+    elif score >= 50:
+        st.warning("⚠️ Atenção: Gargalo em crescimento, priorizar na sequência.")
+    else:
+        st.info("🟢 Situação controlada.")
+
+    # SUGESTÃO
+    st.markdown("### 💡 Ação Recomendada")
+
+    if qtd > 10 and horas > 20:
+        st.markdown(f"➡️ Priorizar equipe adicional no processo **{processo}** imediatamente.")
+    elif horas > 15:
+        st.markdown(f"➡️ Avaliar redistribuição de carga para o processo **{processo}**.")
+    else:
+        st.markdown(f"➡️ Monitorar evolução do processo **{processo}**.")
 
     # ------------------------------------------------------------
     # CARDS PRINCIPAIS
@@ -3297,7 +3374,7 @@ else:
         st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
 
     # ------------------------------------------------------------
-    # TOP 3 GARGALOS
+    # TOP 3
     # ------------------------------------------------------------
     st.markdown("### 🔥 Top 3 Gargalos Prioritários")
 
@@ -3309,66 +3386,32 @@ else:
             if i < len(top3):
                 row = top3.iloc[i]
 
-                emoji = semaforo_status(row["Status_Gargalo"])
-
                 st.metric(
-                    label=f"{emoji} {row['Processo']}",
+                    label=f"{row['Processo']}",
                     value=f"{int(row['Qtd_Fila'])} itens",
                     delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
-                )
-
-                st.caption(
-                    f"Status: {classificacao_texto(row['Score'])} | "
-                    f"Carga Total: {row['Carga_Total']}"
                 )
             else:
                 st.metric(label="-", value="-", delta="-")
 
     # ------------------------------------------------------------
-    # TABELA DE RANKING
+    # TABELA
     # ------------------------------------------------------------
     st.markdown("### 📊 Ranking Inteligente de Gargalos")
 
-    df_exibicao_gargalos = df_mini_gargalos.copy()
-
-    df_exibicao_gargalos["Semaforo"] = df_exibicao_gargalos["Status_Gargalo"].apply(semaforo_status)
-
-    colunas_exibicao = [
-        "Ranking",
-        "Semaforo",
-        "Processo",
-        "Status_Gargalo",
-        "Qtd_Fila",
-        "Horas_Fila",
-        "Qtd_Baixas_Ativas",
-        "Carga_Total",
-        "Score"
-    ]
-
-    for col in colunas_exibicao:
-        if col not in df_exibicao_gargalos.columns:
-            df_exibicao_gargalos[col] = None
-
-    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
-
-    df_exibicao_gargalos["Horas_Fila"] = (
-        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
-    df_exibicao_gargalos["Score"] = (
-        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
-        .fillna(0)
-        .round(1)
-    )
-
     st.dataframe(
-        df_exibicao_gargalos,
+        df_mini_gargalos[[
+            "Ranking",
+            "Processo",
+            "Qtd_Fila",
+            "Horas_Fila",
+            "Qtd_Baixas_Ativas",
+            "Carga_Total",
+            "Score"
+        ]],
         use_container_width=True,
         hide_index=True
     )
-
 # ------------------------------------------------------------
 # FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
 # ------------------------------------------------------------
@@ -3639,6 +3682,93 @@ if not df_baixas_exib.empty:
     )
 else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
+
+
+# ============================================================
+# 🚨 DASHBOARD DE ERROS OPERACIONAIS
+# ============================================================
+
+st.markdown("## 🚨 Inteligência de Erros Operacionais")
+
+try:
+    caminho = garantir_arquivo_baixas(BASE_PATH)
+    df_baixas_full = pd.read_excel(caminho, dtype=str)
+    df_baixas_full = _padronizar_df_baixas(df_baixas_full)
+except Exception:
+    df_baixas_full = pd.DataFrame()
+
+if df_baixas_full.empty:
+    st.info("Sem dados para análise de erros.")
+else:
+
+    df_baixas_full["Status_Baixa"] = df_baixas_full["Status_Baixa"].astype(str).str.upper()
+
+    df_erros = df_baixas_full[
+        df_baixas_full["Status_Baixa"] == "TENTATIVA_DUPLICADA"
+    ].copy()
+
+    if df_erros.empty:
+        st.success("Nenhuma tentativa duplicada registrada 👍")
+    else:
+
+        # ------------------------------------------------------------
+        # MÉTRICAS
+        # ------------------------------------------------------------
+        total_erros = len(df_erros)
+        total_operacoes = len(df_baixas_full)
+
+        taxa_erro = (total_erros / total_operacoes * 100) if total_operacoes > 0 else 0
+
+        col_e1, col_e2, col_e3 = st.columns(3)
+
+        col_e1.metric("Tentativas Duplicadas", total_erros)
+        col_e2.metric("Total de Registros", total_operacoes)
+        col_e3.metric("Taxa de Erro (%)", f"{taxa_erro:.2f}%")
+
+        st.divider()
+
+        # ------------------------------------------------------------
+        # POR PROCESSO
+        # ------------------------------------------------------------
+        st.markdown("### ⚙️ Erros por Processo")
+
+        erros_processo = (
+            df_erros.groupby("Processo")
+            .size()
+            .reset_index(name="Qtd_Erros")
+            .sort_values("Qtd_Erros", ascending=False)
+        )
+
+        st.dataframe(erros_processo, use_container_width=True, hide_index=True)
+
+        # ------------------------------------------------------------
+        # POR USUÁRIO
+        # ------------------------------------------------------------
+        if "Usuario" in df_erros.columns:
+
+            st.markdown("### 👤 Erros por Usuário")
+
+            erros_usuario = (
+                df_erros.groupby("Usuario")
+                .size()
+                .reset_index(name="Qtd_Erros")
+                .sort_values("Qtd_Erros", ascending=False)
+            )
+
+            st.dataframe(erros_usuario, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # ------------------------------------------------------------
+        # ÚLTIMAS OCORRÊNCIAS
+        # ------------------------------------------------------------
+        st.markdown("### 🕒 Últimas Tentativas")
+
+        st.dataframe(
+            df_erros.sort_values("Data_Baixa", ascending=False).head(20),
+            use_container_width=True,
+            hide_index=True
+        )
 
 
 # ============================================================
