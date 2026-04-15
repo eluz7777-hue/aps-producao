@@ -2955,6 +2955,179 @@ else:
 
 
 
+# ============================================================
+# =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS ============
+# ============================================================
+with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
+
+    st.subheader("🏭 Operações mais carregadas do APS")
+    st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
+
+    gargalos_top3 = (
+        df.groupby("Processo", as_index=False)
+        .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
+        .merge(dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]], on="Processo", how="left")
+        .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
+        .head(3)
+        .reset_index(drop=True)
+    )
+
+    if gargalos_top3.empty:
+        st.info("Nenhum gargalo pendente encontrado no APS.")
+    else:
+        gargalos_top3["Horas_Pendentes"] = pd.to_numeric(gargalos_top3["Horas_Pendentes"], errors="coerce").fillna(0).round(1)
+        gargalos_top3["Capacidade Processo"] = pd.to_numeric(gargalos_top3["Capacidade Processo"], errors="coerce").fillna(0).round(1)
+        gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
+        gargalos_top3["Ranking"] = gargalos_top3.index + 1
+
+        gargalos_top3["Dias de Fila"] = np.where(
+            gargalos_top3["Capacidade Processo"] > 0,
+            (gargalos_top3["Horas_Pendentes"] / gargalos_top3["Capacidade Processo"]).round(1),
+            np.nan
+        )
+
+        st.markdown("### 📌 Top 3 Gargalos Atuais")
+
+        exib_top3 = gargalos_top3.copy()
+        exib_top3["Horas Pendentes (h)"] = exib_top3["Horas_Pendentes"].apply(lambda x: fmt_br_num(x, 1))
+        exib_top3["Capacidade Processo (h)"] = exib_top3["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
+        exib_top3["Utilização (%)"] = exib_top3["Utilização (%)"].apply(lambda x: f"{int(x)}%")
+        exib_top3["Dias de Fila"] = exib_top3["Dias de Fila"].apply(
+            lambda x: f"{fmt_br_num(x, 1)} dias" if pd.notna(x) else "-"
+        )
+
+        st.dataframe(
+            exib_top3[
+                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes",
+                 "Capacidade Processo (h)", "Dias de Fila", "Utilização (%)"]
+            ].rename(columns={"PVs_Pendentes": "PVs Pendentes"}),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.divider()
+
+        processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
+
+        base_gargalos = df_operacional[
+            df_operacional["Processo"].astype(str).str.upper().isin(processos_top3)
+        ].copy()
+
+        for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Status Operacional"]:
+            if col not in base_gargalos.columns:
+                base_gargalos[col] = ""
+            base_gargalos[col] = base_gargalos[col].fillna("").astype(str).str.strip()
+
+        base_gargalos["Processo"] = base_gargalos["Processo"].str.upper()
+
+        base_gargalos["CHAVE_OPERACAO"] = (
+            base_gargalos["PV"].str.upper().str.strip() + "||" +
+            base_gargalos["Processo"].str.upper().str.strip() + "||" +
+            base_gargalos["CODIGO_PV"].str.upper().str.strip()
+        )
+
+        base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
+        base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
+        base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
+        base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+        st.markdown("### 📋 PVs dos Gargalos")
+
+        processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
+
+        fila_gargalo = base_gargalos[
+            base_gargalos["Processo"] == str(processo_baixa_sel).upper()
+        ].copy()
+
+        fila_gargalo = fila_gargalo.sort_values(
+            ["Status Operacional", "Dias para Entrega", "Horas", "PV"],
+            ascending=[True, True, False, True]
+        ).reset_index(drop=True)
+
+        fila_gargalo_pendente = fila_gargalo[
+            fila_gargalo["Status Operacional"] == "⏳ Pendente"
+        ].copy()
+
+        st.dataframe(fila_gargalo, use_container_width=True, height=360)
+
+        st.divider()
+
+        # =========================================================
+        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO COMPLETO)
+        # =========================================================
+        st.markdown("### ✅ Dar Baixa em Operação Concluída")
+
+        if fila_gargalo_pendente.empty:
+            st.info("Nenhuma PV pendente disponível.")
+        else:
+            base_baixa = fila_gargalo_pendente.copy().reset_index(drop=True)
+
+            base_baixa["ID_UNICO"] = base_baixa.index.astype(str)
+
+            base_baixa["ROTULO_BAIXA"] = (
+                "PV " + base_baixa["PV"] +
+                " | " + base_baixa["Processo"] +
+                " | " + base_baixa["CODIGO_PV"] +
+                " | " + base_baixa["Horas"].astype(str) + " h"
+            )
+
+            mapa_linhas = dict(zip(base_baixa["ROTULO_BAIXA"], base_baixa["ID_UNICO"]))
+
+            opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
+
+            # UNITÁRIO
+            st.markdown("#### 🔹 Ação Unitária")
+
+            col_bx1, col_bx2 = st.columns(2)
+
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            observacao_baixa = col_bx2.text_input("Observação")
+
+            if baixa_sel:
+                idx = mapa_linhas.get(baixa_sel)
+                registro_df = base_baixa[base_baixa["ID_UNICO"] == idx]
+
+                if not registro_df.empty:
+                    linha = registro_df.iloc[0]
+
+                    col_btn1, col_btn2 = st.columns(2)
+
+                    if col_btn1.button("💾 Baixar"):
+                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
+                        st.cache_data.clear()
+                        st.rerun()
+
+                    if col_btn2.button("🟣 Terceirizar"):
+                        registro = linha.to_dict()
+                        registro["Status_Baixa"] = "TERCEIRIZADA"
+                        salvar_baixa_operacional(BASE_PATH, registro)
+                        st.cache_data.clear()
+                        st.rerun()
+
+            st.divider()
+
+            # LOTE
+            st.markdown("#### 📦 Ação em Lote")
+
+            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
+
+            if selecao_lote:
+                if st.button("📦 Baixar Lote"):
+                    for label in selecao_lote:
+                        idx = mapa_linhas.get(label)
+                        linha_df = base_baixa[base_baixa["ID_UNICO"] == idx]
+
+                        if not linha_df.empty:
+                            linha = linha_df.iloc[0]
+                            salvar_baixa_operacional(BASE_PATH, linha.to_dict())
+
+                    st.cache_data.clear()
+                    st.rerun()
+
+        st.divider()
+
+
+
 
 # ============================================================
 # MINI DASHBOARD POR GARGALO 
@@ -3591,176 +3764,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
 
     st.divider()
 
-# ============================================================
-# =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS ============
-# ============================================================
-with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
-
-    st.subheader("🏭 Operações mais carregadas do APS")
-    st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
-
-    gargalos_top3 = (
-        df.groupby("Processo", as_index=False)
-        .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
-        .merge(dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]], on="Processo", how="left")
-        .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
-        .head(3)
-        .reset_index(drop=True)
-    )
-
-    if gargalos_top3.empty:
-        st.info("Nenhum gargalo pendente encontrado no APS.")
-    else:
-        gargalos_top3["Horas_Pendentes"] = pd.to_numeric(gargalos_top3["Horas_Pendentes"], errors="coerce").fillna(0).round(1)
-        gargalos_top3["Capacidade Processo"] = pd.to_numeric(gargalos_top3["Capacidade Processo"], errors="coerce").fillna(0).round(1)
-        gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
-        gargalos_top3["Ranking"] = gargalos_top3.index + 1
-
-        gargalos_top3["Dias de Fila"] = np.where(
-            gargalos_top3["Capacidade Processo"] > 0,
-            (gargalos_top3["Horas_Pendentes"] / gargalos_top3["Capacidade Processo"]).round(1),
-            np.nan
-        )
-
-        st.markdown("### 📌 Top 3 Gargalos Atuais")
-
-        exib_top3 = gargalos_top3.copy()
-        exib_top3["Horas Pendentes (h)"] = exib_top3["Horas_Pendentes"].apply(lambda x: fmt_br_num(x, 1))
-        exib_top3["Capacidade Processo (h)"] = exib_top3["Capacidade Processo"].apply(lambda x: fmt_br_num(x, 1))
-        exib_top3["Utilização (%)"] = exib_top3["Utilização (%)"].apply(lambda x: f"{int(x)}%")
-        exib_top3["Dias de Fila"] = exib_top3["Dias de Fila"].apply(
-            lambda x: f"{fmt_br_num(x, 1)} dias" if pd.notna(x) else "-"
-        )
-
-        st.dataframe(
-            exib_top3[
-                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes",
-                 "Capacidade Processo (h)", "Dias de Fila", "Utilização (%)"]
-            ].rename(columns={"PVs_Pendentes": "PVs Pendentes"}),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.divider()
-
-        processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
-
-        base_gargalos = df_operacional[
-            df_operacional["Processo"].astype(str).str.upper().isin(processos_top3)
-        ].copy()
-
-        for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Status Operacional"]:
-            if col not in base_gargalos.columns:
-                base_gargalos[col] = ""
-            base_gargalos[col] = base_gargalos[col].fillna("").astype(str).str.strip()
-
-        base_gargalos["Processo"] = base_gargalos["Processo"].str.upper()
-
-        base_gargalos["CHAVE_OPERACAO"] = (
-            base_gargalos["PV"].str.upper().str.strip() + "||" +
-            base_gargalos["Processo"].str.upper().str.strip() + "||" +
-            base_gargalos["CODIGO_PV"].str.upper().str.strip()
-        )
-
-        base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
-        base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
-        base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
-        base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-        st.markdown("### 📋 PVs dos Gargalos")
-
-        processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
-
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == str(processo_baixa_sel).upper()
-        ].copy()
-
-        fila_gargalo = fila_gargalo.sort_values(
-            ["Status Operacional", "Dias para Entrega", "Horas", "PV"],
-            ascending=[True, True, False, True]
-        ).reset_index(drop=True)
-
-        fila_gargalo_pendente = fila_gargalo[
-            fila_gargalo["Status Operacional"] == "⏳ Pendente"
-        ].copy()
-
-        st.dataframe(fila_gargalo, use_container_width=True, height=360)
-
-        st.divider()
-
-        # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO COMPLETO)
-        # =========================================================
-        st.markdown("### ✅ Dar Baixa em Operação Concluída")
-
-        if fila_gargalo_pendente.empty:
-            st.info("Nenhuma PV pendente disponível.")
-        else:
-            base_baixa = fila_gargalo_pendente.copy().reset_index(drop=True)
-
-            base_baixa["ID_UNICO"] = base_baixa.index.astype(str)
-
-            base_baixa["ROTULO_BAIXA"] = (
-                "PV " + base_baixa["PV"] +
-                " | " + base_baixa["Processo"] +
-                " | " + base_baixa["CODIGO_PV"] +
-                " | " + base_baixa["Horas"].astype(str) + " h"
-            )
-
-            mapa_linhas = dict(zip(base_baixa["ROTULO_BAIXA"], base_baixa["ID_UNICO"]))
-
-            opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
-
-            # UNITÁRIO
-            st.markdown("#### 🔹 Ação Unitária")
-
-            col_bx1, col_bx2 = st.columns(2)
-
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
-            observacao_baixa = col_bx2.text_input("Observação")
-
-            if baixa_sel:
-                idx = mapa_linhas.get(baixa_sel)
-                registro_df = base_baixa[base_baixa["ID_UNICO"] == idx]
-
-                if not registro_df.empty:
-                    linha = registro_df.iloc[0]
-
-                    col_btn1, col_btn2 = st.columns(2)
-
-                    if col_btn1.button("💾 Baixar"):
-                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
-                        st.cache_data.clear()
-                        st.rerun()
-
-                    if col_btn2.button("🟣 Terceirizar"):
-                        registro = linha.to_dict()
-                        registro["Status_Baixa"] = "TERCEIRIZADA"
-                        salvar_baixa_operacional(BASE_PATH, registro)
-                        st.cache_data.clear()
-                        st.rerun()
-
-            st.divider()
-
-            # LOTE
-            st.markdown("#### 📦 Ação em Lote")
-
-            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
-
-            if selecao_lote:
-                if st.button("📦 Baixar Lote"):
-                    for label in selecao_lote:
-                        idx = mapa_linhas.get(label)
-                        linha_df = base_baixa[base_baixa["ID_UNICO"] == idx]
-
-                        if not linha_df.empty:
-                            linha = linha_df.iloc[0]
-                            salvar_baixa_operacional(BASE_PATH, linha.to_dict())
-
-                    st.cache_data.clear()
-                    st.rerun()
-
-        st.divider()
 
         
 # ============================================================
