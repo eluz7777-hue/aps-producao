@@ -2794,7 +2794,7 @@ else:
                 resultado = salvar_baixa_operacional(BASE_PATH, {
                     "PV": linha.get("PV"),
                     "Cliente": linha.get("Cliente", ""),
-                    "CODIGO_PV": linha.get("CODIGO_PV"),
+                    "CODIGO_PV": f"{linha.get('CODIGO_PV')}_{pd.Timestamp.now().timestamp()}",
                     "Processo": linha.get("Processo"),
                     "Horas": linha.get("Horas"),
                     "Data_Baixa": pd.Timestamp.now(),
