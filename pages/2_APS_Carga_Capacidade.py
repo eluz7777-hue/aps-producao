@@ -346,28 +346,6 @@ ROOT_DIR = os.path.dirname(PAGE_DIR)
 arquivo_pv = os.path.join(ROOT_DIR, "PV.xlsx")
 BASE_PATH = ROOT_DIR
 
-# ============================================================
-# 🔥 CARREGAMENTO OFICIAL DAS BAIXAS (CRÍTICO)
-# ============================================================
-
-caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-
-try:
-    file_mtime_baixas = os.path.getmtime(caminho_baixas)
-except:
-    file_mtime_baixas = 0
-
-df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
-
-# 🔥 BASE ATIVA REAL
-df_baixas_ativas = df_baixas[
-    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-].copy()
-
-# 🔒 GARANTE DISPONIBILIDADE GLOBAL
-st.session_state["df_baixas_ativas"] = df_baixas_ativas
-
-
 st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
 
 if not os.path.exists(arquivo_pv):
@@ -1972,7 +1950,7 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
 
 
 
-# ===============================
+# =============================== 
 # BAIXAS OPERACIONAIS APS
 # ===============================
 ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
@@ -2003,6 +1981,7 @@ def garantir_arquivo_baixas(base_path):
         df_vazio.to_excel(caminho, index=False)
 
     return caminho
+
 
 def _padronizar_df_baixas(df_baixas):
 
@@ -2054,6 +2033,7 @@ def _padronizar_df_baixas(df_baixas):
 
     return df_baixas
 
+
 @st.cache_data(ttl=0)
 def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
@@ -2065,6 +2045,27 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
     except Exception as e:
         st.warning(f"Erro ao ler baixas: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+
+# ============================================================
+# 🔥 CARREGAMENTO OFICIAL DAS BAIXAS (POSIÇÃO CORRETA)
+# ============================================================
+
+caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+
+try:
+    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+except:
+    file_mtime_baixas = 0
+
+df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+df_baixas_ativas = df_baixas[
+    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+].copy()
+
+# 🔒 DISPONIBILIZA GLOBALMENTE
+st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
 
 
