@@ -900,24 +900,35 @@ if df_baixas is None:
 
 
 # =========================================================
-# BASE DA FILA (OBRIGATÓRIO PARA GARGALOS)
+# BASE DA FILA (OBRIGATÓRIO PARA GARGALOS) - FINAL
 # =========================================================
 
 fila = pd.DataFrame()
 
-if not df_operacional.empty:
+# 🔥 SÓ TENTA MONTAR FILA SE A BASE EXISTIR
+if "df_operacional" in locals() and isinstance(df_operacional, pd.DataFrame) and not df_operacional.empty:
     fila = df_operacional.copy()
 
-# fallback extra (caso exista outro fluxo)
 elif "df" in locals() and isinstance(df, pd.DataFrame) and not df.empty:
     fila = df.copy()
 
 elif "df_programacao" in locals() and isinstance(df_programacao, pd.DataFrame) and not df_programacao.empty:
     fila = df_programacao.copy()
 
-# erro controlado
-if fila.empty:
+# 🔥 MOSTRA ERRO APENAS SE JÁ EXISTE BASE E MESMO ASSIM FALHOU
+if (
+    ("df_operacional" in locals() or "df" in locals() or "df_programacao" in locals())
+    and fila.empty
+):
     st.error("ERRO: Não foi encontrada base de fila")
+
+# =========================================================
+# DEBUG (MANTER POR ENQUANTO)
+# =========================================================
+st.write("FILA SHAPE:", fila.shape)
+st.write("COLUNAS FILA:", list(fila.columns))
+
+
 
 # =========================================================
 # GARANTE COLUNA PROCESSO
