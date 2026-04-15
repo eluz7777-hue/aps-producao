@@ -346,6 +346,28 @@ ROOT_DIR = os.path.dirname(PAGE_DIR)
 arquivo_pv = os.path.join(ROOT_DIR, "PV.xlsx")
 BASE_PATH = ROOT_DIR
 
+# ============================================================
+# 🔥 CARREGAMENTO OFICIAL DAS BAIXAS (CRÍTICO)
+# ============================================================
+
+caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+
+try:
+    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+except:
+    file_mtime_baixas = 0
+
+df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+# 🔥 BASE ATIVA REAL
+df_baixas_ativas = df_baixas[
+    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+].copy()
+
+# 🔒 GARANTE DISPONIBILIDADE GLOBAL
+st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+
 st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
 
 if not os.path.exists(arquivo_pv):
@@ -689,9 +711,14 @@ else:
 # BASE OFICIAL PARA TIRAR DA FILA
 # SOMENTE BAIXAS ATIVAS / TERCEIRIZADAS
 # --------------------------------------------
-if "df_baixas_ativas" in locals() and df_baixas_ativas is not None and not df_baixas_ativas.empty:
+
+df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+
+if df_baixas_ativas is not None and not df_baixas_ativas.empty:
+
     df_baixas_status = df_baixas_ativas.copy()
 
+    # GARANTE COLUNAS
     for col in ["PV", "Processo", "CODIGO_PV"]:
         if col not in df_baixas_status.columns:
             df_baixas_status[col] = ""
@@ -704,11 +731,15 @@ if "df_baixas_ativas" in locals() and df_baixas_ativas is not None and not df_ba
             .str.upper()
         )
 
+    # CHAVE NORMALIZADA
     df_baixas_status["CHAVE_OPERACAO"] = df_baixas_status.apply(
-        lambda r: normalizar_chave_operacao(r["PV"], r["Processo"], r["CODIGO_PV"]),
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
         axis=1
     )
 
+    # SET DE CHAVES ATIVAS
     chaves_baixadas_ativas = set(
         df_baixas_status["CHAVE_OPERACAO"]
         .dropna()
@@ -718,15 +749,18 @@ if "df_baixas_ativas" in locals() and df_baixas_ativas is not None and not df_ba
         .unique()
     )
 
+    # MAPA DE STATUS
     mapa_status_operacao = (
         df_baixas_status
         .groupby("CHAVE_OPERACAO")["Status_Baixa"]
         .last()
         .to_dict()
     )
+
 else:
     chaves_baixadas_ativas = set()
     mapa_status_operacao = {}
+
 
 # --------------------------------------------
 # CLASSIFICAÇÃO FINAL OFICIAL
