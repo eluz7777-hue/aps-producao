@@ -2030,7 +2030,7 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO DEFINITIVA)
+# SALVAR BAIXA OPERACIONAL (VERSÃO DEFINITIVA CORRIGIDA)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
@@ -2096,9 +2096,8 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     )
 
     # ------------------------------------------------------------
-    # PADRONIZA FINAL
+    # 🚨 NÃO PADRONIZAR O NOVO AQUI (EVITA PERDA DE CHAVE)
     # ------------------------------------------------------------
-    novo = _padronizar_df_baixas(novo)
 
     # ------------------------------------------------------------
     # CONCATENA
@@ -2121,12 +2120,17 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     return df_final
 
 
+# ============================================================
+# HISTÓRICOS
+# ============================================================
+
 def historico_baixas_completo(df_baixas):
 
     if df_baixas is None or df_baixas.empty:
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
     return _padronizar_df_baixas(df_baixas)
+
 
 def historico_baixas_ativas(df_baixas):
 
@@ -2135,7 +2139,14 @@ def historico_baixas_ativas(df_baixas):
 
     df_tmp = _padronizar_df_baixas(df_baixas)
 
-    return df_tmp[df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])].copy()
+    return df_tmp[
+        df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+
+# ============================================================
+# ESTORNO
+# ============================================================
 
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
 
@@ -2177,7 +2188,6 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
         pass
 
     return True, "Baixa estornada com sucesso."
-
 # ============================================================
 # HISTÓRICO (SEM DUPLICAÇÃO DE FUNÇÕES)
 # ============================================================
