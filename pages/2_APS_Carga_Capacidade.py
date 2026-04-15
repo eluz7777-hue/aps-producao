@@ -794,20 +794,16 @@ if not df_original.empty:
 
 
 # ============================================================
-# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
+# 🔹 BASE ORIGINAL (CORRIGIDO - USA df_pv REAL)
 # ============================================================
 
-# ============================================================
-# 🔹 CARREGAMENTO PRINCIPAL (GARANTE BASE ORIGINAL)
-# ============================================================
+if "df_pv" in locals() and isinstance(df_pv, pd.DataFrame) and not df_pv.empty:
+    df_original = df_pv.copy()
 
-# 🔥 AJUSTE AQUI se o seu arquivo for outro
-try:
-    df_original = carregar_dados(ARQUIVO_PV, file_mtime)
-except:
-    df_original = pd.DataFrame()
+elif "df" in locals() and isinstance(df, pd.DataFrame) and not df.empty:
+    df_original = df.copy()
 
-if df_original is None:
+else:
     df_original = pd.DataFrame()
 
 # 🔍 DEBUG
