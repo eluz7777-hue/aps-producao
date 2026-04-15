@@ -2030,14 +2030,14 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (CORRIGIDO - SEM BLOQUEIO)
+# SALVAR BAIXA OPERACIONAL (VERSÃO DEFINITIVA)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
     caminho = garantir_arquivo_baixas(base_path)
 
     # ------------------------------------------------------------
-    # CARREGA BASE EXISTENTE
+    # CARREGA BASE
     # ------------------------------------------------------------
     try:
         df_existente = pd.read_excel(caminho, dtype=str)
@@ -2051,26 +2051,64 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     # ------------------------------------------------------------
     novo = pd.DataFrame([registro_baixa])
 
-    # garante todas as colunas
+    # garante colunas
     for col in COLUNAS_BAIXAS:
         if col not in novo.columns:
             novo[col] = ""
 
-    # garante data
-    if "Data_Baixa" not in novo.columns or pd.isna(novo["Data_Baixa"].iloc[0]):
-        novo["Data_Baixa"] = pd.Timestamp.now()
+    # ------------------------------------------------------------
+    # 🔥 PADRONIZA CAMPOS CRÍTICOS
+    # ------------------------------------------------------------
+    novo["PV"] = novo["PV"].astype(str).str.strip().str.upper()
+    novo["CODIGO_PV"] = novo["CODIGO_PV"].astype(str).str.strip().str.upper()
+    novo["Processo"] = novo["Processo"].astype(str).str.strip().str.upper()
 
+    novo["Cliente"] = novo["Cliente"].fillna("").astype(str).str.strip()
+    novo["Cliente"] = novo["Cliente"].replace("", "SEM CLIENTE")
+
+    novo["Horas"] = pd.to_numeric(novo["Horas"], errors="coerce").fillna(0)
+
+    # ------------------------------------------------------------
+    # 🔥 STATUS FORÇADO (CRÍTICO)
+    # ------------------------------------------------------------
+    status = str(novo.get("Status_Baixa", "ATIVA")).upper().strip()
+
+    if status not in ["ATIVA", "TERCEIRIZADA"]:
+        status = "ATIVA"
+
+    novo["Status_Baixa"] = status
+
+    # ------------------------------------------------------------
+    # 🔥 DATA
+    # ------------------------------------------------------------
+    novo["Data_Baixa"] = pd.Timestamp.now()
+
+    novo["Data_Estorno"] = ""
+    novo["Motivo_Estorno"] = ""
+
+    # ------------------------------------------------------------
+    # 🔥 CHAVE OPERACIONAL (CRÍTICO)
+    # ------------------------------------------------------------
+    novo["CHAVE_OPERACAO"] = (
+        novo["PV"] + "||" +
+        novo["Processo"] + "||" +
+        novo["CODIGO_PV"]
+    )
+
+    # ------------------------------------------------------------
+    # PADRONIZA FINAL
+    # ------------------------------------------------------------
     novo = _padronizar_df_baixas(novo)
 
     # ------------------------------------------------------------
-    # 🔥 CONCATENA SEM BLOQUEIO (ESSA É A CORREÇÃO)
+    # CONCATENA
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
     df_final = _padronizar_df_baixas(df_final)
 
     # ------------------------------------------------------------
-    # SALVA NO EXCEL
+    # SALVA
     # ------------------------------------------------------------
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
         df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
