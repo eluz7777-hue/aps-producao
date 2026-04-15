@@ -3054,7 +3054,7 @@ else:
 
 
 # ============================================================
-# =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS ============
+# =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
 # ============================================================
 with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
@@ -3106,22 +3106,12 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
-
-        base_gargalos = df_operacional[
-            df_operacional["Processo"].astype(str).str.upper().isin(processos_top3)
-        ].copy()
-
-        for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Status Operacional"]:
-            if col not in base_gargalos.columns:
-                base_gargalos[col] = ""
-            base_gargalos[col] = base_gargalos[col].fillna("").astype(str).str.strip()
-
-        base_gargalos["Processo"] = base_gargalos["Processo"].str.upper()
+        base_gargalos = df_operacional[df_operacional["Processo"].isin(processos_top3)].copy()
 
         base_gargalos["CHAVE_OPERACAO"] = (
-            base_gargalos["PV"].str.upper().str.strip() + "||" +
-            base_gargalos["Processo"].str.upper().str.strip() + "||" +
-            base_gargalos["CODIGO_PV"].str.upper().str.strip()
+            base_gargalos["PV"].astype(str).str.upper().str.strip() + "||" +
+            base_gargalos["Processo"].astype(str).str.upper().str.strip() + "||" +
+            base_gargalos["CODIGO_PV"].astype(str).str.upper().str.strip()
         )
 
         base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
@@ -3133,34 +3123,22 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
 
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == str(processo_baixa_sel).upper()
-        ].copy()
-
-        fila_gargalo = fila_gargalo.sort_values(
-            ["Status Operacional", "Dias para Entrega", "Horas", "PV"],
-            ascending=[True, True, False, True]
-        ).reset_index(drop=True)
-
-        fila_gargalo_pendente = fila_gargalo[
-            fila_gargalo["Status Operacional"] == "⏳ Pendente"
-        ].copy()
+        fila_gargalo = base_gargalos[base_gargalos["Processo"] == processo_baixa_sel].copy()
+        fila_gargalo_pendente = fila_gargalo[fila_gargalo["Status Operacional"] == "⏳ Pendente"].copy()
 
         st.dataframe(fila_gargalo, use_container_width=True, height=360)
 
         st.divider()
 
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO COMPLETO)
+        # BAIXA / TERCEIRIZAÇÃO / LOTE
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
         if fila_gargalo_pendente.empty:
             st.info("Nenhuma PV pendente disponível.")
         else:
-            base_baixa = fila_gargalo_pendente.copy().reset_index(drop=True)
-
-            base_baixa["ID_UNICO"] = base_baixa.index.astype(str)
+            base_baixa = fila_gargalo_pendente.copy()
 
             base_baixa["ROTULO_BAIXA"] = (
                 "PV " + base_baixa["PV"] +
@@ -3169,61 +3147,105 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                 " | " + base_baixa["Horas"].astype(str) + " h"
             )
 
-            mapa_linhas = dict(zip(base_baixa["ROTULO_BAIXA"], base_baixa["ID_UNICO"]))
-
             opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
-            # UNITÁRIO
+            # 🔹 UNITÁRIO
             st.markdown("#### 🔹 Ação Unitária")
 
             col_bx1, col_bx2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
-            observacao_baixa = col_bx2.text_input("Observação")
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa, key="select_unitario")
+            observacao_baixa = col_bx2.text_input("Observação", key="obs_unitario")
 
-            if baixa_sel:
-                idx = mapa_linhas.get(baixa_sel)
-                registro_df = base_baixa[base_baixa["ID_UNICO"] == idx]
+            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
-                if not registro_df.empty:
-                    linha = registro_df.iloc[0]
+            if not registro_baixa_df.empty:
+                linha = registro_baixa_df.iloc[0]
 
-                    col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_btn2 = st.columns(2)
 
-                    if col_btn1.button("💾 Baixar"):
-                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
-                        st.cache_data.clear()
-                        st.rerun()
+                if col_btn1.button("💾 Baixar"):
+                    registro = {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Usuario": "Sistema",
+                        "Observacao": observacao_baixa,
+                        "Status_Baixa": "ATIVA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    }
+                    salvar_baixa_operacional(BASE_PATH, registro)
 
-                    if col_btn2.button("🟣 Terceirizar"):
-                        registro = linha.to_dict()
-                        registro["Status_Baixa"] = "TERCEIRIZADA"
-                        salvar_baixa_operacional(BASE_PATH, registro)
-                        st.cache_data.clear()
-                        st.rerun()
+                    st.session_state["select_unitario"] = None
+                    st.session_state["obs_unitario"] = ""
+
+                    st.cache_data.clear()
+                    st.rerun()
+
+                if col_btn2.button("🟣 Terceirizar"):
+                    registro = {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Usuario": "Sistema",
+                        "Observacao": observacao_baixa,
+                        "Status_Baixa": "TERCEIRIZADA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    }
+                    salvar_baixa_operacional(BASE_PATH, registro)
+
+                    st.session_state["select_unitario"] = None
+                    st.session_state["obs_unitario"] = ""
+
+                    st.cache_data.clear()
+                    st.rerun()
 
             st.divider()
 
-            # LOTE
+            # 📦 LOTE
             st.markdown("#### 📦 Ação em Lote")
 
-            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
+            selecao_lote = st.multiselect(
+                "Selecionar lote",
+                opcoes_baixa,
+                key="lote_select"
+            )
 
             if selecao_lote:
                 if st.button("📦 Baixar Lote"):
                     for label in selecao_lote:
-                        idx = mapa_linhas.get(label)
-                        linha_df = base_baixa[base_baixa["ID_UNICO"] == idx]
+                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
 
-                        if not linha_df.empty:
-                            linha = linha_df.iloc[0]
-                            salvar_baixa_operacional(BASE_PATH, linha.to_dict())
+                        registro = {
+                            "PV": linha["PV"],
+                            "Cliente": linha.get("Cliente", ""),
+                            "CODIGO_PV": linha["CODIGO_PV"],
+                            "Processo": linha["Processo"],
+                            "Horas": linha["Horas"],
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "Sistema",
+                            "Observacao": "",
+                            "Status_Baixa": "ATIVA",
+                            "Data_Estorno": "",
+                            "Motivo_Estorno": ""
+                        }
+
+                        salvar_baixa_operacional(BASE_PATH, registro)
+
+                    st.session_state["lote_select"] = []
 
                     st.cache_data.clear()
                     st.rerun()
 
         st.divider()
-
 
 
 
