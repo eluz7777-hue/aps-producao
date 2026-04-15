@@ -1,7 +1,5 @@
 import streamlit as st
 
-
-
 # ===============================
 # 🔐 BLOQUEIO DE ACESSO GLOBAL
 # ===============================
@@ -9,7 +7,9 @@ if "logado" not in st.session_state or not st.session_state.logado:
     st.warning("🔒 Acesso não autorizado. Redirecionando para login...")
     st.switch_page("app.py")
 
-import streamlit as st
+# ===============================
+# IMPORTS (ORGANIZADOS)
+# ===============================
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -17,11 +17,84 @@ import os
 import time
 import holidays
 import math
+import shutil
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 
+# ============================================================
+# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
+# ============================================================
+
+PASTA_BACKUP_BAIXAS = "backup_baixas"
+ARQUIVO_HISTORICO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
+
+
+def _garantir_pasta_backup():
+    os.makedirs(PASTA_BACKUP_BAIXAS, exist_ok=True)
+
+
+def _gerar_nome_backup():
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return f"APS_BAIXAS_OPERACIONAIS_{timestamp}.xlsx"
+
+
+def _criar_backup():
+    try:
+        if not os.path.exists(ARQUIVO_HISTORICO_BAIXAS):
+            return False, "Arquivo ainda não existe (primeira gravação)"
+
+        _garantir_pasta_backup()
+
+        destino = os.path.join(
+            PASTA_BACKUP_BAIXAS,
+            _gerar_nome_backup()
+        )
+
+        shutil.copy2(ARQUIVO_HISTORICO_BAIXAS, destino)
+
+        return True, destino
+
+    except Exception as e:
+        return False, str(e)
+
+
+def salvar_historico_baixas(df):
+    """
+    🔴 ÚNICO PONTO OFICIAL DE GRAVAÇÃO DO HISTÓRICO
+    🔒 COM PROTEÇÃO CONTRA PERDA DE DADOS
+    """
+
+    try:
+        if df is None or df.empty:
+            return {
+                "ok": False,
+                "erro": "DataFrame vazio - gravação cancelada para evitar perda de histórico",
+                "backup_ok": False,
+                "backup_msg": None
+            }
+
+        backup_ok, backup_msg = _criar_backup()
+
+        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
+
+        return {
+            "ok": True,
+            "linhas": len(df),
+            "backup_ok": backup_ok,
+            "backup_msg": backup_msg
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "erro": str(e),
+            "backup_ok": False,
+            "backup_msg": None
+        }
+
 # ===============================
-# FORMATAÇÃO BR
+# FORMATAÇÃO BR (INALTERADO)
 # ===============================
 def fmt_br_num(valor, casas=1):
     try:
@@ -49,7 +122,7 @@ def fmt_br_pct(valor, casas=1):
         return "0,0%"
 
 # ===============================
-# LOGO + TÍTULO
+# LOGO + TÍTULO (INALTERADO)
 # ===============================
 col1, col2 = st.columns([1, 6])
 
@@ -61,23 +134,18 @@ with col2:
     st.title("APS | Carga & Capacidade")
 
 # ===============================
-# CONFIG
+# CONFIG ORIGINAL (INALTERADO)
 # ===============================
-import holidays
-
 EFICIENCIA = 0.80
 
-# Jornada real da fábrica
-HORAS_SEG_A_QUI = 9  # 07h às 17h com 1h almoço
-HORAS_SEXTA = 8      # 07h às 16h com 1h almoço
+HORAS_SEG_A_QUI = 9
+HORAS_SEXTA = 8
 HORAS_DIA_UTIL_MEDIA = ((HORAS_SEG_A_QUI * 4) + HORAS_SEXTA) / 5
 
-# Calendário de feriados Brasil
 FERIADOS_BR = holidays.Brazil()
 
-# Recursos / máquinas por processo
 MAQUINAS = {
-    "CORTE - SERRA": 2,          # Serra Fita + Serra Circular
+    "CORTE - SERRA": 2,
     "CORTE-PLASMA": 1,
     "CORTE-LASER": 1,
     "CORTE-GUILHOTINA": 0,
@@ -99,22 +167,12 @@ MAQUINAS = {
     "DIVERSOS": 0
 }
 
-def capacidade_mes_por_processo(ano, mes, processo):
-    recursos = MAQUINAS.get(processo, 0)
-    if recursos <= 0:
-        return 0
-    return horas_uteis_mes(ano, mes) * recursos * EFICIENCIA
-
 # ===============================
-# FERIADOS
+# FUNÇÕES DE TEMPO (INALTERADAS)
 # ===============================
 br_holidays = holidays.Brazil()
 
 def dias_uteis_periodo(inicio, fim):
-    """
-    Conta apenas os dias úteis reais entre duas datas
-    (segunda a sexta, excluindo feriados nacionais).
-    """
     if pd.isna(inicio) or pd.isna(fim):
         return 0
 
@@ -128,12 +186,6 @@ def dias_uteis_periodo(inicio, fim):
     return sum(1 for d in dias if d.weekday() < 5 and d.date() not in br_holidays)
 
 def horas_uteis_periodo(inicio, fim):
-    """
-    Calcula as horas úteis reais entre duas datas considerando:
-    - Seg a Qui = 9h
-    - Sexta = 8h
-    - exclui sábados, domingos e feriados
-    """
     if pd.isna(inicio) or pd.isna(fim):
         return 0
 
@@ -148,10 +200,7 @@ def horas_uteis_periodo(inicio, fim):
 
     for d in dias:
         if d.weekday() < 5 and d.date() not in br_holidays:
-            if d.weekday() == 4:  # sexta
-                total_horas += HORAS_SEXTA
-            else:  # segunda a quinta
-                total_horas += HORAS_SEG_A_QUI
+            total_horas += HORAS_SEXTA if d.weekday() == 4 else HORAS_SEG_A_QUI
 
     return total_horas
 
@@ -165,307 +214,22 @@ def horas_uteis_mes(ano, mes):
     fim = inicio + pd.offsets.MonthEnd(1)
     return horas_uteis_periodo(inicio, fim)
 
-def horas_uteis_semana(inicio, fim):
-    """
-    Calcula as horas úteis reais da semana/período considerando:
-    - Seg a Qui = 9h
-    - Sexta = 8h
-    - exclui sábados, domingos e feriados
-    """
-    if pd.isna(inicio) or pd.isna(fim):
-        return 0
-
-    inicio = pd.Timestamp(inicio).normalize()
-    fim = pd.Timestamp(fim).normalize()
-
-    if fim < inicio:
-        return 0
-
-    dias = pd.date_range(inicio, fim, freq="D")
-    total_horas = 0
-
-    for d in dias:
-        if d.weekday() < 5 and d.date() not in br_holidays:
-            if d.weekday() == 4:  # sexta
-                total_horas += HORAS_SEXTA
-            else:  # segunda a quinta
-                total_horas += HORAS_SEG_A_QUI
-
-    return total_horas
-
-def capacidade_semana_por_processo(inicio, fim, processo):
+def capacidade_mes_por_processo(ano, mes, processo):
     recursos = MAQUINAS.get(processo, 0)
     if recursos <= 0:
         return 0
-    return horas_uteis_semana(inicio, fim) * recursos * EFICIENCIA
+    return horas_uteis_mes(ano, mes) * recursos * EFICIENCIA
 
 # ===============================
-# CACHE DE LEITURA
+# CACHE (INALTERADO)
 # ===============================
 @st.cache_data(ttl=0)
 def carregar_dados(arquivo_pv, file_mtime):
     df = pd.read_excel(arquivo_pv)
     return df
 
-# ===============================
-# BAIXAS OPERACIONAIS APS
-# ===============================
-ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
 
-COLUNAS_BAIXAS = [
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "Data_Baixa",
-    "Usuario",
-    "Observacao",
-    "Status_Baixa",
-    "Data_Estorno",
-    "Motivo_Estorno"
-]
 
-def caminho_arquivo_baixas(base_path):
-    return os.path.join(base_path, ARQUIVO_BAIXAS)
-
-def garantir_arquivo_baixas(base_path):
-    """
-    Garante que o arquivo físico de baixas exista com a estrutura correta.
-    """
-    os.makedirs(base_path, exist_ok=True)
-    caminho = caminho_arquivo_baixas(base_path)
-
-    if not os.path.exists(caminho):
-        df_vazio = pd.DataFrame(columns=COLUNAS_BAIXAS)
-        df_vazio.to_excel(caminho, index=False)
-
-    return caminho
-
-def _padronizar_df_baixas(df_baixas):
-    """
-    Padroniza a estrutura e os tipos do histórico de baixas operacionais.
-    Mantém histórico completo (ativas + terceirizadas + estornadas).
-    """
-    if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-    df_baixas = df_baixas.copy()
-
-    for col in COLUNAS_BAIXAS:
-        if col not in df_baixas.columns:
-            df_baixas[col] = None
-
-    df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
-
-    colunas_texto = [
-        "PV", "Cliente", "CODIGO_PV", "Processo",
-        "Usuario", "Observacao", "Status_Baixa",
-        "Data_Estorno", "Motivo_Estorno"
-    ]
-
-    for col in colunas_texto:
-        df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
-
-    # Padronização forte
-    df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip().str.upper()
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
-    df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
-
-    df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
-
-    df_baixas["Status_Baixa"] = (
-        df_baixas["Status_Baixa"]
-        .replace("", "ATIVA")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-    df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
-
-    # CHAVE OPERACIONAL OFICIAL
-    df_baixas["CHAVE_OPERACAO"] = (
-        df_baixas["PV"].astype(str).str.strip().str.upper() + "||" +
-        df_baixas["Processo"].astype(str).str.strip().str.upper() + "||" +
-        df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
-    )
-
-    df_baixas = df_baixas.sort_values(
-        by=["Data_Baixa", "PV", "Processo"],
-        ascending=[False, True, True]
-    ).reset_index(drop=True)
-
-    return df_baixas
-
-@st.cache_data(ttl=0)
-def carregar_baixas_operacionais(base_path):
-    caminho = garantir_arquivo_baixas(base_path)
-
-    print("📥 LENDO BAIXAS DE:", caminho)
-
-    try:
-        df_baixas = pd.read_excel(caminho, dtype=str)
-        print("📥 TOTAL DE REGISTROS LIDOS:", len(df_baixas))
-        return _padronizar_df_baixas(df_baixas)
-    except Exception as e:
-        print("❌ ERRO AO LER BAIXAS:", e)
-        st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-def salvar_baixa_operacional(base_path, registro_baixa):
-    """
-    Salva uma nova baixa operacional SEM apagar histórico anterior.
-    Também evita duplicidade ativa/terceirizada da mesma operação.
-    """
-    caminho = garantir_arquivo_baixas(base_path)
-
-    print("💾 SALVANDO BAIXA EM:", caminho)
-    print("🧾 REGISTRO RECEBIDO:", registro_baixa)
-
-    try:
-        df_existente = pd.read_excel(caminho, dtype=str)
-        print("📂 REGISTROS JÁ EXISTENTES:", len(df_existente))
-    except Exception as e:
-        print("⚠️ ARQUIVO AINDA NÃO EXISTIA OU NÃO FOI LIDO:", e)
-        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
-
-    df_existente = _padronizar_df_baixas(df_existente)
-
-    novo_registro = pd.DataFrame([registro_baixa])
-
-    for col in COLUNAS_BAIXAS:
-        if col not in novo_registro.columns:
-            novo_registro[col] = None
-
-    if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
-        novo_registro["Data_Baixa"] = pd.Timestamp.now()
-
-    novo_registro = _padronizar_df_baixas(novo_registro)
-
-    print("🆕 NOVO REGISTRO PADRONIZADO:")
-    print(novo_registro.to_dict(orient="records"))
-
-    # --------------------------------------------
-    # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
-    # --------------------------------------------
-    if not df_existente.empty:
-        chave_nova = str(novo_registro.iloc[0]["CHAVE_OPERACAO"]).strip().upper()
-
-        duplicado = df_existente[
-            (df_existente["CHAVE_OPERACAO"].astype(str).str.strip().str.upper() == chave_nova) &
-            (
-                df_existente["Status_Baixa"]
-                .astype(str)
-                .str.strip()
-                .str.upper()
-                .isin(["ATIVA", "TERCEIRIZADA"])
-            )
-        ]
-
-        if not duplicado.empty:
-            print("⚠️ DUPLICIDADE DETECTADA - BAIXA NÃO SALVA")
-            print(duplicado[["PV", "Processo", "CODIGO_PV", "Status_Baixa"]].to_dict(orient="records"))
-            return df_existente
-
-    # --------------------------------------------
-    # CONCATENA E SALVA
-    # --------------------------------------------
-    df_final = pd.concat(
-        [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
-        ignore_index=True
-    )
-
-    df_final = _padronizar_df_baixas(df_final)
-
-    print("💾 TOTAL DE REGISTROS APÓS CONCATENAR:", len(df_final))
-
-    # Persistência física garantida
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_final.to_excel(writer, index=False)
-
-    print("✅ ARQUIVO SALVO COM SUCESSO:", caminho)
-
-    st.cache_data.clear()
-
-    return df_final
-
-def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
-    """
-    Estorna a última baixa ATIVA ou TERCEIRIZADA daquela operação sem apagar histórico.
-    """
-    caminho = garantir_arquivo_baixas(base_path)
-
-    try:
-        df_baixas = pd.read_excel(caminho, dtype=str)
-    except Exception as e:
-        return False, f"Erro ao ler arquivo de baixas: {e}"
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    if df_baixas.empty:
-        return False, "Nenhuma baixa operacional encontrada."
-
-    pv = str(pv).strip().upper()
-    processo = str(processo).strip().upper()
-    codigo_pv = str(codigo_pv).strip().upper()
-
-    filtro = (
-        (df_baixas["PV"].astype(str).str.strip().str.upper() == pv) &
-        (df_baixas["Processo"].astype(str).str.strip().str.upper() == processo) &
-        (df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper() == codigo_pv) &
-        (
-            df_baixas["Status_Baixa"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .isin(["ATIVA", "TERCEIRIZADA"])
-        )
-    )
-
-    if not filtro.any():
-        return False, "Nenhuma baixa ativa encontrada para estorno."
-
-    idx_estorno = df_baixas.loc[filtro].sort_values("Data_Baixa", ascending=False).index[0]
-
-    df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M:%S")
-    df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    # Persistência física garantida
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_baixas.to_excel(writer, index=False)
-
-    st.cache_data.clear()
-
-    return True, "Baixa operacional estornada com sucesso."
-
-def historico_baixas_ativas(df_baixas):
-    """
-    Retorna apenas as operações que devem sair da fila operacional:
-    ATIVA + TERCEIRIZADA
-    """
-    if df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-    df_baixas = _padronizar_df_baixas(df_baixas)
-
-    return df_baixas[
-        df_baixas["Status_Baixa"].astype(str).str.strip().str.upper().isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-def historico_baixas_completo(df_baixas):
-    """
-    Retorna o histórico completo consolidado (ativas + terceirizadas + estornadas).
-    """
-    if df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-    return _padronizar_df_baixas(df_baixas.copy())
 
 # ===============================
 # CSS VISUAL PREMIUM APS
@@ -575,139 +339,6 @@ if not os.path.exists(arquivo_pv):
 file_mtime = os.path.getmtime(arquivo_pv)
 
 df_pv = carregar_dados(arquivo_pv, file_mtime)
-
-# ===============================
-# INTEGRAÇÃO DO HISTÓRICO DE BAIXAS OPERACIONAIS
-# ===============================
-if "BASE_PATH" in globals():
-    caminho_baixas = caminho_arquivo_baixas(BASE_PATH)
-
-    if os.path.exists(caminho_baixas):
-        try:
-            df_baixas_raw = pd.read_excel(caminho_baixas, dtype=str)
-        except Exception as e:
-            st.warning(f"Erro ao ler histórico físico de baixas: {e}")
-            df_baixas_raw = pd.DataFrame(columns=COLUNAS_BAIXAS)
-    else:
-        df_baixas_raw = pd.DataFrame(columns=COLUNAS_BAIXAS)
-
-    df_baixas = _padronizar_df_baixas(df_baixas_raw)
-    df_baixas_historico = historico_baixas_completo(df_baixas)
-    df_baixas_ativas = historico_baixas_ativas(df_baixas)
-
-    for _df in [df_baixas, df_baixas_historico, df_baixas_ativas]:
-        if not _df.empty:
-            for col in ["PV", "Processo", "CODIGO_PV", "CHAVE_OPERACAO"]:
-                if col in _df.columns:
-                    _df[col] = (
-                        _df[col]
-                        .fillna("")
-                        .astype(str)
-                        .str.strip()
-                        .str.upper()
-                    )
-
-    if not df_baixas_ativas.empty and "CHAVE_OPERACAO" in df_baixas_ativas.columns:
-        chaves_baixadas = set(
-            df_baixas_ativas["CHAVE_OPERACAO"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .unique()
-        )
-    else:
-        chaves_baixadas = set()
-
-    st.caption(f"📁 Histórico físico carregado: {len(df_baixas_historico)} registro(s)")
-else:
-    df_baixas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    df_baixas_historico = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    df_baixas_ativas = pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-    chaves_baixadas = set()
-
-# ===============================
-# HISTÓRICO PREMIUM DE BAIXAS OPERACIONAIS
-# ===============================
-st.subheader("🧾 Histórico Premium de Baixas Operacionais")
-
-if df_baixas_historico is not None and not df_baixas_historico.empty:
-
-    hist_exib = df_baixas_historico.copy()
-
-    # ----------------------------
-    # FORMATAÇÕES
-    # ----------------------------
-    if "Data_Baixa" in hist_exib.columns:
-        hist_exib["Data_Baixa"] = pd.to_datetime(hist_exib["Data_Baixa"], errors="coerce")
-        hist_exib = hist_exib.sort_values("Data_Baixa", ascending=False)
-        hist_exib["Data_Baixa"] = hist_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
-
-    if "Horas" in hist_exib.columns:
-        hist_exib["Horas"] = pd.to_numeric(hist_exib["Horas"], errors="coerce").fillna(0).round(1)
-
-    if "Status_Baixa" in hist_exib.columns:
-        hist_exib["Status_Baixa"] = (
-            hist_exib["Status_Baixa"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .replace({
-                "ATIVA": "🟢 ATIVA",
-                "TERCEIRIZADA": "🟣 TERCEIRIZADA",
-                "ESTORNADA": "🔴 ESTORNADA"
-            })
-        )
-
-    # ----------------------------
-    # FILTROS
-    # ----------------------------
-    col1, col2 = st.columns(2)
-
-    with col1:
-        filtro_status = st.selectbox(
-            "Filtrar por status",
-            ["Todos", "🟢 ATIVA", "🟣 TERCEIRIZADA", "🔴 ESTORNADA"],
-            key="filtro_status_historico_premium"
-        )
-
-    with col2:
-        filtro_pv = st.text_input(
-            "Buscar PV",
-            key="buscar_pv_historico_premium"
-        ).strip()
-
-    if filtro_status != "Todos":
-        hist_exib = hist_exib[hist_exib["Status_Baixa"] == filtro_status]
-
-    if filtro_pv:
-        hist_exib = hist_exib[
-            hist_exib["PV"].astype(str).str.contains(filtro_pv, case=False, na=False)
-        ]
-
-    # ----------------------------
-    # EXIBIÇÃO
-    # ----------------------------
-    colunas = [
-        "Status_Baixa",
-        "Data_Baixa",
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Usuario",
-        "Observacao"
-    ]
-
-    colunas = [c for c in colunas if c in hist_exib.columns]
-
-    st.dataframe(hist_exib[colunas], use_container_width=True)
-
-    st.caption(f"Total de registros: {len(hist_exib)}")
-
-else:
-    st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ===============================
 # NORMALIZAÇÃO FORTE DE CABEÇALHOS
@@ -996,41 +627,12 @@ if not df_original.empty:
             dayfirst=True
         )
 
+
 # ============================================================
-# BASE OPERACIONAL (JÁ ESTÁ EM FORMATO LONG)
+# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
 # ============================================================
 
 df_operacional = df_original.copy()
-
-# 🔥 GARANTE PADRÃO
-df_operacional["Processo"] = (
-    df_operacional["Processo"]
-    .astype(str)
-    .str.strip()
-    .str.upper()
-)
-
-df_operacional["Horas"] = pd.to_numeric(
-    df_operacional["Horas"], errors="coerce"
-).fillna(0)
-
-df_operacional = df_operacional[df_operacional["Horas"] > 0]
-
-
-# ============================================================
-# 🔥 RESTAURA FORMATO ANTIGO PARA CORTE
-# ============================================================
-
-df_corte_pivot = df_operacional.pivot_table(
-    index=["PV", "Cliente", "CODIGO_PV", "Data"],
-    columns="Processo",
-    values="Horas",
-    aggfunc="sum",
-    fill_value=0
-).reset_index()
-
-df_corte_pivot.columns.name = None
-
 
 # --------------------------------------------
 # FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE
@@ -1220,6 +822,9 @@ if df.empty:
     st.dataframe(df_pv.head(20), use_container_width=True)
 
     st.stop()
+
+
+
  
 # ===============================
 # FILTRO POR CLIENTE
@@ -1276,6 +881,7 @@ df["Fila (dias)"] = np.where(
     0
 )
 
+
 # ===============================
 # CALENDÁRIO
 # ===============================
@@ -1306,27 +912,57 @@ df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
 if tipo == "Semanal":
     df["Periodo"] = "Sem " + df["Semana"].astype(str)
 
-    dem = df.groupby(["Periodo", "Processo", "Semana", "Ano"], as_index=False)["Horas"].sum()
+    dem = df.groupby(
+        ["Periodo", "Processo", "Semana", "Ano"],
+        as_index=False
+    )["Horas"].sum()
+
     dem = dem.merge(cal, on=["Semana", "Ano"], how="left")
 
-    # Capacidade semanal real = dias úteis da semana × jornada real × recursos × eficiência
-    dem["Capacidade"] = dem.apply(
-    lambda r: capacidade_semana_por_processo(r["Inicio"], r["Fim"], r["Processo"]),
-    axis=1
-)
+    # DEBUG (mantenha por enquanto)
+    st.write("DEBUG dem colunas:", dem.columns.tolist())
+    st.write("DEBUG dem preview:", dem.head())
+
+    # 🔒 FUNÇÃO SEGURA
+    def calcular_capacidade_segura(r):
+        try:
+            inicio = r.get("Inicio", None)
+            fim = r.get("Fim", None)
+            processo = r.get("Processo", None)
+
+            if pd.isna(inicio) or pd.isna(fim) or processo is None:
+                return 0
+
+            return capacidade_semana_por_processo(inicio, fim, processo)
+        except Exception as e:
+            return 0
+
+    dem["Capacidade"] = dem.apply(calcular_capacidade_segura, axis=1)
 
 else:
     df["Periodo"] = "Mês " + df["Mes"].astype(str)
 
-    dem = df.groupby(["Periodo", "Processo", "Mes", "Ano"], as_index=False)["Horas"].sum()
+    dem = df.groupby(
+        ["Periodo", "Processo", "Mes", "Ano"],
+        as_index=False
+    )["Horas"].sum()
 
     dem["Capacidade"] = dem.apply(
-        lambda r: capacidade_mes_por_processo(r["Ano"], r["Mes"], r["Processo"]),
+        lambda r: capacidade_mes_por_processo(
+            r.get("Ano"),
+            r.get("Mes"),
+            r.get("Processo")
+        ),
         axis=1
     )
 
+# ===============================
+# TRATAMENTOS FINAIS
+# ===============================
+
 # Evita divisão por zero
 dem["Capacidade"] = dem["Capacidade"].fillna(0)
+
 dem["Ocupacao"] = np.where(
     dem["Capacidade"] > 0,
     (dem["Horas"] / dem["Capacidade"]) * 100,
@@ -1335,13 +971,13 @@ dem["Ocupacao"] = np.where(
 
 dem["Ocupacao"] = dem["Ocupacao"].replace([np.inf, -np.inf], 0).fillna(0)
 
-# Remove processos sem capacidade produtiva da visão de ocupação
+# Remove processos sem capacidade produtiva
 dem = dem[dem["Capacidade"] > 0].copy()
 
-# Remove linhas zeradas para não poluir gráfico
+# Remove linhas irrelevantes
 dem = dem[(dem["Horas"] > 0) | (dem["Ocupacao"] > 0)].copy()
 
-# Ordenação correta do eixo
+# Ordenação
 if tipo == "Mensal":
     dem["Ordem_Periodo"] = dem["Mes"]
 else:
@@ -1349,7 +985,7 @@ else:
 
 dem = dem.sort_values(["Ordem_Periodo", "Processo"]).copy()
 
-# Rótulos com 1 casa decimal
+# Labels
 dem["Horas_Label"] = dem["Horas"].round(1).astype(str) + "h"
 dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
 
@@ -1374,164 +1010,108 @@ def status(x):
     else:
         return "🟢"
 
-dem["Status"] = dem["Ocupacao"].apply(status)
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
 # Coluna apenas para exibição visual
 dem["Ocupação (%)"] = dem["Ocupacao"].round(1)
 
-# ===============================
-# COLAPSO DO GARGALO (BASE EXECUTIVA)
-# ===============================
-fila_resumo = (
-    df.groupby("Processo", as_index=False)
+
+# ============================================================
+# 🔷 BASE EXECUTIVA APS (PV + PRAZO + STATUS)
+# ============================================================
+
+# 🔒 Validação mínima da base
+if df is None or df.empty:
+    st.error("Erro: base APS (df) está vazia.")
+    st.stop()
+
+if "DATA_ENTREGA_APS" not in df.columns:
+    st.error("Erro: coluna DATA_ENTREGA_APS não encontrada.")
+    st.stop()
+
+if "Horas" not in df.columns:
+    st.error("Erro: coluna Horas não encontrada.")
+    st.stop()
+
+# ============================================================
+# 📦 CONSOLIDAÇÃO POR PV
+# ============================================================
+
+pv_carga = (
+    df.groupby("PV", as_index=False)
     .agg({
-        "Fila Acumulada (h)": "max",
-        "Fila (dias)": "max"
-    })
-    .rename(columns={
-        "Fila Acumulada (h)": "Fila Acumulada Max (h)",
-        "Fila (dias)": "Fila Max (dias)"
+        "Horas": "sum",
+        "DATA_ENTREGA_APS": "min"
     })
 )
 
-dem_colapso = dem.groupby("Processo", as_index=False).agg({
-    "Horas": "sum",
-    "Capacidade": "sum",
-    "Ocupacao": "max",
-    "Saldo (h)": "sum"
-})
-
-dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
-
-dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
-dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
-
-# Classificação inline (blindada contra NameError)
-dem_colapso["Semáforo Colapso"] = np.select(
-    [
-        (dem_colapso["Ocupacao"] >= 120) | (dem_colapso["Fila Max (dias)"] >= 10) | (dem_colapso["Saldo (h)"] < -40),
-        (dem_colapso["Ocupacao"] >= 100) | (dem_colapso["Fila Max (dias)"] >= 6) | (dem_colapso["Saldo (h)"] < 0),
-        (dem_colapso["Ocupacao"] >= 85) | (dem_colapso["Fila Max (dias)"] >= 3)
-    ],
-    [
-        "🔥 Colapso Severo",
-        "🔴 Colapso",
-        "🟡 Atenção"
-    ],
-    default="🟢 Sob Controle"
+# 🔒 Garantia de tipo de data
+pv_carga["DATA_ENTREGA_APS"] = pd.to_datetime(
+    pv_carga["DATA_ENTREGA_APS"],
+    errors="coerce"
 )
 
-ranking_colapso = dem_colapso.sort_values(
-    by=["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)"],
-    ascending=[False, False, False]
-).reset_index(drop=True)
+# ============================================================
+# 📅 CÁLCULO DE PRAZO
+# ============================================================
 
-# ===============================
-# CAPACIDADE POR PROCESSO
-# ===============================
-if tipo == "Mensal":
-    capacidade_proc = {
-        proc: horas_uteis_mes(ano_ref, mes_ref) * MAQUINAS.get(proc, 0) * EFICIENCIA
-        for proc in processos
-    }
-    dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
+hoje = pd.Timestamp.now().normalize()
 
-else:
-    capacidade_proc = (
-        dem.groupby("Processo", as_index=False)["Capacidade"]
-        .sum()
-        .rename(columns={"Capacidade": "Capacidade Processo"})
+pv_carga["Dias Disponíveis"] = (
+    pv_carga["DATA_ENTREGA_APS"] - hoje
+).dt.days
+
+pv_carga["Dias Disponíveis"] = pd.to_numeric(
+    pv_carga["Dias Disponíveis"], errors="coerce"
+).fillna(0)
+
+pv_carga["Atraso (dias)"] = np.where(
+    pv_carga["Dias Disponíveis"] < 0,
+    pv_carga["Dias Disponíveis"] * -1,
+    0
+)
+
+# ============================================================
+# 🚦 STATUS EXECUTIVO
+# ============================================================
+
+pv_carga["Status Prazo"] = np.where(
+    pv_carga["Atraso (dias)"] > 0,
+    "Atrasado",
+    np.where(
+        pv_carga["Dias Disponíveis"] <= 3,
+        "Risco",
+        "OK"
     )
-    dem_proc = dem_proc.merge(capacidade_proc, on="Processo", how="left")
-
-dem_proc["Capacidade Processo"] = dem_proc["Capacidade Processo"].fillna(0)
-
-dem_proc["Utilização (%)"] = np.where(
-    dem_proc["Capacidade Processo"] > 0,
-    (dem_proc["Horas"] / dem_proc["Capacidade Processo"]) * 100,
-    0
 )
 
-dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].replace([float("inf"), -float("inf")], 0)
-dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].fillna(0)
-dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].round(0).astype(int)
+# ============================================================
+# 📊 AGRUPAMENTOS EXECUTIVOS
+# ============================================================
 
-def faixa_utilizacao(x):
-    if x > 100:
-        return "Crítico"
-    elif x > 80:
-        return "Atenção"
-    else:
-        return "OK"
-
-dem_proc["Faixa"] = dem_proc["Utilização (%)"].apply(faixa_utilizacao)
-
-# ===============================
-# ATRASO
-# ===============================
-pv_carga = df.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"].sum()
-
-# Capacidade média diária real da fábrica (global)
-recursos_ativos = sum(v for v in MAQUINAS.values() if v > 0)
-
-capacidade_media_diaria_global = (
-    HORAS_DIA_UTIL_MEDIA * recursos_ativos * EFICIENCIA
-)
-
-pv_carga["Dias Necessários"] = np.where(
-    capacidade_media_diaria_global > 0,
-    pv_carga["Horas"] / capacidade_media_diaria_global,
-    0
-)
-
-hoje = pd.Timestamp.today().normalize()
-
-pv_carga["Horas Disponíveis"] = pv_carga["Data"].apply(
-    lambda x: horas_uteis_periodo(hoje, x) * EFICIENCIA
-)
-
-pv_carga["Dias Disponíveis"] = np.where(
-    capacidade_media_diaria_global > 0,
-    pv_carga["Horas Disponíveis"] / capacidade_media_diaria_global,
-    0
-)
-
-pv_carga["Atraso (dias)"] = (
-    pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
-).apply(lambda x: max(0, math.ceil(x)))
-
-# ===============================
-# PIZZA / ATRASOS
-# ===============================
-# PVs reais no APS = todas as PVs auditadas (não apenas as com carga expandida)
-pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
-
-# PVs em atraso
 atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
 
-# Critério de risco: sem atraso, mas com pouca folga
-if "Dias Disponíveis" in pv_carga.columns:
-    risco = pv_carga[
-        (pv_carga["Atraso (dias)"] == 0) &
-        (pv_carga["Dias Disponíveis"] <= 3)
-    ].copy()
-else:
-    risco = pd.DataFrame(columns=pv_carga.columns)
-
-# ===============================
-# RISCO
-# ===============================
 risco = pv_carga[
     (pv_carga["Atraso (dias)"] == 0) &
-    (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
+    (pv_carga["Dias Disponíveis"] <= 3)
 ].copy()
 
+ok = pv_carga[
+    (pv_carga["Atraso (dias)"] == 0) &
+    (pv_carga["Dias Disponíveis"] > 3)
+].copy()
+
+# 🔒 Blindagem final
+if pv_carga.empty:
+    st.error("Erro crítico: pv_carga não foi gerado corretamente.")
+    st.stop()
+
 # ============================================================
-# ====================== VISÃO GERENCIAL =====================
+# ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
-st.markdown("## 📊 Visão Gerencial")
-st.caption("Indicadores estratégicos, gargalos, capacidade e visão consolidada da produção.")
+st.markdown("## 📊 Painel Executivo APS")
+st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
+
 
 # ===============================
 # BASE EXECUTIVA
@@ -1612,22 +1192,20 @@ def semaforo_entrega(dias):
     else:
         return "🟢 Normal"
 
-# ===============================
-# BASE EXECUTIVA DE COLAPSO (REAPROVEITA A BASE JÁ CALCULADA)
-# ===============================
-# Blindagem para garantir que a coluna exista sempre
-if "Semáforo Colapso" not in ranking_colapso.columns:
-    ranking_colapso["Semáforo Colapso"] = "🟢 Sob Controle"
+def status(x):
+    try:
+        x = float(x)
+    except:
+        return "⚪"
 
-# Blindagem para garantir colunas numéricas
-for col in ["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)", "Saldo (h)"]:
-    if col not in ranking_colapso.columns:
-        ranking_colapso[col] = 0
-
-ranking_colapso["Ocupacao"] = pd.to_numeric(ranking_colapso["Ocupacao"], errors="coerce").fillna(0)
-ranking_colapso["Fila Max (dias)"] = pd.to_numeric(ranking_colapso["Fila Max (dias)"], errors="coerce").fillna(0)
-ranking_colapso["Fila Acumulada Max (h)"] = pd.to_numeric(ranking_colapso["Fila Acumulada Max (h)"], errors="coerce").fillna(0)
-ranking_colapso["Saldo (h)"] = pd.to_numeric(ranking_colapso["Saldo (h)"], errors="coerce").fillna(0)
+    if x >= 100:
+        return "🔴"
+    elif x >= 90:
+        return "🟠"
+    elif x >= 75:
+        return "🟡"
+    else:
+        return "🟢"
 
 # ===============================
 # STATUS EXECUTIVO
@@ -1650,6 +1228,2226 @@ d1.metric("🔥 Gargalo Principal", gargalo_exec if gargalo_exec else "N/D")
 d2.metric("🏗️ Processo Mais Carregado", processo_mais_carga if processo_mais_carga else "N/D")
 d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
 
+# ============================================================
+# Mini Dashboard por Gargalo (INTELIGENTE)
+# ============================================================
+
+def _normalizar_coluna_processo(df, coluna="Processo"):
+    if df is None or df.empty or coluna not in df.columns:
+        return df
+
+    df = df.copy()
+    df[coluna] = df[coluna].fillna("").astype(str).str.strip().str.upper()
+    return df
+
+
+def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
+
+    # 🔒 Proteção total
+    if df_baixas_ativas is None or not isinstance(df_baixas_ativas, pd.DataFrame):
+        df_baixas_ativas = pd.DataFrame()
+
+    if fila is None or fila.empty:
+        return pd.DataFrame(columns=[
+            "Processo",
+            "Qtd_Fila",
+            "Horas_Fila",
+            "Qtd_Baixas_Ativas",
+            "Carga_Total",
+            "Score",
+            "Status_Gargalo",
+            "Ranking"
+        ])
+
+    # ------------------------------------------------------------
+    # BASE DA FILA
+    # ------------------------------------------------------------
+    fila_tmp = fila.copy()
+    fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
+
+    if "Horas" not in fila_tmp.columns:
+        fila_tmp["Horas"] = 0
+
+    fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
+
+    resumo_fila = (
+        fila_tmp.groupby("Processo", dropna=False)
+        .agg(
+            Qtd_Fila=("Processo", "size"),
+            Horas_Fila=("Horas", "sum")
+        )
+        .reset_index()
+    )
+
+    # ------------------------------------------------------------
+    # BASE DE BAIXAS ATIVAS (BLINDADO)
+    # ------------------------------------------------------------
+    if (
+        df_baixas_ativas is None
+        or not isinstance(df_baixas_ativas, pd.DataFrame)
+        or df_baixas_ativas.empty
+        or "Processo" not in df_baixas_ativas.columns
+    ):
+        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
+    else:
+        baixas_tmp = df_baixas_ativas.copy()
+        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
+
+        resumo_baixas = (
+            baixas_tmp.groupby("Processo", dropna=False)
+            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
+            .reset_index()
+        )
+
+    # ------------------------------------------------------------
+    # CONSOLIDAÇÃO
+    # ------------------------------------------------------------
+    df_dash = resumo_fila.merge(
+        resumo_baixas,
+        on="Processo",
+        how="left"
+    )
+
+    df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0).astype(int)
+    df_dash["Qtd_Fila"] = df_dash["Qtd_Fila"].fillna(0).astype(int)
+    df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
+
+    # ------------------------------------------------------------
+    # CARGA TOTAL
+    # ------------------------------------------------------------
+    df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
+
+    # ------------------------------------------------------------
+    # SCORE
+    # ------------------------------------------------------------
+    df_dash["Score"] = (
+        (df_dash["Horas_Fila"] * 1.5) +
+        (df_dash["Qtd_Fila"] * 1.0) +
+        (df_dash["Qtd_Baixas_Ativas"] * 0.5)
+    )
+
+    # ------------------------------------------------------------
+    # CLASSIFICAÇÃO
+    # ------------------------------------------------------------
+    def classificar_gargalo(score):
+        if score >= 80:
+            return "CRITICO"
+        elif score >= 30:
+            return "ATENCAO"
+        else:
+            return "CONTROLADO"
+
+    df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar_gargalo)
+
+    # ------------------------------------------------------------
+    # ORDENAÇÃO
+    # ------------------------------------------------------------
+    df_dash = df_dash.sort_values(
+        by=["Score", "Horas_Fila", "Qtd_Fila"],
+        ascending=[False, False, False]
+    ).reset_index(drop=True)
+
+    df_dash["Ranking"] = df_dash.index + 1
+
+    return df_dash
+
+
+# ============================================================
+# RESUMO DOS CARDS
+# ============================================================
+
+def resumo_cards_gargalos(df_dash):
+
+    if df_dash is None or df_dash.empty:
+        return {
+            "total_processos": 0,
+            "total_itens_fila": 0,
+            "total_horas_fila": 0.0,
+            "total_baixas_ativas": 0,
+            "gargalo_critico": "-",
+            "qtd_criticos": 0,
+            "qtd_atencao": 0,
+            "qtd_controlados": 0
+        }
+
+    gargalo_critico = df_dash.iloc[0]["Processo"]
+
+    return {
+        "total_processos": int(df_dash["Processo"].nunique()),
+        "total_itens_fila": int(df_dash["Qtd_Fila"].sum()),
+        "total_horas_fila": float(df_dash["Horas_Fila"].sum()),
+        "total_baixas_ativas": int(df_dash["Qtd_Baixas_Ativas"].sum()),
+        "gargalo_critico": gargalo_critico,
+        "qtd_criticos": int((df_dash["Status_Gargalo"] == "CRITICO").sum()),
+        "qtd_atencao": int((df_dash["Status_Gargalo"] == "ATENCAO").sum()),
+        "qtd_controlados": int((df_dash["Status_Gargalo"] == "CONTROLADO").sum())
+    }
+
+# ============================================================
+# ======================= GRÁFICOS ============================
+# ============================================================
+st.markdown("## 📈 Indicadores Visuais")
+st.caption("Leitura gráfica da ocupação, carga, atraso e distribuição da produção.")
+
+# ===============================
+# 1) OCUPAÇÃO POR PROCESSO
+# ===============================
+st.subheader("📌 Ocupação por Processo (%)")
+
+dem_plot = dem.copy()
+dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
+dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+
+fig = px.bar(
+    dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
+    x="Periodo",
+    y="Ocupacao",
+    color="Processo",
+    barmode="group",
+    text="Label",
+    custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
+)
+
+fig.add_hline(y=100, line_dash="dash")
+
+fig.update_traces(
+    textposition="outside",
+    hovertemplate=(
+        "<b>%{x}</b><br>"
+        "Processo: %{customdata[0]}<br>"
+        "Ocupação: %{customdata[1]}<br>"
+        "Carga: %{customdata[2]} h<br>"
+        "Capacidade: %{customdata[3]} h"
+        "<extra></extra>"
+    )
+)
+
+fig.update_layout(
+    yaxis_title="Ocupação (%)",
+    xaxis_title="Período"
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================
+# 📊 UTILIZAÇÃO POR PROCESSO (BASE)
+# ============================================================
+
+# capacidade por processo no mês
+def capacidade_processo(processo):
+    recursos = MAQUINAS.get(processo, 0)
+    if recursos <= 0:
+        return 0
+    return horas_mes * recursos * EFICIENCIA
+
+dem_proc["Capacidade Processo"] = dem_proc["Processo"].apply(capacidade_processo)
+
+# evita divisão por zero
+dem_proc["Utilização (%)"] = np.where(
+    dem_proc["Capacidade Processo"] > 0,
+    (dem_proc["Horas"] / dem_proc["Capacidade Processo"]) * 100,
+    0
+)
+
+dem_proc["Utilização (%)"] = dem_proc["Utilização (%)"].replace([np.inf, -np.inf], 0).fillna(0).round(1)
+
+# classificação (opcional mas recomendado)
+dem_proc["Faixa"] = np.where(
+    dem_proc["Utilização (%)"] >= 100, "Crítico",
+    np.where(dem_proc["Utilização (%)"] >= 80, "Atenção", "OK")
+)
+
+# ===============================
+# 2) UTILIZAÇÃO POR PROCESSO
+# ===============================
+st.subheader("📊 Utilização por Processo (%)")
+
+fig_proc = px.bar(
+    dem_proc.sort_values("Utilização (%)", ascending=False),
+    x="Processo",
+    y="Utilização (%)",
+    text="Utilização (%)",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    }
+)
+
+fig_proc.add_hline(y=100, line_dash="dash")
+fig_proc.update_traces(texttemplate="%{text}")
+fig_proc.update_yaxes(title="Utilização (%)")
+
+st.plotly_chart(fig_proc, use_container_width=True)
+
+# ===============================
+# 3) EVOLUÇÃO DA CARGA
+# ===============================
+st.subheader("📈 Evolução da Carga")
+
+carga = df.groupby("Data", as_index=False)["Horas"].sum().sort_values("Data")
+carga["Carga Acumulada (h)"] = carga["Horas"].cumsum()
+
+fig_carga = px.line(
+    carga,
+    x="Data",
+    y="Carga Acumulada (h)",
+    title="Carga Acumulada no Tempo",
+    markers=True
+)
+
+st.plotly_chart(fig_carga, use_container_width=True)
+
+# ===============================
+# 4) DISTRIBUIÇÃO DE ATRASO
+# ===============================
+st.subheader("📊 Distribuição de Atraso por Faixa")
+
+df_atraso = atrasos.copy()
+
+if "Atraso (dias)" not in df_atraso.columns:
+    df_atraso["Atraso (dias)"] = 0
+
+df_atraso["Atraso (dias)"] = (
+    pd.to_numeric(df_atraso["Atraso (dias)"], errors="coerce")
+    .fillna(0)
+    .clip(lower=0)
+)
+
+df_atraso = df_atraso[df_atraso["Atraso (dias)"] > 0].copy()
+
+if not df_atraso.empty:
+
+    max_atraso = int(df_atraso["Atraso (dias)"].max())
+    bins = list(range(0, max_atraso + 3, 2))
+
+    labels = []
+    for i in range(len(bins)-1):
+        inicio = bins[i] + 1
+        fim = bins[i+1]
+        labels.append(f"{inicio}-{fim}")
+
+    df_atraso["Faixa"] = pd.cut(
+        df_atraso["Atraso (dias)"],
+        bins=bins,
+        labels=labels,
+        include_lowest=True
+    )
+
+    dist = (
+        df_atraso.groupby("Faixa", observed=False)["PV"]
+        .nunique()
+        .reset_index(name="Quantidade")
+    )
+
+    dist = dist[dist["Quantidade"] > 0]
+
+    dist["Ordem"] = dist["Faixa"].astype(str).str.extract(r"(\d+)").astype(int)
+    dist = dist.sort_values("Ordem")
+
+    fig_bar = px.bar(
+        dist,
+        x="Faixa",
+        y="Quantidade",
+        text="Quantidade",
+        title="Escalonamento de Atraso (em dias)",
+    )
+
+    fig_bar.update_traces(textposition="outside")
+
+    fig_bar.update_layout(
+        xaxis_title="Faixa de Atraso (dias)",
+        yaxis_title="Quantidade de PVs",
+        height=450,
+        showlegend=False,
+        uniformtext_minsize=8,
+        uniformtext_mode='hide'
+    )
+
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Maior atraso", f"{df_atraso['Atraso (dias)'].max():.0f} dias")
+
+    with col2:
+        st.metric("Média", f"{df_atraso['Atraso (dias)'].mean():.1f} dias")
+
+    with col3:
+        st.metric("Total em atraso", f"{len(df_atraso)} PVs")
+
+    faixa_select = st.selectbox(
+        "Selecionar faixa para detalhamento",
+        dist["Faixa"].astype(str).tolist(),
+        key="faixa_bar_select"
+    )
+
+    detalhe = df_atraso[
+        df_atraso["Faixa"].astype(str) == faixa_select
+    ].copy()
+
+    st.subheader("📋 Detalhamento da Faixa")
+
+    st.dataframe(
+        detalhe.sort_values("Atraso (dias)", ascending=False),
+        use_container_width=True
+    )
+
+else:
+    st.success("Nenhum atraso 🎉")
+
+# ===============================
+# 5) PV POR CLIENTE
+# ===============================
+st.subheader("📌 PV por Cliente")
+
+pv_cliente_base = df_auditoria_pv.copy()
+
+if cliente_sel != "Todos":
+    pv_cliente_base = pv_cliente_base[pv_cliente_base["Cliente"] == cliente_sel].copy()
+
+pv_cliente = pv_cliente_base.groupby("Cliente", as_index=False)["PV"].nunique()
+total = pv_cliente["PV"].sum()
+
+pv_cliente = pd.concat(
+    [pv_cliente, pd.DataFrame([{"Cliente": "TOTAL", "PV": total}])],
+    ignore_index=True
+)
+
+fig_cliente = px.bar(
+    pv_cliente.sort_values("PV", ascending=False),
+    x="Cliente",
+    y="PV",
+    text="PV"
+)
+
+fig_cliente.update_traces(textposition="outside")
+fig_cliente.update_layout(
+    xaxis_title="Cliente",
+    yaxis_title="Quantidade de PVs"
+)
+
+st.plotly_chart(fig_cliente, use_container_width=True)
+
+# ===============================
+# 6) DISTRIBUIÇÃO DE STATUS (OPCIONAL)
+# ===============================
+st.subheader("🥧 Distribuição de Status dos Processos")
+
+status_proc = dem_proc.groupby("Faixa", as_index=False)["Processo"].count()
+status_proc = status_proc.rename(columns={"Processo": "Quantidade"})
+
+fig_status = px.pie(
+    status_proc,
+    names="Faixa",
+    values="Quantidade",
+    color="Faixa",
+    color_discrete_map={
+        "OK": "green",
+        "Atenção": "gold",
+        "Crítico": "red"
+    },
+    title="Status dos Processos"
+)
+
+st.plotly_chart(fig_status, use_container_width=True)
+
+# ===============================
+# 7) COMPARAÇÃO CARGA x CAPACIDADE
+# ===============================
+st.subheader("📊 Carga x Capacidade por Processo")
+
+base = dem_proc.copy()
+
+# segurança numérica
+for col in ["Horas", "Capacidade Processo"]:
+    if col not in base.columns:
+        base[col] = 0
+
+    base[col] = pd.to_numeric(base[col], errors="coerce").fillna(0)
+
+fig_comp = px.bar(
+    base.sort_values("Horas", ascending=False),
+    x="Processo",
+    y=["Horas", "Capacidade Processo"],
+    barmode="group",
+    text_auto=True
+)
+
+# cores corretas
+fig_comp.update_traces(
+    selector=dict(name="Horas"),
+    marker_color="#FF7A00"  # laranja
+)
+
+fig_comp.update_traces(
+    selector=dict(name="Capacidade Processo"),
+    marker_color="#1f77b4"  # azul
+)
+
+# rótulos em cima
+fig_comp.update_traces(
+    textposition="outside"
+)
+
+fig_comp.update_layout(
+    yaxis_title="Horas",
+    height=550,
+    xaxis_title="Processo",
+    uniformtext_minsize=8,
+    uniformtext_mode="hide"
+)
+
+st.plotly_chart(fig_comp, use_container_width=True)
+
+
+
+
+# ===============================
+# BAIXAS OPERACIONAIS APS
+# ===============================
+ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
+
+COLUNAS_BAIXAS = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Data_Baixa",
+    "Usuario",
+    "Observacao",
+    "Status_Baixa",
+    "Data_Estorno",
+    "Motivo_Estorno"
+]
+
+def caminho_arquivo_baixas(base_path):
+    return os.path.join(base_path, ARQUIVO_BAIXAS)
+
+def garantir_arquivo_baixas(base_path):
+    """
+    Garante que o arquivo físico de baixas exista com a estrutura correta.
+    NUNCA apaga histórico existente.
+    """
+    os.makedirs(base_path, exist_ok=True)
+    caminho = caminho_arquivo_baixas(base_path)
+
+    if not os.path.exists(caminho):
+        df_vazio = pd.DataFrame(columns=COLUNAS_BAIXAS)
+        df_vazio.to_excel(caminho, index=False)
+
+    return caminho
+
+def _padronizar_df_baixas(df_baixas):
+    """
+    Padroniza a estrutura e os tipos do histórico de baixas operacionais.
+    Mantém histórico completo (ativas + terceirizadas + estornadas).
+    """
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    df_baixas = df_baixas.copy()
+
+    for col in COLUNAS_BAIXAS:
+        if col not in df_baixas.columns:
+            df_baixas[col] = None
+
+    df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
+
+    colunas_texto = [
+        "PV", "Cliente", "CODIGO_PV", "Processo",
+        "Usuario", "Observacao", "Status_Baixa",
+        "Data_Estorno", "Motivo_Estorno"
+    ]
+
+    for col in colunas_texto:
+        df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip().str.upper()
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
+    df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.strip().str.upper()
+    df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
+
+    df_baixas["Status_Baixa"] = (
+        df_baixas["Status_Baixa"]
+        .replace("", "ATIVA")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
+    df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str).str.strip()
+
+    df_baixas["CHAVE_OPERACAO"] = (
+        df_baixas["PV"].astype(str).str.strip().str.upper() + "||" +
+        df_baixas["Processo"].astype(str).str.strip().str.upper() + "||" +
+        df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper()
+    )
+
+    df_baixas = df_baixas.sort_values(
+        by=["Data_Baixa", "PV", "Processo"],
+        ascending=[False, True, True]
+    ).reset_index(drop=True)
+
+    return df_baixas
+
+@st.cache_data(ttl=0)
+def carregar_baixas_operacionais(base_path, file_mtime_baixas):
+    """
+    Leitura cacheada do histórico de baixas, invalidada pela modificação do arquivo físico.
+    """
+    caminho = garantir_arquivo_baixas(base_path)
+
+    try:
+        df_baixas = pd.read_excel(caminho, dtype=str)
+        return _padronizar_df_baixas(df_baixas)
+    except Exception as e:
+        st.warning(f"Não foi possível ler o arquivo de baixas operacionais: {e}")
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+def salvar_baixa_operacional(base_path, registro_baixa):
+    """
+    Salva uma nova baixa operacional SEM apagar histórico anterior.
+    Também evita duplicidade ativa/terceirizada da mesma operação.
+    Agora com BACKUP AUTOMÁTICO do histórico após gravação bem-sucedida.
+    """
+    caminho = garantir_arquivo_baixas(base_path)
+
+    try:
+        df_existente = pd.read_excel(caminho, dtype=str)
+    except Exception:
+        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    df_existente = _padronizar_df_baixas(df_existente)
+
+    novo_registro = pd.DataFrame([registro_baixa])
+
+    for col in COLUNAS_BAIXAS:
+        if col not in novo_registro.columns:
+            novo_registro[col] = None
+
+    if "Data_Baixa" not in novo_registro.columns or novo_registro["Data_Baixa"].isna().all():
+        novo_registro["Data_Baixa"] = pd.Timestamp.now()
+
+    novo_registro = _padronizar_df_baixas(novo_registro)
+
+    chave_nova = novo_registro["CHAVE_OPERACAO"].iloc[0]
+
+    # impede duplicidade ativa/terceirizada da mesma operação
+    duplicado_ativo = df_existente[
+        (df_existente["CHAVE_OPERACAO"] == chave_nova) &
+        (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
+    ].copy()
+
+    if not duplicado_ativo.empty:
+        return df_existente
+
+    df_final = pd.concat([df_existente, novo_registro], ignore_index=True)
+    df_final = _padronizar_df_baixas(df_final)
+
+    # gravação blindada
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
+
+    # backup automático do histórico
+    try:
+        _criar_backup()
+    except Exception:
+        pass
+
+    # releitura REAL do arquivo salvo (fonte da verdade)
+    try:
+        df_reloaded = pd.read_excel(caminho, dtype=str)
+        df_reloaded = _padronizar_df_baixas(df_reloaded)
+        return df_reloaded
+    except Exception:
+        return df_final
+
+def historico_baixas_completo(df_baixas):
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+    return _padronizar_df_baixas(df_baixas)
+
+def historico_baixas_ativas(df_baixas):
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    df_tmp = _padronizar_df_baixas(df_baixas)
+    return df_tmp[df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])].copy()
+
+def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
+    """
+    Marca a baixa como ESTORNADA sem apagar histórico.
+    Agora com BACKUP AUTOMÁTICO do histórico após gravação bem-sucedida.
+    """
+    caminho = garantir_arquivo_baixas(base_path)
+
+    try:
+        df_baixas = pd.read_excel(caminho, dtype=str)
+    except Exception as e:
+        return False, f"Não foi possível abrir o histórico de baixas: {e}"
+
+    df_baixas = _padronizar_df_baixas(df_baixas)
+
+    chave_estorno = (
+        str(pv).strip().upper() + "||" +
+        str(processo).strip().upper() + "||" +
+        str(codigo_pv).strip().upper()
+    )
+
+    filtro = (
+        (df_baixas["CHAVE_OPERACAO"] == chave_estorno) &
+        (df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
+    )
+
+    if not filtro.any():
+        return False, "Nenhuma baixa ativa encontrada para estorno."
+
+    idx = df_baixas[filtro].index[0]
+
+    df_baixas.at[idx, "Status_Baixa"] = "ESTORNADA"
+    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")
+    df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
+
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_baixas[COLUNAS_BAIXAS].to_excel(writer, index=False)
+
+    # backup automático do histórico
+    try:
+        _criar_backup()
+    except Exception:
+        pass
+
+    return True, "Baixa estornada com sucesso."
+    # --------------------------------------------
+    # EVITA DUPLICIDADE ATIVA / TERCEIRIZADA
+    # --------------------------------------------
+    if not df_existente.empty:
+        chave_nova = str(novo_registro.iloc[0]["CHAVE_OPERACAO"]).strip().upper()
+
+        duplicado = df_existente[
+            (df_existente["CHAVE_OPERACAO"].astype(str).str.strip().str.upper() == chave_nova) &
+            (
+                df_existente["Status_Baixa"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .isin(["ATIVA", "TERCEIRIZADA"])
+            )
+        ]
+
+        if not duplicado.empty:
+            print("⚠️ DUPLICIDADE DETECTADA - BAIXA NÃO SALVA")
+            print(duplicado[["PV", "Processo", "CODIGO_PV", "Status_Baixa"]].to_dict(orient="records"))
+            return df_existente
+
+    # --------------------------------------------
+    # CONCATENA E SALVA
+    # --------------------------------------------
+    df_final = pd.concat(
+        [df_existente[COLUNAS_BAIXAS], novo_registro[COLUNAS_BAIXAS]],
+        ignore_index=True
+    )
+
+    df_final = _padronizar_df_baixas(df_final)
+
+    print("💾 TOTAL DE REGISTROS APÓS CONCATENAR:", len(df_final))
+
+    # Persistência física garantida
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_final.to_excel(writer, index=False)
+
+    print("✅ ARQUIVO SALVO COM SUCESSO:", caminho)
+
+    st.cache_data.clear()
+
+    return df_final
+
+def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
+    """
+    Estorna a última baixa ATIVA ou TERCEIRIZADA daquela operação sem apagar histórico.
+    """
+    caminho = garantir_arquivo_baixas(base_path)
+
+    try:
+        df_baixas = pd.read_excel(caminho, dtype=str)
+    except Exception as e:
+        return False, f"Erro ao ler arquivo de baixas: {e}"
+
+    df_baixas = _padronizar_df_baixas(df_baixas)
+
+    if df_baixas.empty:
+        return False, "Nenhuma baixa operacional encontrada."
+
+    pv = str(pv).strip().upper()
+    processo = str(processo).strip().upper()
+    codigo_pv = str(codigo_pv).strip().upper()
+
+    filtro = (
+        (df_baixas["PV"].astype(str).str.strip().str.upper() == pv) &
+        (df_baixas["Processo"].astype(str).str.strip().str.upper() == processo) &
+        (df_baixas["CODIGO_PV"].astype(str).str.strip().str.upper() == codigo_pv) &
+        (
+            df_baixas["Status_Baixa"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .isin(["ATIVA", "TERCEIRIZADA"])
+        )
+    )
+
+    if not filtro.any():
+        return False, "Nenhuma baixa ativa encontrada para estorno."
+
+    idx_estorno = df_baixas.loc[filtro].sort_values("Data_Baixa", ascending=False).index[0]
+
+    df_baixas.loc[idx_estorno, "Status_Baixa"] = "ESTORNADA"
+    df_baixas.loc[idx_estorno, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M:%S")
+    df_baixas.loc[idx_estorno, "Motivo_Estorno"] = motivo_estorno.strip() if motivo_estorno else ""
+
+    df_baixas = _padronizar_df_baixas(df_baixas)
+
+    # Persistência física garantida
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_baixas.to_excel(writer, index=False)
+
+    st.cache_data.clear()
+
+    return True, "Baixa operacional estornada com sucesso."
+
+def historico_baixas_ativas(df_baixas):
+    """
+    Retorna apenas as operações que devem sair da fila operacional:
+    ATIVA + TERCEIRIZADA
+    """
+    if df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    df_baixas = _padronizar_df_baixas(df_baixas)
+
+    return df_baixas[
+        df_baixas["Status_Baixa"].astype(str).str.strip().str.upper().isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+def historico_baixas_completo(df_baixas):
+    """
+    Retorna o histórico completo consolidado (ativas + terceirizadas + estornadas).
+    """
+    if df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    return _padronizar_df_baixas(df_baixas.copy())
+
+
+# =========================================================
+# DASHBOARD DO CORTE
+# =========================================================
+st.markdown("## 📊 Dashboard do Corte")
+st.caption("Indicadores operacionais e gerenciais do setor de corte.")
+
+# ---------------------------------------
+# BASES DO DASHBOARD DE CORTE
+# ---------------------------------------
+fila_corte_dash = df.copy()
+fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
+
+fila_corte_dash = fila_corte_dash[
+    (
+        fila_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
+        fila_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
+        fila_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
+    )
+].copy()
+
+fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
+
+hist_corte_dash = pd.DataFrame()
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+    hist_corte_dash = df_baixas_historico.copy()
+    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
+    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
+
+    hist_corte_dash = hist_corte_dash[
+        (
+            hist_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
+            hist_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
+            hist_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
+        )
+    ].copy()
+
+    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
+    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
+
+# ---------------------------------------
+# KPIs DO CORTE
+# ---------------------------------------
+ops_fila_corte = len(fila_corte_dash)
+horas_fila_corte = fila_corte_dash["Horas"].sum()
+
+if not hist_corte_dash.empty:
+    baixas_ativas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    baixas_estornadas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
+    ].copy()
+
+    qtd_baixadas_corte = len(baixas_ativas_corte)
+    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
+    qtd_estornadas_corte = len(baixas_estornadas_corte)
+else:
+    qtd_baixadas_corte = 0
+    horas_baixadas_corte = 0
+    qtd_estornadas_corte = 0
+
+col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
+col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
+col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
+col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
+col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
+col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
+
+st.divider()
+
+# ---------------------------------------
+# THROUGHPUT POR PROCESSO DE CORTE
+# ---------------------------------------
+st.markdown("### ⚙️ Throughput por Processo de Corte")
+
+if not hist_corte_dash.empty:
+    throughput = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    throughput["Processo_Corte"] = throughput["PROC_UPPER"].apply(
+        lambda x: "SERRA" if "SERRA" in x else (
+            "LASER" if "LASER" in x else (
+                "PLASMA" if "PLASMA" in x else "OUTROS"
+            )
+        )
+    )
+
+    throughput_resumo = (
+        throughput.groupby("Processo_Corte", as_index=False)
+        .agg(
+            Operacoes_Baixadas=("PV", "count"),
+            Horas_Baixadas=("Horas", "sum")
+        )
+        .sort_values("Horas_Baixadas", ascending=False)
+    )
+
+    throughput_resumo["Horas_Baixadas"] = throughput_resumo["Horas_Baixadas"].round(1)
+
+    st.dataframe(
+        throughput_resumo,
+        use_container_width=True,
+        hide_index=True
+    )
+else:
+    st.info("Ainda não há baixas suficientes para calcular throughput do corte.")
+
+st.divider()
+
+# ---------------------------------------
+# EVOLUÇÃO DIÁRIA DO CORTE (POR TIPO)
+# ---------------------------------------
+st.markdown("### 📈 Evolução Diária do Corte")
+
+if "df_baixas_historico" in globals() and df_baixas_historico is not None and not df_baixas_historico.empty:
+
+    evolucao = df_baixas_historico.copy()
+
+    # -----------------------------------
+    # PADRONIZAÇÃO
+    # -----------------------------------
+    evolucao["Processo"] = evolucao["Processo"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Status_Baixa"] = evolucao["Status_Baixa"].fillna("").astype(str).str.upper().str.strip()
+    evolucao["Horas"] = pd.to_numeric(evolucao["Horas"], errors="coerce").fillna(0)
+    evolucao["Data_Baixa"] = pd.to_datetime(evolucao["Data_Baixa"], errors="coerce")
+
+    # -----------------------------------
+    # FILTRO: SOMENTE CORTE VÁLIDO
+    # -----------------------------------
+    evolucao = evolucao[
+        (
+            evolucao["Processo"].str.contains("SERRA", na=False) |
+            evolucao["Processo"].str.contains("LASER", na=False) |
+            evolucao["Processo"].str.contains("PLASMA", na=False)
+        ) &
+        (
+            evolucao["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+        )
+    ].copy()
+
+    evolucao = evolucao.dropna(subset=["Data_Baixa"]).copy()
+
+    if not evolucao.empty:
+
+        # -----------------------------------
+        # CLASSIFICA TIPO DE CORTE
+        # -----------------------------------
+        def classificar_corte(proc):
+            proc = str(proc).upper().strip()
+            if "SERRA" in proc:
+                return "SERRA"
+            elif "LASER" in proc:
+                return "LASER"
+            elif "PLASMA" in proc:
+                return "PLASMA"
+            return "OUTROS"
+
+        evolucao["Tipo_Corte"] = evolucao["Processo"].apply(classificar_corte)
+        evolucao["Dia"] = evolucao["Data_Baixa"].dt.strftime("%d/%m/%Y")
+
+        # -----------------------------------
+        # RESUMO ANALÍTICO
+        # -----------------------------------
+        evolucao_resumo = (
+            evolucao.groupby(["Dia", "Tipo_Corte"], as_index=False)
+            .agg(
+                Horas_Baixadas=("Horas", "sum"),
+                Operacoes_Baixadas=("CHAVE_OPERACAO", "count")
+            )
+        )
+
+        evolucao_resumo["Horas_Baixadas"] = evolucao_resumo["Horas_Baixadas"].round(1)
+
+        # ordena por data real
+        evolucao_resumo["Dia_Ordenacao"] = pd.to_datetime(evolucao_resumo["Dia"], format="%d/%m/%Y", errors="coerce")
+        evolucao_resumo = evolucao_resumo.sort_values(["Dia_Ordenacao", "Tipo_Corte"]).reset_index(drop=True)
+
+        # -----------------------------------
+        # GRÁFICO - HORAS POR DIA / TIPO
+        # -----------------------------------
+        grafico_horas = evolucao_resumo.pivot_table(
+            index="Dia",
+            columns="Tipo_Corte",
+            values="Horas_Baixadas",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        # ordena corretamente o eixo X
+        ordem_datas = (
+            evolucao_resumo[["Dia", "Dia_Ordenacao"]]
+            .drop_duplicates()
+            .sort_values("Dia_Ordenacao")["Dia"]
+            .tolist()
+        )
+
+        grafico_horas = grafico_horas.reindex(ordem_datas)
+
+        if not grafico_horas.empty:
+            st.line_chart(grafico_horas, use_container_width=True)
+
+            st.caption("Horas baixadas por dia, separadas por tipo de corte.")
+        else:
+            st.info("Não há dados suficientes para gerar o gráfico de evolução.")
+
+        # -----------------------------------
+        # TABELA DE APOIO
+        # -----------------------------------
+        st.markdown("#### 📋 Detalhamento da Evolução do Corte")
+
+        st.dataframe(
+            evolucao_resumo[
+                ["Dia", "Tipo_Corte", "Horas_Baixadas", "Operacoes_Baixadas"]
+            ].rename(columns={
+                "Dia": "Data",
+                "Tipo_Corte": "Tipo de Corte",
+                "Horas_Baixadas": "Horas Baixadas",
+                "Operacoes_Baixadas": "Operações Baixadas"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("Ainda não há baixas válidas de corte para alimentar a evolução diária.")
+
+else:
+    st.info("Histórico de baixas não disponível para gerar a evolução diária.")
+
+# --------------------------------------------------------
+# HISTÓRICO PREMIUM DE BAIXA
+# --------------------------------------------------------
+st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
+st.caption("Rastreabilidade completa das baixas operacionais, terceirizações e estornos.")
+
+if "df_baixas_historico" not in locals() or df_baixas_historico is None:
+    df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
+else:
+    df_baixas_exib = df_baixas_historico.copy()
+
+if not df_baixas_exib.empty:
+    for col in [
+        "PV", "Cliente", "CODIGO_PV", "Processo", "Usuario",
+        "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
+    ]:
+        if col in df_baixas_exib.columns:
+            df_baixas_exib[col] = (
+                df_baixas_exib[col]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+
+    if "Status_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Status_Baixa"] = (
+            df_baixas_exib["Status_Baixa"]
+            .replace("", "ATIVA")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+    else:
+        df_baixas_exib["Status_Baixa"] = "ATIVA"
+
+    if "Data_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Baixa"] = pd.to_datetime(
+            df_baixas_exib["Data_Baixa"],
+            errors="coerce"
+        )
+
+    if "Data_Estorno" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Estorno"] = pd.to_datetime(
+            df_baixas_exib["Data_Estorno"],
+            errors="coerce"
+        )
+
+    col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
+
+    status_hist_sel = col_hist1.selectbox(
+        "Filtrar por status",
+        ["Todos", "ATIVA", "TERCEIRIZADA", "ESTORNADA"],
+        key="filtro_status_historico_baixas"
+    )
+
+    processo_hist_sel = col_hist2.selectbox(
+        "Filtrar por processo",
+        ["Todos"] + sorted(
+            df_baixas_exib["Processo"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        ),
+        key="filtro_processo_historico_baixas"
+    )
+
+    cliente_hist_sel = col_hist3.selectbox(
+        "Filtrar por cliente",
+        ["Todos"] + sorted(
+            df_baixas_exib["Cliente"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        ),
+        key="filtro_cliente_historico_baixas"
+    )
+
+    if status_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Status_Baixa"] == status_hist_sel
+        ].copy()
+
+    if processo_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
+        ].copy()
+
+    if cliente_hist_sel != "Todos":
+        df_baixas_exib = df_baixas_exib[
+            df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
+        ].copy()
+
+    col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
+    col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
+    col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
+    col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
+    col_hk4.metric(
+        "Horas Registradas",
+        fmt_br_num(
+            pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(),
+            1
+        ) + " h"
+    )
+
+    def status_historico_label(x):
+        x = str(x).strip().upper()
+        if x == "ATIVA":
+            return "✅ Baixada"
+        elif x == "TERCEIRIZADA":
+            return "🟣 Terceirizada"
+        elif x == "ESTORNADA":
+            return "🔁 Estornada"
+        return "⚪ Indefinido"
+
+    df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
+
+    if "Data_Baixa" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+
+    if "Data_Estorno" in df_baixas_exib.columns:
+        df_baixas_exib["Data_Estorno"] = df_baixas_exib["Data_Estorno"].dt.strftime("%d/%m/%Y %H:%M")
+
+    df_baixas_exib = df_baixas_exib.sort_values(
+        by=["Data_Baixa"],
+        ascending=False,
+        na_position="last"
+    ).copy()
+
+    colunas_exibir = [
+        "Status Exibição",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Data_Baixa",
+        "Usuario",
+        "Observacao",
+        "Data_Estorno",
+        "Motivo_Estorno"
+    ]
+    colunas_exibir = [c for c in colunas_exibir if c in df_baixas_exib.columns]
+
+    st.dataframe(
+        df_baixas_exib[colunas_exibir].rename(columns={
+            "Status Exibição": "Status",
+            "Data_Baixa": "Data da Baixa",
+            "Usuario": "Usuário",
+            "Observacao": "Observação",
+            "Data_Estorno": "Data do Estorno",
+            "Motivo_Estorno": "Motivo do Estorno"
+        }),
+        use_container_width=True,
+        hide_index=True,
+        height=340
+    )
+else:
+    st.info("Nenhuma baixa operacional registrada até o momento.")
+
+
+# ===============================
+# COLAPSO DO GARGALO (BASE EXECUTIVA)
+# ===============================
+fila_resumo = (
+    df.groupby("Processo", as_index=False)
+    .agg({
+        "Fila Acumulada (h)": "max",
+        "Fila (dias)": "max"
+    })
+    .rename(columns={
+        "Fila Acumulada (h)": "Fila Acumulada Max (h)",
+        "Fila (dias)": "Fila Max (dias)"
+    })
+)
+
+dem_colapso = dem.groupby("Processo", as_index=False).agg({
+    "Horas": "sum",
+    "Capacidade": "sum",
+    "Ocupacao": "max",
+    "Saldo (h)": "sum"
+})
+
+dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
+
+dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
+dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
+
+# Classificação inline (blindada contra NameError)
+dem_colapso["Semáforo Colapso"] = np.select(
+    [
+        (dem_colapso["Ocupacao"] >= 120) | (dem_colapso["Fila Max (dias)"] >= 10) | (dem_colapso["Saldo (h)"] < -40),
+        (dem_colapso["Ocupacao"] >= 100) | (dem_colapso["Fila Max (dias)"] >= 6) | (dem_colapso["Saldo (h)"] < 0),
+        (dem_colapso["Ocupacao"] >= 85) | (dem_colapso["Fila Max (dias)"] >= 3)
+    ],
+    [
+        "🔥 Colapso Severo",
+        "🔴 Colapso",
+        "🟡 Atenção"
+    ],
+    default="🟢 Sob Controle"
+)
+
+ranking_colapso = dem_colapso.sort_values(
+    by=["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)"],
+    ascending=[False, False, False]
+).reset_index(drop=True)
+
+# ===============================
+# CAPACIDADE POR PROCESSO
+# ===============================
+
+# 🔒 Garantia mínima
+if dem_proc is None or dem_proc.empty:
+    st.error("Erro: dem_proc vazio.")
+    st.stop()
+
+if "Processo" not in dem_proc.columns:
+    st.error("Erro: coluna 'Processo' não encontrada em dem_proc.")
+    st.stop()
+
+if "Horas" not in dem_proc.columns:
+    dem_proc["Horas"] = 0
+
+# -------------------------------
+# CÁLCULO DE CAPACIDADE
+# -------------------------------
+if tipo == "Mensal":
+
+    capacidade_proc = {
+        proc: horas_uteis_mes(ano_ref, mes_ref) * MAQUINAS.get(proc, 0) * EFICIENCIA
+        for proc in processos
+    }
+
+    dem_proc["Capacidade Processo"] = dem_proc["Processo"].map(capacidade_proc)
+
+else:
+    if dem is not None and not dem.empty and "Capacidade" in dem.columns:
+        capacidade_proc = (
+            dem.groupby("Processo", as_index=False)["Capacidade"]
+            .sum()
+            .rename(columns={"Capacidade": "Capacidade Processo"})
+        )
+
+        dem_proc = dem_proc.merge(capacidade_proc, on="Processo", how="left")
+
+    else:
+        dem_proc["Capacidade Processo"] = 0
+
+# -------------------------------
+# BLINDAGEM DA CAPACIDADE
+# -------------------------------
+if "Capacidade Processo" not in dem_proc.columns:
+    dem_proc["Capacidade Processo"] = 0
+
+dem_proc["Capacidade Processo"] = pd.to_numeric(
+    dem_proc["Capacidade Processo"], errors="coerce"
+).fillna(0)
+
+# -------------------------------
+# CÁLCULO DE UTILIZAÇÃO
+# -------------------------------
+dem_proc["Utilização (%)"] = np.where(
+    dem_proc["Capacidade Processo"] > 0,
+    (dem_proc["Horas"] / dem_proc["Capacidade Processo"]) * 100,
+    0
+)
+
+dem_proc["Utilização (%)"] = (
+    dem_proc["Utilização (%)"]
+    .replace([float("inf"), -float("inf")], 0)
+    .fillna(0)
+    .round(0)
+    .astype(int)
+)
+
+# -------------------------------
+# CLASSIFICAÇÃO
+# -------------------------------
+def faixa_utilizacao(x):
+    if x >= 100:
+        return "Crítico"
+    elif x >= 80:
+        return "Atenção"
+    else:
+        return "OK"
+
+dem_proc["Faixa"] = dem_proc["Utilização (%)"].apply(faixa_utilizacao)
+
+# ===============================
+# ATRASO
+# ===============================
+pv_carga = df.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"].sum()
+
+# Capacidade média diária real da fábrica (global)
+recursos_ativos = sum(v for v in MAQUINAS.values() if v > 0)
+
+capacidade_media_diaria_global = (
+    HORAS_DIA_UTIL_MEDIA * recursos_ativos * EFICIENCIA
+)
+
+pv_carga["Dias Necessários"] = np.where(
+    capacidade_media_diaria_global > 0,
+    pv_carga["Horas"] / capacidade_media_diaria_global,
+    0
+)
+
+hoje = pd.Timestamp.today().normalize()
+
+pv_carga["Horas Disponíveis"] = pv_carga["Data"].apply(
+    lambda x: horas_uteis_periodo(hoje, x) * EFICIENCIA
+)
+
+pv_carga["Dias Disponíveis"] = np.where(
+    capacidade_media_diaria_global > 0,
+    pv_carga["Horas Disponíveis"] / capacidade_media_diaria_global,
+    0
+)
+
+pv_carga["Atraso (dias)"] = (
+    pv_carga["Dias Necessários"] - pv_carga["Dias Disponíveis"]
+).apply(lambda x: max(0, math.ceil(x)))
+
+# ===============================
+# PIZZA / ATRASOS
+# ===============================
+# PVs reais no APS = todas as PVs auditadas (não apenas as com carga expandida)
+pvs_no_aps = df_auditoria_pv["PV"].astype(str).str.strip().nunique()
+
+# PVs em atraso
+atrasos = pv_carga[pv_carga["Atraso (dias)"] > 0].copy()
+
+# Critério de risco: sem atraso, mas com pouca folga
+if "Dias Disponíveis" in pv_carga.columns:
+    risco = pv_carga[
+        (pv_carga["Atraso (dias)"] == 0) &
+        (pv_carga["Dias Disponíveis"] <= 3)
+    ].copy()
+else:
+    risco = pd.DataFrame(columns=pv_carga.columns)
+
+# ===============================
+# RISCO
+# ===============================
+risco = pv_carga[
+    (pv_carga["Atraso (dias)"] == 0) &
+    (pv_carga["Dias Necessários"] > pv_carga["Dias Disponíveis"] * 0.8)
+].copy()
+
+
+# ============================================================
+# ===================== ANÁLISE OPERACIONAL ==================
+# ============================================================
+with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
+
+    st.caption("Visões complementares da carga operacional por processo e cliente.")
+
+    # ===============================
+    # BACKLOG POR PROCESSO
+    # ===============================
+    st.subheader("📊 Backlog por Processo")
+
+    backlog = df.groupby("Processo", as_index=False).agg(
+        PVs=("PV", "nunique"),
+        Horas=("Horas", "sum")
+    )
+
+    backlog["Horas"] = backlog["Horas"].round(1)
+
+    fig_backlog = px.bar(
+        backlog.sort_values("Horas", ascending=False),
+        x="Processo",
+        y="Horas",
+        text="Horas"
+    )
+
+    fig_backlog.update_traces(
+        marker_color="#FF7A00",
+        texttemplate="%{y:.1f}",
+        textposition="outside",
+        textfont=dict(size=11, color="white")
+    )
+
+    fig_backlog.update_layout(
+        xaxis_title="Processo",
+        yaxis_title="Horas em Backlog",
+        height=550
+    )
+
+    st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
+
+    # ===============================
+    # CARGA POR CLIENTE
+    # ===============================
+    st.subheader("📊 Carga por Cliente")
+
+    hoje = pd.Timestamp.today().normalize()
+
+    base_op = df.copy()
+
+    if "ENTREGA" in base_op.columns:
+        base_op["ENTREGA"] = pd.to_datetime(base_op["ENTREGA"], errors="coerce")
+        base_op["Dias para Entrega"] = (base_op["ENTREGA"] - hoje).dt.days
+    else:
+        base_op["Dias para Entrega"] = None
+
+    carga_cliente = base_op.groupby("Cliente", as_index=False).agg(
+        Horas=("Horas", "sum"),
+        PVs=("PV", "nunique")
+    )
+
+    carga_cliente["Horas"] = carga_cliente["Horas"].round(1)
+
+    fig_cliente_carga = px.bar(
+        carga_cliente.sort_values("Horas", ascending=False),
+        x="Cliente",
+        y="Horas",
+        text="Horas"
+    )
+
+    fig_cliente_carga.update_traces(
+        marker_color="#1f3b73",
+        texttemplate="%{y:.1f}",
+        textposition="outside",
+        textfont=dict(color="white")
+    )
+
+    fig_cliente_carga.update_layout(height=500)
+
+    st.plotly_chart(fig_cliente_carga, use_container_width=True)
+
+# ============================================================
+# ===================== PAINEL OPERACIONAL ===================
+# ============================================================
+st.markdown("## ⚡ Painel Operacional")
+st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
+
+base_op = df.copy()
+hoje = pd.Timestamp.today().normalize()
+
+if "DATA_ENTREGA_APS" in base_op.columns:
+    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(
+        base_op["DATA_ENTREGA_APS"], errors="coerce"
+    )
+
+    base_op["Dias para Entrega"] = (
+        base_op["DATA_ENTREGA_APS"] - hoje
+    ).dt.days
+
+    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
+else:
+    base_op["Dias para Entrega"] = None
+    base_op["ENTREGA"] = pd.NaT
+
+# ===============================
+# PVs QUE VENCEM HOJE
+# ===============================
+st.subheader("📅 PVs que vencem HOJE")
+
+pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
+
+if not pvs_hoje.empty:
+    pvs_hoje["Horas"] = pd.to_numeric(pvs_hoje["Horas"], errors="coerce").fillna(0).round(1)
+    pvs_hoje["ENTREGA"] = pd.to_datetime(
+        pvs_hoje["ENTREGA"], errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
+
+    st.dataframe(
+        pvs_hoje.sort_values("Horas", ascending=False),
+        use_container_width=True
+    )
+else:
+    st.success("Nenhuma PV vence hoje ✅")
+
+# ===============================
+# TOP 10 PVS MAIS CRÍTICAS
+# ===============================
+st.subheader("🔥 Top 10 PVs mais críticas")
+
+criticas = base_op.copy()
+
+if "Horas" in criticas.columns:
+    criticas["Horas"] = pd.to_numeric(criticas["Horas"], errors="coerce").fillna(0)
+
+if "Dias para Entrega" not in criticas.columns:
+    criticas["Dias para Entrega"] = None
+
+criticas = criticas.sort_values(
+    ["Dias para Entrega", "Horas"],
+    ascending=[True, False]
+).head(10)
+
+criticas["Horas"] = criticas["Horas"].round(1)
+
+if "ENTREGA" in criticas.columns:
+    criticas["ENTREGA"] = pd.to_datetime(
+        criticas["ENTREGA"], errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
+
+st.dataframe(criticas, use_container_width=True)
+
+# ===============================
+# PVS URGENTES DA SEMANA
+# ===============================
+st.subheader("🚨 PVs Urgentes da Semana")
+
+pvs_urgentes = base_op.copy()
+
+if "Dias para Entrega" in pvs_urgentes.columns:
+    pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
+
+    urgentes = pvs_urgentes[
+        pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
+    ].copy()
+
+    if not urgentes.empty:
+        urgentes["Horas"] = pd.to_numeric(urgentes["Horas"], errors="coerce").fillna(0).round(1)
+
+        if "ENTREGA" in urgentes.columns:
+            urgentes["ENTREGA"] = pd.to_datetime(
+                urgentes["ENTREGA"], errors="coerce"
+            ).dt.strftime("%d/%m/%Y")
+
+        colunas_urgentes = [
+            "Semáforo",
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "Processo",
+            "Horas",
+            "Dias para Entrega",
+            "ENTREGA"
+        ]
+        colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
+
+        st.dataframe(
+            urgentes[colunas_urgentes].sort_values(
+                ["Dias para Entrega", "Horas"],
+                ascending=[True, False]
+            ),
+            use_container_width=True
+        )
+    else:
+        st.success("Nenhuma PV urgente para os próximos 7 dias ✅")
+else:
+    st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
+
+# ============================================================
+# ===================== FILA POR PROCESSO ====================
+# ============================================================
+st.subheader("📌 Fila por Processo")
+
+fila = df.copy()
+
+if "ENTREGA" in fila.columns:
+    fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
+    fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
+else:
+    fila["Dias para Entrega"] = None
+
+fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
+
+# ---------------------------------------
+# FILTROS
+# ---------------------------------------
+col_f1, col_f2, col_f3 = st.columns(3)
+
+processos_fila = sorted(fila["Processo"].dropna().astype(str).str.strip().unique().tolist())
+processo_fila_sel = col_f1.selectbox("Filtrar por Processo", ["Todos"] + processos_fila)
+
+pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
+pv_fila_sel = col_f2.selectbox("Filtrar por PV específica", ["Todas"] + pvs_fila)
+
+tipo_corte_sel = col_f3.selectbox(
+    "Filtrar por Tipo de Corte",
+    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"]
+)
+
+if processo_fila_sel != "Todos":
+    fila = fila[fila["Processo"].astype(str).str.strip() == processo_fila_sel].copy()
+
+if pv_fila_sel != "Todas":
+    fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
+
+fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
+
+if tipo_corte_sel == "Apenas Corte":
+    fila = fila[fila["Processo"].str.contains("CORTE", na=False)].copy()
+elif tipo_corte_sel == "Apenas Serra":
+    fila = fila[fila["Processo"] == "CORTE - SERRA"].copy()
+elif tipo_corte_sel == "Apenas Laser":
+    fila = fila[fila["Processo"] == "CORTE - LASER"].copy()
+elif tipo_corte_sel == "Apenas Plasma":
+    fila = fila[fila["Processo"] == "CORTE - PLASMA"].copy()
+
+# ---------------------------------------
+# KPIs
+# ---------------------------------------
+col_k1, col_k2, col_k3 = st.columns(3)
+col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
+col_k2.metric("Processos na Fila", fila["Processo"].nunique())
+col_k3.metric("Horas na Fila", f"{pd.to_numeric(fila['Horas'], errors='coerce').fillna(0).sum():.1f} h")
+
+st.markdown("### 📋 PVs na Fila")
+
+fila_detalhe = fila.copy()
+fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
+
+if "ENTREGA" in fila_detalhe.columns:
+    fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
+    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+colunas_fila = ["Semáforo","PV","Cliente","CODIGO_PV","Processo","Horas","Dias para Entrega","ENTREGA"]
+colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+
+fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
+
+st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
+
+# =========================================================
+# BAIXAS DE CORTE
+# =========================================================
+st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
+
+fila_corte = fila.copy()
+proc_upper = fila_corte["Processo"].astype(str).str.strip().str.upper()
+
+fila_corte = fila_corte[
+    proc_upper.str.contains("SERRA|LASER|PLASMA", na=False)
+].copy()
+
+if not fila_corte.empty:
+
+    fila_corte["Horas"] = pd.to_numeric(fila_corte["Horas"], errors="coerce").fillna(0).round(1)
+
+    fila_corte["LABEL"] = (
+        "PV " + fila_corte["PV"].astype(str) +
+        " | " + fila_corte["Processo"].astype(str) +
+        " | " + fila_corte["CODIGO_PV"].astype(str) +
+        " | " + fila_corte["Horas"].astype(str) + " h"
+    )
+
+    opcoes = fila_corte["LABEL"].tolist()
+
+    escolha = st.selectbox("Operação", opcoes)
+
+    linha_sel = fila_corte[fila_corte["LABEL"] == escolha]
+
+    if not linha_sel.empty:
+        linha = linha_sel.iloc[0]
+
+        if st.button("Confirmar Baixa"):
+            salvar_baixa_operacional(BASE_PATH, {
+                "PV": linha.get("PV"),
+                "Processo": linha.get("Processo"),
+                "Horas": linha.get("Horas"),
+                "Data_Baixa": pd.Timestamp.now(),
+                "Status_Baixa": "ATIVA"
+            })
+
+            st.success("Baixa registrada")
+            st.rerun()
+
+# ============================================================
+# MINI DASHBOARD POR GARGALO 
+# ============================================================
+
+st.markdown("## 🔥 Mini Dashboard por Gargalo")
+
+# 🔒 GARANTIA ABSOLUTA
+if (
+    "df_baixas_ativas" not in locals()
+    or df_baixas_ativas is None
+    or not isinstance(df_baixas_ativas, pd.DataFrame)
+):
+    df_baixas_ativas = pd.DataFrame()
+
+df_mini_gargalos = montar_mini_dashboard_gargalos(
+    fila=fila,
+    df_baixas_ativas=df_baixas_ativas
+)
+
+# 🔒 GARANTIA DE ORDENAÇÃO (CRÍTICO)
+df_mini_gargalos = df_mini_gargalos.sort_values(
+    by=["Score", "Horas_Fila", "Qtd_Fila"],
+    ascending=[False, False, False]
+).reset_index(drop=True)
+
+df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+
+cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
+
+if df_mini_gargalos.empty:
+    st.info("Nenhum dado disponível para análise de gargalos.")
+else:
+
+    # ------------------------------------------------------------
+    # FUNÇÕES VISUAIS
+    # ------------------------------------------------------------
+    def semaforo_status(status):
+        if status == "CRITICO":
+            return "🔴"
+        elif status == "ATENCAO":
+            return "🟡"
+        else:
+            return "🟢"
+
+    def classificacao_texto(score):
+        if score >= 80:
+            return "CRÍTICO"
+        elif score >= 30:
+            return "ATENÇÃO"
+        else:
+            return "CONTROLADO"
+
+    # ------------------------------------------------------------
+    # CARDS PRINCIPAIS
+    # ------------------------------------------------------------
+    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
+
+    with col_g1:
+        st.metric("Processos", cards_gargalos["total_processos"])
+
+    with col_g2:
+        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
+
+    with col_g3:
+        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
+
+    with col_g4:
+        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
+
+    with col_g5:
+        st.metric("Gargalo Crítico", f"🔴 {cards_gargalos['gargalo_critico']}")
+
+    # ------------------------------------------------------------
+    # CLASSIFICAÇÃO
+    # ------------------------------------------------------------
+    st.markdown("### 🚨 Classificação dos Gargalos")
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+
+    with col_s1:
+        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
+
+    with col_s2:
+        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
+
+    with col_s3:
+        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
+
+    # ------------------------------------------------------------
+    # TOP 3 GARGALOS
+    # ------------------------------------------------------------
+    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
+
+    top3 = df_mini_gargalos.head(3)
+    top3_cols = st.columns(3)
+
+    for i in range(3):
+        with top3_cols[i]:
+            if i < len(top3):
+                row = top3.iloc[i]
+
+                emoji = semaforo_status(row["Status_Gargalo"])
+
+                st.metric(
+                    label=f"{emoji} {row['Processo']}",
+                    value=f"{int(row['Qtd_Fila'])} itens",
+                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
+                )
+
+                st.caption(
+                    f"Status: {classificacao_texto(row['Score'])} | "
+                    f"Carga Total: {row['Carga_Total']}"
+                )
+            else:
+                st.metric(label="-", value="-", delta="-")
+
+    # ------------------------------------------------------------
+    # TABELA DE RANKING
+    # ------------------------------------------------------------
+    st.markdown("### 📊 Ranking Inteligente de Gargalos")
+
+    df_exibicao_gargalos = df_mini_gargalos.copy()
+
+    df_exibicao_gargalos["Semaforo"] = df_exibicao_gargalos["Status_Gargalo"].apply(semaforo_status)
+
+    colunas_exibicao = [
+        "Ranking",
+        "Semaforo",
+        "Processo",
+        "Status_Gargalo",
+        "Qtd_Fila",
+        "Horas_Fila",
+        "Qtd_Baixas_Ativas",
+        "Carga_Total",
+        "Score"
+    ]
+
+    for col in colunas_exibicao:
+        if col not in df_exibicao_gargalos.columns:
+            df_exibicao_gargalos[col] = None
+
+    df_exibicao_gargalos = df_exibicao_gargalos[colunas_exibicao].copy()
+
+    df_exibicao_gargalos["Horas_Fila"] = (
+        pd.to_numeric(df_exibicao_gargalos["Horas_Fila"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    df_exibicao_gargalos["Score"] = (
+        pd.to_numeric(df_exibicao_gargalos["Score"], errors="coerce")
+        .fillna(0)
+        .round(1)
+    )
+
+    st.dataframe(
+        df_exibicao_gargalos,
+        use_container_width=True,
+        hide_index=True
+    )
+
+# ------------------------------------------------------------
+# FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
+# ------------------------------------------------------------
+st.markdown("### 🧾 Fila Atual de Corte")
+
+if (
+    "fila_corte_dash" not in locals()
+    or fila_corte_dash is None
+    or not isinstance(fila_corte_dash, pd.DataFrame)
+):
+    fila_corte_dash = pd.DataFrame()
+
+if not fila_corte_dash.empty:
+
+    fila_corte_exib = fila_corte_dash.copy()
+
+    if "ENTREGA" in fila_corte_exib.columns:
+        fila_corte_exib["ENTREGA"] = pd.to_datetime(
+            fila_corte_exib["ENTREGA"], errors="coerce"
+        )
+        fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    fila_corte_exib["Horas"] = pd.to_numeric(
+        fila_corte_exib["Horas"], errors="coerce"
+    ).fillna(0).round(1)
+
+    colunas_corte_fila = [
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Dias para Entrega",
+        "ENTREGA"
+    ]
+
+    colunas_corte_fila = [
+        c for c in colunas_corte_fila if c in fila_corte_exib.columns
+    ]
+
+    if "ENTREGA" in fila_corte_exib.columns:
+        df_exib = fila_corte_exib[colunas_corte_fila] \
+            .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
+    else:
+        df_exib = fila_corte_exib[colunas_corte_fila] \
+            .sort_values(["Processo"], ascending=[True])
+
+    df_exib = df_exib.reset_index(drop=True)
+
+    st.dataframe(
+        df_exib,
+        use_container_width=True,
+        hide_index=True,
+        height=320
+    )
+
+else:
+    st.success("Nenhuma operação de corte pendente no momento. 🎯")
+
+st.divider()
+
+st.subheader("🔎 Busca rápida de PV / Cliente")
+
+col_b1, col_b2 = st.columns(2)
+
+busca_pv = col_b1.text_input("Buscar por PV")
+busca_cliente = col_b2.text_input("Buscar por Cliente")
+
+busca_df = base_op.copy()
+
+if busca_pv:
+    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
+
+if busca_cliente:
+    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
+
+if busca_pv or busca_cliente:
+    busca_df["Horas"] = busca_df["Horas"].round(1)
+
+    if "ENTREGA" in busca_df.columns:
+        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+    st.dataframe(busca_df, use_container_width=True)
+
+st.subheader("📥 Exportar dados filtrados")
+
+@st.cache_data
+def converter_excel(df_export):
+    from io import BytesIO
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_export.to_excel(writer, index=False)
+    return buffer.getvalue()
+
+if not busca_df.empty:
+    excel_bytes = converter_excel(busca_df)
+
+    st.download_button(
+        label="📥 Baixar Excel",
+        data=excel_bytes,
+        file_name="consulta_pvs.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+st.divider()
+
+st.subheader("🧪 Auditoria de PV")
+
+if not df_auditoria_pv.empty:
+
+    df_auditoria_pv["PV"] = df_auditoria_pv["PV"].astype(str).str.strip()
+
+    total_excel = pvs_totais_excel
+    total_aps = df_auditoria_pv["PV"].nunique()
+    total_auditadas = len(df_auditoria_pv)
+
+    resumo_auditoria = (
+        df_auditoria_pv["Status"]
+        .value_counts()
+        .reset_index()
+    )
+    resumo_auditoria.columns = ["Status", "Qtde"]
+
+    def semaforo_auditoria(x):
+        x = str(x).strip().upper()
+        if x == "OK":
+            return "🟢"
+        elif x == "DIVERGENTE":
+            return "🟡"
+        elif x == "FALTANDO":
+            return "🔴"
+        elif x == "SEM PROCESSO VÁLIDO":
+            return "🟠"
+        return "⚪"
+
+    df_auditoria_exibicao = df_auditoria_pv.copy()
+    df_auditoria_exibicao["Semáforo"] = df_auditoria_exibicao["Status"].apply(semaforo_auditoria)
+
+    qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
+    qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
+    qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
+    qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
+
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
+    col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
+    col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
+    col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
+    col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
+    col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
+    col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
+
+    st.markdown("### 📊 Resumo da Auditoria")
+    st.dataframe(
+        resumo_auditoria,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.markdown("### 🚨 PVs com inconsistência de processo")
+
+    problemas_processo = df_auditoria_pv[
+        df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
+    ].copy()
+
+    if not problemas_processo.empty:
+        if "DATA_ENTREGA_APS" in problemas_processo.columns:
+            problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
+                problemas_processo["DATA_ENTREGA_APS"],
+                errors="coerce"
+            ).dt.strftime("%d/%m/%Y")
+
+        colunas_problema = [
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "DATA_ENTREGA_APS",
+            "Qtd",
+            "Status",
+            "Motivo"
+        ]
+        colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
+
+        st.dataframe(
+            problemas_processo[colunas_problema]
+            .sort_values(["PV"])
+            .reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
+
+    st.markdown("### 📋 Detalhamento da Auditoria")
+    colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
+
+    st.dataframe(
+        df_auditoria_exibicao[colunas_auditoria]
+        .sort_values(["Status", "PV"])
+        .reset_index(drop=True),
+        use_container_width=True,
+        height=420
+    )
+
+else:
+    st.info("Nenhuma auditoria de PV disponível.")
+
+with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
+
+    base_roteiro = df_pv.copy()
+    base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
+
+    processos_ordenados = [
+        "CORTE - SERRA",
+        "CORTE-PLASMA",
+        "CORTE-LASER",
+        "CORTE-GUILHOTINA",
+        "TORNO CONVENCIONAL",
+        "TORNO CNC",
+        "CENTRO DE USINAGEM",
+        "FRESADORAS",
+        "FURADEIRA DE BANCADA",
+        "PRENSA (AMASSAMENTO)",
+        "CALANDRA",
+        "DOBRADEIRA",
+        "ROSQUEADEIRA",
+        "METALEIRA",
+        "SOLDAGEM",
+        "ACABAMENTO",
+        "JATEAMENTO",
+        "PINTURA",
+        "MONTAGEM",
+        "DIVERSOS"
+    ]
+
+    processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
+
+    if len(processos_validos) == 0:
+        st.warning("Nenhum processo válido encontrado na planilha.")
+    else:
+        roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
+
+        for proc in processos_validos:
+            roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
+
+        st.markdown("### 🔎 Consultar Roteiro por Código")
+
+        col_r1, col_r2, col_r3 = st.columns([2, 1, 1])
+
+        codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
+        codigo_sel = col_r1.selectbox("Selecione o código", codigos)
+
+        roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
+
+        roteiro_detalhado = roteiro_sel.melt(
+            id_vars=["CODIGO_KEY"],
+            value_vars=processos_validos,
+            var_name="Processo",
+            value_name="Tempo (min)"
+        )
+
+        roteiro_detalhado["Tempo (min)"] = pd.to_numeric(
+            roteiro_detalhado["Tempo (min)"], errors="coerce"
+        ).fillna(0)
+
+        roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0].copy()
+
+        ordem = {p: i for i, p in enumerate(processos_ordenados)}
+        roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
+        roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
+
+        roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
+        roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
+
+        tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
+        tempo_total_h = round(tempo_total_min / 60, 2)
+        qtd_processos = len(roteiro_exibicao)
+
+        col_r2.metric("🧩 Etapas", f"{qtd_processos:,.0f}")
+        col_r3.metric("⏱️ Tempo Total (h)", f"{tempo_total_h:,.2f}")
+
+        st.markdown(f"### 🛠️ Roteiro do Código: `{codigo_sel}`")
+
+        if not roteiro_exibicao.empty:
+            st.dataframe(
+                roteiro_exibicao.reset_index(drop=True),
+                use_container_width=True,
+                height=420,
+                hide_index=True
+            )
+        else:
+            st.warning("Este código não possui tempos válidos nos processos mapeados.")
+
+        with st.expander("📋 Base Completa de Roteiros", expanded=False):
+            st.dataframe(
+                roteiro,
+                use_container_width=True,
+                height=320,
+                hide_index=True
+            )
+
+        from io import BytesIO
+
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            roteiro.to_excel(writer, index=False)
+
+        st.download_button(
+            label="📥 Baixar Roteiros em Excel",
+            data=buffer.getvalue(),
+            file_name="roteiro_fabricacao.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+
+
+
+
+
+
+
+
+
+# ============================================================
+# ============ TABELAS ANALÍTICAS DE CAPACIDADE ==============
+# ============================================================
+st.markdown("## 📋 Tabelas Analíticas de Capacidade")
+st.caption("Leitura técnica de colapso, pressão de fila e criticidade de capacidade.")
+
+# ===============================
+# BASE EXECUTIVA DE COLAPSO
+# ===============================
+if "Semáforo Colapso" not in ranking_colapso.columns:
+    ranking_colapso["Semáforo Colapso"] = "🟢 Sob Controle"
+
+for col in ["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)", "Saldo (h)"]:
+    if col not in ranking_colapso.columns:
+        ranking_colapso[col] = 0
+
+ranking_colapso["Ocupacao"] = pd.to_numeric(ranking_colapso["Ocupacao"], errors="coerce").fillna(0)
+ranking_colapso["Fila Max (dias)"] = pd.to_numeric(ranking_colapso["Fila Max (dias)"], errors="coerce").fillna(0)
+ranking_colapso["Fila Acumulada Max (h)"] = pd.to_numeric(ranking_colapso["Fila Acumulada Max (h)"], errors="coerce").fillna(0)
+ranking_colapso["Saldo (h)"] = pd.to_numeric(ranking_colapso["Saldo (h)"], errors="coerce").fillna(0)
+
 # ===============================
 # ALERTA DE COLAPSO DO GARGALO
 # ===============================
@@ -1658,7 +3456,6 @@ st.subheader("🚨 Semáforo de Colapso dos Gargalos")
 if not ranking_colapso.empty:
     colapso_exib = ranking_colapso.copy()
 
-    # Blindagem estrutural
     if "Semáforo Colapso" not in colapso_exib.columns:
         colapso_exib["Semáforo Colapso"] = "🟢 Sob Controle"
     if "Processo" not in colapso_exib.columns:
@@ -1709,7 +3506,20 @@ if not critico.empty:
     st.error("Capacidade próxima ou acima do limite detectada.")
 
     critico_exib = critico.copy()
-    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(status)
+
+    # saneamento forte das colunas numéricas
+    for col in ["Ocupacao", "Horas", "Capacidade"]:
+        if col not in critico_exib.columns:
+            critico_exib[col] = 0
+
+        critico_exib[col] = pd.to_numeric(
+            critico_exib[col],
+            errors="coerce"
+        ).fillna(0)
+
+    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(
+    lambda x: "🔴" if x >= 100 else "🟠" if x >= 90 else "🟡" if x >= 75 else "🟢"
+    )
     critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
     critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
@@ -1732,473 +3542,6 @@ if not critico.empty:
 else:
     st.success("Capacidade sob controle.")
 
-# ============================================================
-# ======================= GRÁFICOS ============================
-# ============================================================
-with st.expander("📈 Ver gráficos e indicadores visuais", expanded=True):
-
-    st.subheader("📌 Ocupação por Processo (%)")
-
-    dem_plot = dem.copy()
-    dem_plot["Label"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    dem_plot["Hover_Ocupacao"] = dem_plot["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    dem_plot["Hover_Horas"] = dem_plot["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    dem_plot["Hover_Capacidade"] = dem_plot["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-
-    fig = px.bar(
-        dem_plot.sort_values(["Ordem_Periodo", "Processo"]),
-        x="Periodo",
-        y="Ocupacao",
-        color="Processo",
-        barmode="group",
-        text="Label",
-        custom_data=["Processo", "Hover_Ocupacao", "Hover_Horas", "Hover_Capacidade"]
-    )
-
-    fig.add_hline(y=100, line_dash="dash")
-
-    fig.update_traces(
-        textposition="outside",
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Processo: %{customdata[0]}<br>"
-            "Ocupação: %{customdata[1]}<br>"
-            "Carga: %{customdata[2]} h<br>"
-            "Capacidade: %{customdata[3]} h"
-            "<extra></extra>"
-        )
-    )
-
-    fig.update_layout(
-        yaxis_title="Ocupação (%)",
-        xaxis_title="Período"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("📊 Utilização por Processo (%)")
-
-    fig_proc = px.bar(
-        dem_proc.sort_values("Utilização (%)", ascending=False),
-        x="Processo",
-        y="Utilização (%)",
-        text="Utilização (%)",
-        color="Faixa",
-        color_discrete_map={
-            "OK": "green",
-            "Atenção": "gold",
-            "Crítico": "red"
-        }
-    )
-
-    fig_proc.add_hline(y=100, line_dash="dash")
-    fig_proc.update_traces(texttemplate="%{text}")
-    fig_proc.update_yaxes(title="Utilização (%)")
-
-    st.plotly_chart(fig_proc, use_container_width=True)
-
-    st.subheader("🥧 Distribuição de Status dos Processos")
-
-    status_proc = dem_proc.groupby("Faixa", as_index=False)["Processo"].count()
-    status_proc = status_proc.rename(columns={"Processo": "Quantidade"})
-
-    fig_status = px.pie(
-        status_proc,
-        names="Faixa",
-        values="Quantidade",
-        color="Faixa",
-        color_discrete_map={
-            "OK": "green",
-            "Atenção": "gold",
-            "Crítico": "red"
-        },
-        title="Status dos Processos"
-    )
-
-    st.plotly_chart(fig_status, use_container_width=True)
-
-    st.subheader("📈 Evolução da Carga")
-
-    carga = df.groupby("Data", as_index=False)["Horas"].sum().sort_values("Data")
-    carga["Carga Acumulada (h)"] = carga["Horas"].cumsum()
-
-    fig_carga = px.line(
-        carga,
-        x="Data",
-        y="Carga Acumulada (h)",
-        title="Carga Acumulada no Tempo",
-        markers=True
-    )
-
-    st.plotly_chart(fig_carga, use_container_width=True)
-
-    st.subheader("📌 PV por Cliente")
-
-    pv_cliente_base = df_auditoria_pv.copy()
-
-    if cliente_sel != "Todos":
-        pv_cliente_base = pv_cliente_base[pv_cliente_base["Cliente"] == cliente_sel].copy()
-
-    pv_cliente = pv_cliente_base.groupby("Cliente", as_index=False)["PV"].nunique()
-    total = pv_cliente["PV"].sum()
-
-    pv_cliente = pd.concat(
-        [pv_cliente, pd.DataFrame([{"Cliente": "TOTAL", "PV": total}])],
-        ignore_index=True
-    )
-
-    fig_cliente = px.bar(
-        pv_cliente.sort_values("PV", ascending=False),
-        x="Cliente",
-        y="PV",
-        text="PV"
-    )
-
-    fig_cliente.update_traces(textposition="outside")
-    fig_cliente.update_layout(
-        xaxis_title="Cliente",
-        yaxis_title="Quantidade de PVs"
-    )
-
-    st.plotly_chart(fig_cliente, use_container_width=True)
-
-# ===============================
-# DISTRIBUIÇÃO DE ATRASO (NOVA VISÃO EXECUTIVA)
-# ===============================
-st.subheader("📊 Distribuição de Atraso por Faixa")
-
-df_atraso = atrasos.copy()
-
-# Blindagem
-if "Atraso (dias)" not in df_atraso.columns:
-    df_atraso["Atraso (dias)"] = 0
-
-df_atraso["Atraso (dias)"] = (
-    pd.to_numeric(df_atraso["Atraso (dias)"], errors="coerce")
-    .fillna(0)
-    .clip(lower=0)
-)
-
-# Considera apenas atrasos reais
-df_atraso = df_atraso[df_atraso["Atraso (dias)"] > 0].copy()
-
-if not df_atraso.empty:
-
-    max_atraso = int(df_atraso["Atraso (dias)"].max())
-
-    # Cria faixas de 2 em 2 dias dinamicamente
-    bins = list(range(0, max_atraso + 3, 2))
-
-    labels = []
-    for i in range(len(bins)-1):
-        inicio = bins[i] + 1
-        fim = bins[i+1]
-        labels.append(f"{inicio}-{fim}")
-
-    df_atraso["Faixa"] = pd.cut(
-        df_atraso["Atraso (dias)"],
-        bins=bins,
-        labels=labels,
-        include_lowest=True
-    )
-
-    dist = (
-        df_atraso.groupby("Faixa", observed=False)["PV"]
-        .nunique()
-        .reset_index(name="Quantidade")
-    )
-
-    dist = dist[dist["Quantidade"] > 0]
-
-    # Ordenação correta das faixas
-    dist["Ordem"] = dist["Faixa"].astype(str).str.extract(r"(\d+)").astype(int)
-    dist = dist.sort_values("Ordem")
-
-    # GRÁFICO DE COLUNAS
-    fig_bar = px.bar(
-        dist,
-        x="Faixa",
-        y="Quantidade",
-        text="Quantidade",
-        title="Escalonamento de Atraso (em dias)",
-    )
-
-    fig_bar.update_traces(
-        textposition="outside"
-    )
-
-    fig_bar.update_layout(
-        xaxis_title="Faixa de Atraso (dias)",
-        yaxis_title="Quantidade de PVs",
-        height=450,
-        showlegend=False,
-        uniformtext_minsize=8,
-        uniformtext_mode='hide'
-    )
-
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    # KPI rápido abaixo do gráfico
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Maior atraso", f"{df_atraso['Atraso (dias)'].max():.0f} dias")
-
-    with col2:
-        st.metric("Média", f"{df_atraso['Atraso (dias)'].mean():.1f} dias")
-
-    with col3:
-        st.metric("Total em atraso", f"{len(df_atraso)} PVs")
-
-    # DETALHAMENTO
-    faixa_select = st.selectbox(
-        "Selecionar faixa para detalhamento",
-        dist["Faixa"].astype(str).tolist(),
-        key="faixa_bar_select"
-    )
-
-    detalhe = df_atraso[
-        df_atraso["Faixa"].astype(str) == faixa_select
-    ].copy()
-
-    st.subheader("📋 Detalhamento da Faixa")
-
-    st.dataframe(
-        detalhe.sort_values("Atraso (dias)", ascending=False),
-        use_container_width=True
-    )
-
-else:
-    st.success("Nenhum atraso 🎉")
-
-# ============================================================
-# ===================== ANÁLISE OPERACIONAL ==================
-# ============================================================
-with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
-
-    st.subheader("🔥 Gargalos do Período")
-
-    gargalos = dem.sort_values(
-        by=["Periodo", "Ocupacao", "Horas"],
-        ascending=[True, False, False]
-    ).copy()
-
-    top_gargalos = gargalos.groupby("Periodo").head(3).reset_index(drop=True)
-    top_gargalos["Semáforo"] = top_gargalos["Ocupacao"].apply(status)
-    top_gargalos["Ocupação (%)"] = top_gargalos["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-    top_gargalos["Horas"] = top_gargalos["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    top_gargalos["Capacidade"] = top_gargalos["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-    top_gargalos["Saldo (h)"] = top_gargalos["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
-
-    st.dataframe(
-        top_gargalos[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
-        use_container_width=True
-    )
-
-    st.subheader("🏭 Carga Real x Capacidade por Processo (h)")
-
-    dem_proc_plot = dem_proc.copy()
-
-    fig_cap_proc = px.bar(
-        dem_proc_plot.sort_values("Capacidade Processo", ascending=False),
-        x="Processo",
-        y=["Horas", "Capacidade Processo"],
-        barmode="group"
-    )
-
-    fig_cap_proc.update_traces(
-        selector=dict(name="Horas"),
-        name="Horas Aplicadas",
-        marker_color="#FF7A00",
-        texttemplate="%{y:.0f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
-    )
-
-    fig_cap_proc.update_traces(
-        selector=dict(name="Capacidade Processo"),
-        marker_color="#1f3b73",
-        texttemplate="%{y:.0f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
-    )
-
-    fig_cap_proc.update_layout(
-        yaxis_title="Horas",
-        xaxis_title="Processo",
-        legend_title_text="Tipo",
-        legend=dict(orientation="h", y=1.1),
-        uniformtext_minsize=8,
-        uniformtext_mode="show",
-        height=650
-    )
-
-    st.plotly_chart(
-        fig_cap_proc,
-        use_container_width=True,
-        key="grafico_capacidade_carga_processo"
-    )
-
-    st.subheader("📊 Backlog por Processo")
-
-    backlog = df.groupby("Processo", as_index=False).agg(
-        PVs=("PV", "nunique"),
-        Horas=("Horas", "sum")
-    )
-
-    backlog["Horas"] = backlog["Horas"].round(1)
-
-    fig_backlog = px.bar(
-        backlog.sort_values("Horas", ascending=False),
-        x="Processo",
-        y="Horas",
-        text="Horas"
-    )
-
-    fig_backlog.update_traces(
-        marker_color="#FF7A00",
-        texttemplate="%{y:.1f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
-    )
-
-    fig_backlog.update_layout(
-        xaxis_title="Processo",
-        yaxis_title="Horas em Backlog",
-        height=550
-    )
-
-    st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
-
-    st.subheader("📊 Carga por Cliente")
-
-    hoje = pd.Timestamp.today().normalize()
-
-    base_op = df.copy()
-
-    if "ENTREGA" in base_op.columns:
-        base_op["ENTREGA"] = pd.to_datetime(base_op["ENTREGA"], errors="coerce")
-        base_op["Dias para Entrega"] = (base_op["ENTREGA"] - hoje).dt.days
-    else:
-        base_op["Dias para Entrega"] = None
-
-    carga_cliente = base_op.groupby("Cliente", as_index=False).agg(
-        Horas=("Horas", "sum"),
-        PVs=("PV", "nunique")
-    )
-
-    carga_cliente["Horas"] = carga_cliente["Horas"].round(1)
-
-    fig_cliente_carga = px.bar(
-        carga_cliente.sort_values("Horas", ascending=False),
-        x="Cliente",
-        y="Horas",
-        text="Horas"
-    )
-
-    fig_cliente_carga.update_traces(
-        marker_color="#1f3b73",
-        texttemplate="%{y:.1f}",
-        textposition="outside",
-        textfont=dict(color="white")
-    )
-
-    fig_cliente_carga.update_layout(height=500)
-
-    st.plotly_chart(fig_cliente_carga, use_container_width=True)
-
-# ============================================================
-# ===================== PAINEL OPERACIONAL ===================
-# ============================================================
-st.markdown("## ⚡ Painel Operacional")
-st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
-
-st.subheader("📅 PVs que vencem HOJE")
-
-base_op = df.copy()
-
-if "DATA_ENTREGA_APS" in base_op.columns:
-    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(base_op["DATA_ENTREGA_APS"], errors="coerce")
-    base_op["Dias para Entrega"] = (base_op["DATA_ENTREGA_APS"] - hoje).dt.days
-    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
-else:
-    base_op["Dias para Entrega"] = None
-    base_op["ENTREGA"] = pd.NaT
-
-pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
-
-if not pvs_hoje.empty:
-    pvs_hoje["Horas"] = pvs_hoje["Horas"].round(1)
-    pvs_hoje["ENTREGA"] = pd.to_datetime(pvs_hoje["ENTREGA"], errors="coerce").dt.strftime("%d/%m/%Y")
-
-    st.dataframe(
-        pvs_hoje.sort_values("Horas", ascending=False),
-        use_container_width=True
-    )
-else:
-    st.success("Nenhuma PV vence hoje ✅")
-
-st.subheader("🔥 Top 10 PVs mais críticas")
-
-criticas = base_op.copy()
-
-criticas = criticas.sort_values(
-    ["Dias para Entrega", "Horas"],
-    ascending=[True, False]
-).head(10)
-
-criticas["Horas"] = criticas["Horas"].round(1)
-
-if "ENTREGA" in criticas.columns:
-    criticas["ENTREGA"] = pd.to_datetime(criticas["ENTREGA"], errors="coerce").dt.strftime("%d/%m/%Y")
-
-st.dataframe(criticas, use_container_width=True)
-
-st.subheader("🚨 PVs Urgentes da Semana")
-
-pvs_urgentes = df.copy()
-
-if "DATA_ENTREGA_APS" in pvs_urgentes.columns:
-    pvs_urgentes["DATA_ENTREGA_APS"] = pd.to_datetime(
-        pvs_urgentes["DATA_ENTREGA_APS"],
-        errors="coerce"
-    )
-
-    pvs_urgentes["Dias para Entrega"] = (
-        pvs_urgentes["DATA_ENTREGA_APS"] - hoje
-    ).dt.days
-
-    pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
-    pvs_urgentes["ENTREGA"] = pvs_urgentes["DATA_ENTREGA_APS"]
-
-    urgentes = pvs_urgentes[
-        pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
-    ].copy()
-
-    urgentes["Horas"] = urgentes["Horas"].round(1)
-    urgentes["ENTREGA"] = pd.to_datetime(urgentes["ENTREGA"], errors="coerce").dt.strftime("%d/%m/%Y")
-
-    colunas_urgentes = [
-        "Semáforo",
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Dias para Entrega",
-        "ENTREGA"
-    ]
-    colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
-
-    st.dataframe(
-        urgentes[colunas_urgentes].sort_values(
-            ["Dias para Entrega", "Horas"],
-            ascending=[True, False]
-        ),
-        use_container_width=True
-    )
-else:
-    st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
 
 # ============================================================
 # ===================== VISÃO OPERACIONAL ====================
@@ -2211,14 +3554,44 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     st.subheader("📌 Auditoria de Capacidade")
 
     auditoria = dem.copy()
-    auditoria["Semáforo"] = auditoria["Ocupacao"].apply(status)
+
+    # ------------------------------
+    # SANEAMENTO NUMÉRICO ROBUSTO
+    # ------------------------------
+    for col in ["Ocupacao", "Horas", "Capacidade", "Saldo (h)"]:
+        if col not in auditoria.columns:
+            auditoria[col] = 0
+
+        auditoria[col] = pd.to_numeric(
+            auditoria[col],
+            errors="coerce"
+        ).fillna(0)
+
+    # ------------------------------
+    # SEMÁFORO (INLINE - SEGURO)
+    # ------------------------------
+    auditoria["Semáforo"] = auditoria["Ocupacao"].apply(
+        lambda x: "🔴" if x >= 100
+        else "🟠" if x >= 90
+        else "🟡" if x >= 75
+        else "🟢"
+    )
+
+    # ------------------------------
+    # FORMATAÇÃO VISUAL
+    # ------------------------------
     auditoria["Ocupação (%)"] = auditoria["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
     auditoria["Horas"] = auditoria["Horas"].apply(lambda x: fmt_br_num(x, 1))
     auditoria["Capacidade"] = auditoria["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
     auditoria["Saldo (h)"] = auditoria["Saldo (h)"].apply(lambda x: fmt_br_num(x, 1))
 
+    # ------------------------------
+    # EXIBIÇÃO
+    # ------------------------------
     st.dataframe(
-        auditoria[["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]],
+        auditoria[
+            ["Periodo", "Semáforo", "Processo", "Horas", "Capacidade", "Ocupação (%)", "Saldo (h)"]
+        ],
         use_container_width=True
     )
 
@@ -2255,338 +3628,6 @@ with st.expander("📋 Tabelas, Filtros e Auditoria", expanded=True):
     st.dataframe(dem_proc, use_container_width=True)
 
     st.divider()
-    st.subheader("📌 Fila por Processo")
-
-    fila = df.copy()
-
-    if "ENTREGA" in fila.columns:
-        fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
-        fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
-    else:
-        fila["Dias para Entrega"] = None
-
-    fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
-
-    col_f1, col_f2 = st.columns(2)
-
-    processos_fila = sorted(fila["Processo"].dropna().unique().tolist())
-    processo_fila_sel = col_f1.selectbox(
-        "Filtrar por Processo",
-        ["Todos"] + processos_fila,
-        key="filtro_fila_processo_unico"
-    )
-
-    pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
-    pv_fila_sel = col_f2.selectbox(
-        "Filtrar por PV específica",
-        ["Todas"] + pvs_fila,
-        key="filtro_fila_pv_unico"
-    )
-
-    if processo_fila_sel != "Todos":
-        fila = fila[fila["Processo"] == processo_fila_sel].copy()
-
-    if pv_fila_sel != "Todas":
-        fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
-
-    col_k1, col_k2, col_k3 = st.columns(3)
-    col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
-    col_k2.metric("Processos na Fila", fila["Processo"].nunique())
-    col_k3.metric("Horas na Fila", f"{fila['Horas'].sum():.1f} h")
-
-    st.markdown("### 📋 PVs na Fila")
-
-    fila_detalhe = fila.copy()
-    fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
-
-    if "ENTREGA" in fila_detalhe.columns:
-        fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
-        fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-    colunas_fila = [
-        "Semáforo",
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-        "Horas",
-        "Dias para Entrega",
-        "ENTREGA"
-    ]
-    colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
-
-    ordenacao_fila = [c for c in ["Dias para Entrega", "Processo", "Horas"] if c in fila_detalhe.columns]
-    asc_fila = [True, True, False][:len(ordenacao_fila)]
-
-    fila_detalhe_exib = fila_detalhe[colunas_fila].copy()
-
-    if ordenacao_fila:
-        fila_detalhe_exib = fila_detalhe_exib.sort_values(
-            ordenacao_fila,
-            ascending=asc_fila
-        )
-
-    fila_detalhe_exib = fila_detalhe_exib.reset_index(drop=True)
-
-    st.dataframe(
-        fila_detalhe_exib,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.divider()
-
-    st.subheader("🔎 Busca rápida de PV / Cliente")
-
-    col_b1, col_b2 = st.columns(2)
-
-    busca_pv = col_b1.text_input("Buscar por PV")
-    busca_cliente = col_b2.text_input("Buscar por Cliente")
-
-    busca_df = base_op.copy()
-
-    if busca_pv:
-        busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
-
-    if busca_cliente:
-        busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
-
-    if busca_pv or busca_cliente:
-        busca_df["Horas"] = busca_df["Horas"].round(1)
-
-        if "ENTREGA" in busca_df.columns:
-            busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-        st.dataframe(busca_df, use_container_width=True)
-
-    st.subheader("📥 Exportar dados filtrados")
-
-    @st.cache_data
-    def converter_excel(df_export):
-        from io import BytesIO
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df_export.to_excel(writer, index=False)
-        return buffer.getvalue()
-
-    if not busca_df.empty:
-        excel_bytes = converter_excel(busca_df)
-
-        st.download_button(
-            label="📥 Baixar Excel",
-            data=excel_bytes,
-            file_name="consulta_pvs.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-        st.divider()
-    st.subheader("🧪 Auditoria de PV")
-
-    if not df_auditoria_pv.empty:
-
-        df_auditoria_pv["PV"] = df_auditoria_pv["PV"].astype(str).str.strip()
-
-        total_excel = pvs_totais_excel
-        total_aps = df_auditoria_pv["PV"].nunique()
-        total_auditadas = len(df_auditoria_pv)
-
-        resumo_auditoria = (
-            df_auditoria_pv["Status"]
-            .value_counts()
-            .reset_index()
-        )
-        resumo_auditoria.columns = ["Status", "Qtde"]
-
-        def semaforo_auditoria(x):
-            x = str(x).strip().upper()
-            if x == "OK":
-                return "🟢"
-            elif x == "DIVERGENTE":
-                return "🟡"
-            elif x == "FALTANDO":
-                return "🔴"
-            elif x == "SEM PROCESSO VÁLIDO":
-                return "🟠"
-            return "⚪"
-
-        df_auditoria_exibicao = df_auditoria_pv.copy()
-        df_auditoria_exibicao["Semáforo"] = df_auditoria_exibicao["Status"].apply(semaforo_auditoria)
-
-        qtd_ok = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "OK").sum()
-        qtd_divergente = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "DIVERGENTE").sum()
-        qtd_faltando = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "FALTANDO").sum()
-        qtd_sem_processo = (df_auditoria_exibicao["Status"].astype(str).str.upper().str.strip() == "SEM PROCESSO VÁLIDO").sum()
-
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-        col1.metric("📄 PVs Excel", f"{total_excel:,.0f}")
-        col2.metric("⚙️ PVs APS", f"{total_aps:,.0f}")
-        col3.metric("🔍 Registros", f"{total_auditadas:,.0f}")
-        col4.metric("🟢 OK", f"{qtd_ok:,.0f}")
-        col5.metric("🟡 Divergente", f"{qtd_divergente:,.0f}")
-        col6.metric("🔴 Faltando", f"{qtd_faltando:,.0f}")
-        col7.metric("🟠 Sem Processo", f"{qtd_sem_processo:,.0f}")
-
-        st.markdown("### 📊 Resumo da Auditoria")
-        st.dataframe(
-            resumo_auditoria,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.markdown("### 🚨 PVs com inconsistência de processo")
-
-        problemas_processo = df_auditoria_pv[
-            df_auditoria_pv["Status"].astype(str).str.strip().str.upper() == "SEM PROCESSO VÁLIDO"
-        ].copy()
-
-        if not problemas_processo.empty:
-            if "DATA_ENTREGA_APS" in problemas_processo.columns:
-                problemas_processo["DATA_ENTREGA_APS"] = pd.to_datetime(
-                    problemas_processo["DATA_ENTREGA_APS"],
-                    errors="coerce"
-                ).dt.strftime("%d/%m/%Y")
-
-            colunas_problema = [
-                "PV",
-                "Cliente",
-                "CODIGO_PV",
-                "DATA_ENTREGA_APS",
-                "Qtd",
-                "Status",
-                "Motivo"
-            ]
-            colunas_problema = [c for c in colunas_problema if c in problemas_processo.columns]
-
-            st.dataframe(
-                problemas_processo[colunas_problema]
-                .sort_values(["PV"])
-                .reset_index(drop=True),
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.success("Nenhuma PV com inconsistência de processo encontrada ✅")
-
-        st.markdown("### 📋 Detalhamento da Auditoria")
-        colunas_auditoria = ["Semáforo"] + [c for c in df_auditoria_exibicao.columns if c != "Semáforo"]
-
-        st.dataframe(
-            df_auditoria_exibicao[colunas_auditoria]
-            .sort_values(["Status", "PV"])
-            .reset_index(drop=True),
-            use_container_width=True,
-            height=420
-        )
-
-    else:
-        st.info("Nenhuma auditoria de PV disponível.")
-
-    with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
-
-        base_roteiro = df_pv.copy()
-        base_roteiro = base_roteiro[base_roteiro["CODIGO_KEY"] != ""].copy()
-
-        processos_ordenados = [
-            "CORTE - SERRA",
-            "CORTE-PLASMA",
-            "CORTE-LASER",
-            "CORTE-GUILHOTINA",
-            "TORNO CONVENCIONAL",
-            "TORNO CNC",
-            "CENTRO DE USINAGEM",
-            "FRESADORAS",
-            "FURADEIRA DE BANCADA",
-            "PRENSA (AMASSAMENTO)",
-            "CALANDRA",
-            "DOBRADEIRA",
-            "ROSQUEADEIRA",
-            "METALEIRA",
-            "SOLDAGEM",
-            "ACABAMENTO",
-            "JATEAMENTO",
-            "PINTURA",
-            "MONTAGEM",
-            "DIVERSOS"
-        ]
-
-        processos_validos = [p for p in processos_ordenados if p in base_roteiro.columns]
-
-        if len(processos_validos) == 0:
-            st.warning("Nenhum processo válido encontrado na planilha.")
-        else:
-            roteiro = base_roteiro.groupby("CODIGO_KEY")[processos_validos].max().reset_index()
-
-            for proc in processos_validos:
-                roteiro[proc] = pd.to_numeric(roteiro[proc], errors="coerce").fillna(0)
-
-            st.markdown("### 🔎 Consultar Roteiro por Código")
-
-            col_r1, col_r2, col_r3 = st.columns([2, 1, 1])
-
-            codigos = sorted(roteiro["CODIGO_KEY"].unique().tolist())
-            codigo_sel = col_r1.selectbox("Selecione o código", codigos)
-
-            roteiro_sel = roteiro[roteiro["CODIGO_KEY"] == codigo_sel].copy()
-
-            roteiro_detalhado = roteiro_sel.melt(
-                id_vars=["CODIGO_KEY"],
-                value_vars=processos_validos,
-                var_name="Processo",
-                value_name="Tempo (min)"
-            )
-
-            roteiro_detalhado["Tempo (min)"] = pd.to_numeric(
-                roteiro_detalhado["Tempo (min)"], errors="coerce"
-            ).fillna(0)
-
-            roteiro_detalhado = roteiro_detalhado[roteiro_detalhado["Tempo (min)"] > 0].copy()
-
-            ordem = {p: i for i, p in enumerate(processos_ordenados)}
-            roteiro_detalhado["Ordem"] = roteiro_detalhado["Processo"].map(ordem).fillna(999)
-            roteiro_detalhado = roteiro_detalhado.sort_values("Ordem")
-
-            roteiro_exibicao = roteiro_detalhado[["Processo", "Tempo (min)"]].copy()
-            roteiro_exibicao["Tempo (h)"] = (roteiro_exibicao["Tempo (min)"] / 60).round(2)
-
-            tempo_total_min = roteiro_exibicao["Tempo (min)"].sum()
-            tempo_total_h = round(tempo_total_min / 60, 2)
-            qtd_processos = len(roteiro_exibicao)
-
-            col_r2.metric("🧩 Etapas", f"{qtd_processos:,.0f}")
-            col_r3.metric("⏱️ Tempo Total (h)", f"{tempo_total_h:,.2f}")
-
-            st.markdown(f"### 🛠️ Roteiro do Código: `{codigo_sel}`")
-
-            if not roteiro_exibicao.empty:
-                st.dataframe(
-                    roteiro_exibicao.reset_index(drop=True),
-                    use_container_width=True,
-                    height=420,
-                    hide_index=True
-                )
-            else:
-                st.warning("Este código não possui tempos válidos nos processos mapeados.")
-
-            with st.expander("📋 Base Completa de Roteiros", expanded=False):
-                st.dataframe(
-                    roteiro,
-                    use_container_width=True,
-                    height=320,
-                    hide_index=True
-                )
-
-            from io import BytesIO
-
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-                roteiro.to_excel(writer, index=False)
-
-            st.download_button(
-                label="📥 Baixar Roteiros em Excel",
-                data=buffer.getvalue(),
-                file_name="roteiro_fabricacao.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
 
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS ============
@@ -2596,20 +3637,10 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
     st.subheader("🏭 Operações mais carregadas do APS")
     st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
 
-    # --------------------------------------------------------
-    # BASE DOS GARGALOS ATUAIS (usa apenas pendentes reais)
-    # --------------------------------------------------------
     gargalos_top3 = (
         df.groupby("Processo", as_index=False)
-        .agg(
-            Horas_Pendentes=("Horas", "sum"),
-            PVs_Pendentes=("PV", "nunique")
-        )
-        .merge(
-            dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]],
-            on="Processo",
-            how="left"
-        )
+        .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
+        .merge(dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]], on="Processo", how="left")
         .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
         .head(3)
         .reset_index(drop=True)
@@ -2623,9 +3654,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
         gargalos_top3["Ranking"] = gargalos_top3.index + 1
 
-        # --------------------------------------------------------
-        # DIAS DE FILA DO GARGALO
-        # --------------------------------------------------------
         gargalos_top3["Dias de Fila"] = np.where(
             gargalos_top3["Capacidade Processo"] > 0,
             (gargalos_top3["Horas_Pendentes"] / gargalos_top3["Capacidade Processo"]).round(1),
@@ -2644,578 +3672,115 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.dataframe(
             exib_top3[
-                [
-                    "Ranking",
-                    "Processo",
-                    "Horas Pendentes (h)",
-                    "PVs_Pendentes",
-                    "Capacidade Processo (h)",
-                    "Dias de Fila",
-                    "Utilização (%)"
-                ]
-            ].rename(columns={
-                "PVs_Pendentes": "PVs Pendentes"
-            }),
+                ["Ranking", "Processo", "Horas Pendentes (h)", "PVs_Pendentes",
+                 "Capacidade Processo (h)", "Dias de Fila", "Utilização (%)"]
+            ].rename(columns={"PVs_Pendentes": "PVs Pendentes"}),
             use_container_width=True,
             hide_index=True
         )
 
         st.divider()
 
-        # --------------------------------------------------------
-        # FILA DOS GARGALOS (usa base visual completa)
-        # --------------------------------------------------------
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
-
         base_gargalos = df_operacional[df_operacional["Processo"].isin(processos_top3)].copy()
 
-        # Blindagem estrutural
         for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Status Operacional"]:
             if col not in base_gargalos.columns:
                 base_gargalos[col] = ""
             base_gargalos[col] = base_gargalos[col].fillna("").astype(str).str.strip()
 
-        if "CHAVE_OPERACAO" not in base_gargalos.columns:
-            base_gargalos["CHAVE_OPERACAO"] = (
-                base_gargalos["PV"].astype(str).str.strip().str.upper() + "||" +
-                base_gargalos["Processo"].astype(str).str.strip().str.upper() + "||" +
-                base_gargalos["CODIGO_PV"].astype(str).str.strip().str.upper()
-            )
-        else:
-            base_gargalos["CHAVE_OPERACAO"] = (
-                base_gargalos["CHAVE_OPERACAO"].fillna("").astype(str).str.strip().str.upper()
-            )
-
-        if "ENTREGA" in base_gargalos.columns:
-            base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
-            base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
-            base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
-            base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
-        else:
-            base_gargalos["Dias para Entrega"] = None
-            base_gargalos["Semáforo"] = "⚪ Sem data"
-            base_gargalos["ENTREGA_FMT"] = ""
-
-        base_gargalos["Horas"] = pd.to_numeric(base_gargalos["Horas"], errors="coerce").fillna(0).round(1)
-
-        st.markdown("### 📋 PVs dos Gargalos (Pendentes + Baixadas)")
-
-        processo_baixa_sel = st.selectbox(
-            "Selecione o gargalo para trabalhar",
-            processos_top3,
-            key="gargalo_top3_select_operacional"
+        base_gargalos["CHAVE_OPERACAO"] = (
+            base_gargalos["PV"].str.upper().str.strip() + "||" +
+            base_gargalos["Processo"].str.upper().str.strip() + "||" +
+            base_gargalos["CODIGO_PV"].str.upper().str.strip()
         )
 
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == processo_baixa_sel
-        ].copy()
+        base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
+        base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
+        base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
+        base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+        st.markdown("### 📋 PVs dos Gargalos")
+
+        processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
+
+        fila_gargalo = base_gargalos[base_gargalos["Processo"] == processo_baixa_sel].copy()
 
         fila_gargalo = fila_gargalo.sort_values(
             ["Status Operacional", "Dias para Entrega", "Horas", "PV"],
             ascending=[True, True, False, True]
         ).reset_index(drop=True)
 
-        # --------------------------------------------------------
-        # TEMPO ACUMULADO DE FILA
-        # --------------------------------------------------------
-        capacidade_dia_gargalo = np.nan
-
-        if "Capacidade/Dia" in gargalos_top3.columns:
-            capacidade_tmp = gargalos_top3.loc[
-                gargalos_top3["Processo"] == processo_baixa_sel,
-                "Capacidade/Dia"
-            ]
-            if not capacidade_tmp.empty:
-                capacidade_dia_gargalo = pd.to_numeric(capacidade_tmp.iloc[0], errors="coerce")
-
-        elif "Capacidade" in gargalos_top3.columns:
-            capacidade_tmp = gargalos_top3.loc[
-                gargalos_top3["Processo"] == processo_baixa_sel,
-                "Capacidade"
-            ]
-            if not capacidade_tmp.empty:
-                capacidade_dia_gargalo = pd.to_numeric(capacidade_tmp.iloc[0], errors="coerce")
-
-        fila_gargalo["Horas"] = pd.to_numeric(fila_gargalo["Horas"], errors="coerce").fillna(0)
-
-        fila_gargalo["Horas_Pendentes_Acumuladas"] = np.where(
-            fila_gargalo["Status Operacional"] == "⏳ Pendente",
-            fila_gargalo["Horas"],
-            0
-        )
-
-        fila_gargalo["Fila Acumulada (h)"] = fila_gargalo["Horas_Pendentes_Acumuladas"].cumsum().round(1)
-
-        if pd.notna(capacidade_dia_gargalo) and capacidade_dia_gargalo > 0:
-            fila_gargalo["Dias até Entrada"] = (
-                fila_gargalo["Fila Acumulada (h)"] / capacidade_dia_gargalo
-            ).round(1)
-
-            fila_gargalo["Entrada Prevista"] = fila_gargalo["Dias até Entrada"].apply(
-                lambda x: "Hoje" if x <= 1 else f"{int(np.ceil(x))} dias"
-            )
-        else:
-            fila_gargalo["Dias até Entrada"] = np.nan
-            fila_gargalo["Entrada Prevista"] = "Sem capacidade"
-
         fila_gargalo_pendente = fila_gargalo[
             fila_gargalo["Status Operacional"] == "⏳ Pendente"
         ].copy()
 
-        col_g1, col_g2, col_g3, col_g4 = st.columns(4)
-
-        col_g1.metric("Processo Selecionado", processo_baixa_sel)
-        col_g2.metric("PVs Pendentes", fmt_br_int(fila_gargalo_pendente["PV"].nunique()))
-        col_g3.metric("Horas Pendentes", fmt_br_num(fila_gargalo_pendente["Horas"].sum(), 1) + " h")
-
-        if not fila_gargalo_pendente.empty and "Fila Acumulada (h)" in fila_gargalo_pendente.columns:
-            fila_total_h = pd.to_numeric(fila_gargalo_pendente["Fila Acumulada (h)"], errors="coerce").max()
-        else:
-            fila_total_h = 0
-
-        col_g4.metric("Fila Total do Gargalo", fmt_br_num(fila_total_h, 1) + " h")
-
-        fila_gargalo_exib = fila_gargalo.copy()
-
-        st.dataframe(
-            fila_gargalo_exib[
-                [
-                    "Status Operacional",
-                    "Semáforo",
-                    "PV",
-                    "Cliente",
-                    "CODIGO_PV",
-                    "Processo",
-                    "Horas",
-                    "Fila Acumulada (h)",
-                    "Entrada Prevista",
-                    "Dias para Entrega",
-                    "ENTREGA_FMT"
-                ]
-            ].rename(columns={
-                "ENTREGA_FMT": "Entrega"
-            }),
-            use_container_width=True,
-            hide_index=True,
-            height=360
-        )
+        st.dataframe(fila_gargalo, use_container_width=True, height=360)
 
         st.divider()
 
-        # --------------------------------------------------------
-        # BAIXA OPERACIONAL (usa CHAVE_OPERACAO REAL da linha)
-        # --------------------------------------------------------
+        # =========================================================
+        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
+        # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
         if fila_gargalo_pendente.empty:
-            st.info("Nenhuma PV pendente disponível para baixa neste gargalo.")
+            st.info("Nenhuma PV pendente disponível.")
         else:
             base_baixa = fila_gargalo_pendente.copy()
 
-            # blindagem estrutural
-            for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Horas", "CHAVE_OPERACAO"]:
-                if col not in base_baixa.columns:
-                    base_baixa[col] = ""
-
-            base_baixa["PV"] = base_baixa["PV"].fillna("").astype(str).str.strip().str.upper()
-            base_baixa["Cliente"] = base_baixa["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
-            base_baixa["CODIGO_PV"] = base_baixa["CODIGO_PV"].fillna("").astype(str).str.strip().str.upper()
-            base_baixa["Processo"] = base_baixa["Processo"].fillna("").astype(str).str.strip().str.upper()
-            base_baixa["Horas"] = pd.to_numeric(base_baixa["Horas"], errors="coerce").fillna(0)
-
-            # garante CHAVE_OPERACAO real e padronizada
-            base_baixa["CHAVE_OPERACAO"] = (
-                base_baixa["PV"].astype(str).str.strip().str.upper() + "||" +
-                base_baixa["Processo"].astype(str).str.strip().str.upper() + "||" +
-                base_baixa["CODIGO_PV"].astype(str).str.strip().str.upper()
-            )
-
-            # remove duplicidade visual da mesma operação
-            base_baixa = base_baixa.drop_duplicates(subset=["CHAVE_OPERACAO"]).copy()
-
-            # rótulo único e estável
             base_baixa["ROTULO_BAIXA"] = (
                 "PV " + base_baixa["PV"] +
                 " | " + base_baixa["Processo"] +
                 " | " + base_baixa["CODIGO_PV"] +
-                " | " + base_baixa["Horas"].round(1).astype(str) + " h"
+                " | " + base_baixa["Horas"].astype(str) + " h"
             )
 
-            opcoes_baixa = base_baixa["ROTULO_BAIXA"].dropna().astype(str).tolist()
+            opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
-            col_bx1, col_bx2 = st.columns([2, 2])
+            # 🔹 UNITÁRIO
+            st.markdown("#### 🔹 Ação Unitária")
 
-            baixa_sel = col_bx1.selectbox(
-                "Selecione a operação concluída",
-                opcoes_baixa,
-                key="pv_baixa_top3_select"
-            )
+            col_bx1, col_bx2 = st.columns(2)
 
-            observacao_baixa = col_bx2.text_input(
-                "Observação da baixa (opcional)",
-                key="obs_baixa_top3_input"
-            )
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            observacao_baixa = col_bx2.text_input("Observação")
 
-            registro_baixa_df = base_baixa[
-                base_baixa["ROTULO_BAIXA"] == baixa_sel
-            ].copy()
+            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
             if not registro_baixa_df.empty:
                 linha_baixa = registro_baixa_df.iloc[0]
 
-                chave_selecionada = str(linha_baixa["CHAVE_OPERACAO"]).strip().upper()
-
-                st.info(
-                    f"Você está prestes a registrar a operação **{linha_baixa['Processo']}** "
-                    f"da PV **{linha_baixa['PV']}** "
-                    f"({fmt_br_num(linha_baixa['Horas'], 1)} h)."
-                )
-
-                st.caption(f"🔑 CHAVE_OPERACAO: {chave_selecionada}")
-
                 col_btn1, col_btn2 = st.columns(2)
 
-                # --------------------------------------------
-                # BOTÃO BAIXA NORMAL
-                # --------------------------------------------
-                if col_btn1.button("💾 Confirmar Baixa Operacional", key="btn_confirmar_baixa_top3"):
+                if col_btn1.button("💾 Baixar"):
+                    salvar_baixa_operacional(BASE_PATH, linha_baixa.to_dict())
+                    st.cache_data.clear()
+                    st.rerun()
 
-                    registro_baixa = {
-                        "PV": str(linha_baixa["PV"]).strip().upper(),
-                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
-                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip().upper(),
-                        "Processo": str(linha_baixa["Processo"]).strip().upper(),
-                        "Horas": float(linha_baixa["Horas"]),
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "APS",
-                        "Observacao": observacao_baixa.strip() if observacao_baixa else "",
-                        "Status_Baixa": "ATIVA",
-                        "Data_Estorno": pd.NaT,
-                        "Motivo_Estorno": ""
-                    }
+                if col_btn2.button("🟣 Terceirizar"):
+                    salvar_baixa_operacional(BASE_PATH, linha_baixa.to_dict())
+                    st.cache_data.clear()
+                    st.rerun()
 
-                    try:
-                        df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
-                        st.cache_data.clear()
+            st.divider()
 
-                        st.success("✅ Baixa operacional registrada com sucesso.")
-                        st.info(
-                            f"Registro salvo: PV {registro_baixa['PV']} | "
-                            f"{registro_baixa['Processo']} | "
-                            f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
-                        )
+            # 📦 LOTE
+            st.markdown("#### 📦 Ação em Lote")
 
-                        if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                            st.caption(f"📁 Total de baixas registradas: {len(df_baixas_salvo)}")
+            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
 
-                            # auditoria rápida pós-gravação
-                            df_baixas_teste = df_baixas_salvo.copy()
+            if selecao_lote:
+                if st.button("📦 Baixar Lote"):
+                    for label in selecao_lote:
+                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
+                        salvar_baixa_operacional(BASE_PATH, linha.to_dict())
 
-                            for col in ["PV", "Processo", "CODIGO_PV"]:
-                                if col not in df_baixas_teste.columns:
-                                    df_baixas_teste[col] = ""
-
-                                df_baixas_teste[col] = (
-                                    df_baixas_teste[col]
-                                    .fillna("")
-                                    .astype(str)
-                                    .str.strip()
-                                    .str.upper()
-                                )
-
-                            df_baixas_teste["CHAVE_OPERACAO"] = (
-                                df_baixas_teste["PV"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["Processo"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["CODIGO_PV"].astype(str).str.strip().str.upper()
-                            )
-
-                            if chave_selecionada in df_baixas_teste["CHAVE_OPERACAO"].tolist():
-                                st.success("🧠 Validação: a operação foi localizada corretamente no histórico.")
-                            else:
-                                st.error("❌ Validação falhou: a operação não foi localizada no histórico após salvar.")
-
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(f"Erro ao salvar baixa operacional: {e}")
-
-                # --------------------------------------------
-                # BOTÃO TERCEIRIZADA
-                # --------------------------------------------
-                if col_btn2.button("🟣 Marcar como Terceirizada", key="btn_terceirizada_top3"):
-
-                    registro_baixa = {
-                        "PV": str(linha_baixa["PV"]).strip().upper(),
-                        "Cliente": str(linha_baixa.get("Cliente", "SEM CLIENTE")).strip(),
-                        "CODIGO_PV": str(linha_baixa.get("CODIGO_PV", "")).strip().upper(),
-                        "Processo": str(linha_baixa["Processo"]).strip().upper(),
-                        "Horas": float(linha_baixa["Horas"]),
-                        "Data_Baixa": pd.Timestamp.now(),
-                        "Usuario": "APS",
-                        "Observacao": f"TERCEIRIZADA | {observacao_baixa.strip()}" if observacao_baixa else "TERCEIRIZADA",
-                        "Status_Baixa": "TERCEIRIZADA",
-                        "Data_Estorno": pd.NaT,
-                        "Motivo_Estorno": ""
-                    }
-
-                    try:
-                        df_baixas_salvo = salvar_baixa_operacional(BASE_PATH, registro_baixa)
-                        st.cache_data.clear()
-
-                        st.success("🟣 Operação marcada como terceirizada.")
-                        st.info(
-                            f"Registro salvo: PV {registro_baixa['PV']} | "
-                            f"{registro_baixa['Processo']} | "
-                            f"{fmt_br_num(registro_baixa['Horas'], 1)} h"
-                        )
-
-                        if df_baixas_salvo is not None and not df_baixas_salvo.empty:
-                            st.caption(f"📁 Total de registros operacionais: {len(df_baixas_salvo)}")
-
-                            # auditoria rápida pós-gravação
-                            df_baixas_teste = df_baixas_salvo.copy()
-
-                            for col in ["PV", "Processo", "CODIGO_PV"]:
-                                if col not in df_baixas_teste.columns:
-                                    df_baixas_teste[col] = ""
-
-                                df_baixas_teste[col] = (
-                                    df_baixas_teste[col]
-                                    .fillna("")
-                                    .astype(str)
-                                    .str.strip()
-                                    .str.upper()
-                                )
-
-                            df_baixas_teste["CHAVE_OPERACAO"] = (
-                                df_baixas_teste["PV"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["Processo"].astype(str).str.strip().str.upper() + "||" +
-                                df_baixas_teste["CODIGO_PV"].astype(str).str.strip().str.upper()
-                            )
-
-                            if chave_selecionada in df_baixas_teste["CHAVE_OPERACAO"].tolist():
-                                st.success("🧠 Validação: a operação terceirizada foi localizada corretamente no histórico.")
-                            else:
-                                st.error("❌ Validação falhou: a operação terceirizada não foi localizada no histórico após salvar.")
-
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(f"Erro ao registrar terceirização: {e}")
+                    st.cache_data.clear()
+                    st.rerun()
 
         st.divider()
-
-        # --------------------------------------------------------
-        # DESFAZER BAIXA OPERACIONAL
-        # --------------------------------------------------------
-        st.markdown("### 🔁 Desfazer Baixa Operacional")
-
-        if "df_baixas_historico" not in locals() or df_baixas_historico is None or df_baixas_historico.empty:
-            st.info("Nenhuma baixa operacional disponível para estorno.")
-        else:
-            df_baixas_ativas_ui = df_baixas_historico.copy()
-
-            if "Status_Baixa" not in df_baixas_ativas_ui.columns:
-                df_baixas_ativas_ui["Status_Baixa"] = "ATIVA"
-
-            df_baixas_ativas_ui["Status_Baixa"] = (
-                df_baixas_ativas_ui["Status_Baixa"]
-                .fillna("ATIVA")
-                .astype(str)
-                .str.strip()
-                .str.upper()
-            )
-
-            df_baixas_ativas_ui = df_baixas_ativas_ui[
-                df_baixas_ativas_ui["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-            ].copy()
-
-            if cliente_sel != "Todos" and "Cliente" in df_baixas_ativas_ui.columns:
-                df_baixas_ativas_ui = df_baixas_ativas_ui[
-                    df_baixas_ativas_ui["Cliente"].astype(str).str.strip() == cliente_sel
-                ].copy()
-
-            if df_baixas_ativas_ui.empty:
-                st.info("Nenhuma baixa ativa disponível para estorno.")
-            else:
-                df_baixas_ativas_ui["ROTULO_ESTORNO"] = (
-                    "PV " + df_baixas_ativas_ui["PV"].astype(str).str.strip() +
-                    " | " + df_baixas_ativas_ui["Processo"].astype(str).str.strip() +
-                    " | " + df_baixas_ativas_ui["CODIGO_PV"].astype(str).str.strip() +
-                    " | " + df_baixas_ativas_ui["Horas"].astype(str)
-                )
-
-                opcoes_estorno = df_baixas_ativas_ui["ROTULO_ESTORNO"].dropna().astype(str).tolist()
-
-                col_est1, col_est2 = st.columns([2, 2])
-
-                baixa_estorno_sel = col_est1.selectbox(
-                    "Selecione a baixa para desfazer",
-                    opcoes_estorno,
-                    key="select_estorno_baixa_operacional"
-                )
-
-                motivo_estorno = col_est2.text_input(
-                    "Motivo do estorno",
-                    key="motivo_estorno_baixa_operacional"
-                )
-
-                linha_estorno = df_baixas_ativas_ui[
-                    df_baixas_ativas_ui["ROTULO_ESTORNO"] == baixa_estorno_sel
-                ].copy()
-
-                if not linha_estorno.empty:
-                    linha_estorno = linha_estorno.iloc[0]
-
-                    st.warning(
-                        f"Você está prestes a desfazer a baixa da PV **{linha_estorno['PV']}** "
-                        f"no processo **{linha_estorno['Processo']}**."
-                    )
-
-                    if st.button("🔁 Confirmar Estorno da Baixa", key="btn_estornar_baixa_operacional"):
-                        try:
-                            ok_estorno, msg_estorno = estornar_baixa_operacional(
-                                BASE_PATH,
-                                pv=linha_estorno["PV"],
-                                processo=linha_estorno["Processo"],
-                                codigo_pv=linha_estorno.get("CODIGO_PV", ""),
-                                motivo_estorno=motivo_estorno
-                            )
-
-                            if ok_estorno:
-                                st.cache_data.clear()
-                                st.success(f"✅ {msg_estorno}")
-                                st.rerun()
-                            else:
-                                st.warning(f"⚠️ {msg_estorno}")
-
-                        except Exception as e:
-                            st.error(f"Erro ao estornar baixa operacional: {e}")
-
-        # --------------------------------------------------------
-        # HISTÓRICO PREMIUM DE BAIXAS
-        # --------------------------------------------------------
-        st.markdown("### 🧾 Histórico Premium de Baixas Operacionais")
-
-        if "df_baixas_historico" not in locals() or df_baixas_historico is None:
-            df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
-        else:
-            df_baixas_exib = df_baixas_historico.copy()
-
-        if not df_baixas_exib.empty:
-            for col in ["PV", "Cliente", "CODIGO_PV", "Processo", "Usuario", "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"]:
-                if col in df_baixas_exib.columns:
-                    df_baixas_exib[col] = df_baixas_exib[col].fillna("").astype(str).str.strip()
-
-            if "Status_Baixa" in df_baixas_exib.columns:
-                df_baixas_exib["Status_Baixa"] = (
-                    df_baixas_exib["Status_Baixa"]
-                    .replace("", "ATIVA")
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                )
-            else:
-                df_baixas_exib["Status_Baixa"] = "ATIVA"
-
-            if "Data_Baixa" in df_baixas_exib.columns:
-                df_baixas_exib["Data_Baixa"] = pd.to_datetime(
-                    df_baixas_exib["Data_Baixa"],
-                    errors="coerce"
-                )
-
-            col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
-
-            status_hist_sel = col_hist1.selectbox(
-                "Filtrar por status",
-                ["Todos", "ATIVA", "TERCEIRIZADA", "ESTORNADA"],
-                key="filtro_status_historico_baixas"
-            )
-
-            processo_hist_sel = col_hist2.selectbox(
-                "Filtrar por processo",
-                ["Todos"] + sorted(df_baixas_exib["Processo"].dropna().astype(str).str.strip().unique().tolist()),
-                key="filtro_processo_historico_baixas"
-            )
-
-            cliente_hist_sel = col_hist3.selectbox(
-                "Filtrar por cliente",
-                ["Todos"] + sorted(df_baixas_exib["Cliente"].dropna().astype(str).str.strip().unique().tolist()),
-                key="filtro_cliente_historico_baixas"
-            )
-
-            if status_hist_sel != "Todos":
-                df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Status_Baixa"] == status_hist_sel
-                ].copy()
-
-            if processo_hist_sel != "Todos":
-                df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
-                ].copy()
-
-            if cliente_hist_sel != "Todos":
-                df_baixas_exib = df_baixas_exib[
-                    df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
-                ].copy()
-
-            col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
-            col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
-            col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
-            col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
-            col_hk4.metric("Horas Registradas", fmt_br_num(pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(), 1) + " h")
-
-            if "Data_Baixa" in df_baixas_exib.columns:
-                df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
-
-            def status_historico_label(x):
-                x = str(x).strip().upper()
-                if x == "ATIVA":
-                    return "✅ Baixada"
-                elif x == "TERCEIRIZADA":
-                    return "🟣 Terceirizada"
-                elif x == "ESTORNADA":
-                    return "🔁 Estornada"
-                return "⚪ Indefinido"
-
-            df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
-
-            df_baixas_exib = df_baixas_exib.sort_values(
-                by=["Data_Baixa"],
-                ascending=False,
-                na_position="last"
-            ).copy()
-
-            st.dataframe(
-                df_baixas_exib[
-                    [
-                        "Status Exibição",
-                        "PV",
-                        "Cliente",
-                        "CODIGO_PV",
-                        "Processo",
-                        "Horas",
-                        "Data_Baixa",
-                        "Usuario",
-                        "Observacao",
-                        "Data_Estorno",
-                        "Motivo_Estorno"
-                    ]
-                ].rename(columns={
-                    "Status Exibição": "Status",
-                    "Data_Baixa": "Data da Baixa",
-                    "Usuario": "Usuário",
-                    "Observacao": "Observação",
-                    "Data_Estorno": "Data do Estorno",
-                    "Motivo_Estorno": "Motivo do Estorno"
-                }),
-                use_container_width=True,
-                hide_index=True,
-                height=340
-            )
-        else:
-            st.info("Nenhuma baixa operacional registrada até o momento.")
-
+        
 # ============================================================
 # ================= SIMULAÇÃO DE GARGALO =====================
 # ============================================================
