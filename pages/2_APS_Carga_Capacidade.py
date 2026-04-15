@@ -2729,27 +2729,28 @@ else:
 
     base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
 
-    # 🔥 SOMENTE PENDENTES
-    base_corte = base_corte[
+    # 🔥 RESET E ID (ANTES DE FILTRAR)
+    base_corte = base_corte.reset_index(drop=True)
+    base_corte["ID_UNICO"] = base_corte.index.astype(str)
+
+    base_corte["LABEL"] = (
+        "PV " + base_corte["PV"].astype(str) +
+        " | " + base_corte["Processo"].astype(str) +
+        " | " + base_corte["CODIGO_PV"].astype(str) +
+        " | " + base_corte["Horas"].astype(str) + " h"
+    )
+
+    # 🔥 FILTRA PENDENTES NO MOMENTO CERTO
+    base_corte_pendente = base_corte[
         base_corte["Status Operacional"] == "⏳ Pendente"
     ].copy()
 
-    if base_corte.empty:
+    if base_corte_pendente.empty:
         st.info("Nenhuma operação pendente de corte.")
     else:
 
-        base_corte = base_corte.reset_index(drop=True)
-        base_corte["ID_UNICO"] = base_corte.index.astype(str)
-
-        base_corte["LABEL"] = (
-            "PV " + base_corte["PV"].astype(str) +
-            " | " + base_corte["Processo"].astype(str) +
-            " | " + base_corte["CODIGO_PV"].astype(str) +
-            " | " + base_corte["Horas"].astype(str) + " h"
-        )
-
-        mapa = dict(zip(base_corte["LABEL"], base_corte["ID_UNICO"]))
-        opcoes = base_corte["LABEL"].tolist()
+        mapa = dict(zip(base_corte_pendente["LABEL"], base_corte_pendente["ID_UNICO"]))
+        opcoes = base_corte_pendente["LABEL"].tolist()
 
         # ------------------------------------------------------------
         # UNITÁRIO
@@ -2758,7 +2759,7 @@ else:
 
         escolha = st.selectbox("Operação", opcoes)
 
-        linha_sel = base_corte[base_corte["LABEL"] == escolha]
+        linha_sel = base_corte_pendente[base_corte_pendente["LABEL"] == escolha]
 
         if not linha_sel.empty:
             linha = linha_sel.iloc[0]
@@ -2797,7 +2798,7 @@ else:
 
                 for label in selecao:
                     idx = mapa.get(label)
-                    linha_df = base_corte[base_corte["ID_UNICO"] == idx]
+                    linha_df = base_corte_pendente[base_corte_pendente["ID_UNICO"] == idx]
 
                     if not linha_df.empty:
                         linha = linha_df.iloc[0]
@@ -2819,6 +2820,7 @@ else:
                 st.success("Lote de corte baixado com sucesso")
                 st.cache_data.clear()
                 st.rerun()
+
 
 # =========================================================
 # DASHBOARD DO CORTE
