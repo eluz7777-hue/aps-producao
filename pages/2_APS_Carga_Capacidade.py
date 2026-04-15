@@ -2035,7 +2035,7 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL BLINDADA REAL)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL DEFINITIVA)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
@@ -2049,7 +2049,8 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     except Exception:
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
-    df_existente = _padronizar_df_baixas(df_existente)
+    # 🔥 NUNCA TRABALHAR DIRETO NO ORIGINAL
+    df_existente = df_existente.copy()
 
     # ------------------------------------------------------------
     # NOVO REGISTRO
@@ -2061,7 +2062,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo[col] = ""
 
     # ------------------------------------------------------------
-    # PADRONIZAÇÃO FORTE
+    # PADRONIZAÇÃO DO NOVO
     # ------------------------------------------------------------
     for col in ["PV", "CODIGO_PV", "Processo"]:
         novo[col] = (
@@ -2098,42 +2099,39 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # 🔴 VALIDAÇÃO REAL (BLINDADA)
+    # 🔴 VALIDAÇÃO ISOLADA (SEM CONTAMINAR BASE)
     # ------------------------------------------------------------
     if not df_existente.empty:
 
-        # NORMALIZA BASE INTEIRA (CRÍTICO)
-        df_existente["PV"] = df_existente["PV"].astype(str).str.strip().str.upper()
-        df_existente["CODIGO_PV"] = df_existente["CODIGO_PV"].astype(str).str.strip().str.upper()
-        df_existente["Processo"] = df_existente["Processo"].astype(str).str.strip().str.upper()
+        df_tmp = df_existente.copy()
 
-        df_existente["Status_Baixa"] = (
-            df_existente["Status_Baixa"]
+        # NORMALIZA SOMENTE PARA COMPARAÇÃO
+        df_tmp["PV"] = df_tmp["PV"].astype(str).str.strip().str.upper()
+        df_tmp["CODIGO_PV"] = df_tmp["CODIGO_PV"].astype(str).str.strip().str.upper()
+        df_tmp["Processo"] = df_tmp["Processo"].astype(str).str.strip().str.upper()
+
+        status_series = (
+            df_tmp["Status_Baixa"]
             .fillna("")
             .astype(str)
             .str.strip()
             .str.upper()
         )
 
-        df_existente["CHAVE_OPERACAO"] = (
-            df_existente["PV"] + "||" +
-            df_existente["Processo"] + "||" +
-            df_existente["CODIGO_PV"]
+        df_tmp["CHAVE_OPERACAO"] = (
+            df_tmp["PV"] + "||" +
+            df_tmp["Processo"] + "||" +
+            df_tmp["CODIGO_PV"]
         )
 
-        # FILTRA MESMA OPERAÇÃO
-        registros = df_existente[
-            df_existente["CHAVE_OPERACAO"] == chave_nova
-        ]
+        registros = df_tmp[df_tmp["CHAVE_OPERACAO"] == chave_nova]
 
         if not registros.empty:
 
-            # 🔥 FILTRA SOMENTE STATUS VÁLIDOS
             registros_ativos = registros[
-                registros["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+                status_series.loc[registros.index].isin(["ATIVA", "TERCEIRIZADA"])
             ]
 
-            # 🔥 SÓ BLOQUEIA SE EXISTIR ATIVO REAL
             if not registros_ativos.empty:
 
                 # LOG DE TENTATIVA
@@ -2152,7 +2150,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 }
 
     # ------------------------------------------------------------
-    # SALVA NORMAL
+    # SALVAMENTO REAL
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
