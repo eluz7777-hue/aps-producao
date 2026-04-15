@@ -1662,6 +1662,35 @@ st.subheader("📊 Carga x Capacidade por Processo")
 
 base = dem_proc.copy()
 
+# 🔥 GARANTE PROCESSO
+base["Processo"] = base["Processo"].astype(str).str.upper()
+
+# 🔥 PREPARA BAIXAS
+if df_baixas is not None and not df_baixas.empty:
+
+    baixas_tmp = df_baixas.copy()
+    baixas_tmp["Processo"] = baixas_tmp["Processo"].astype(str).str.upper()
+    baixas_tmp["Horas"] = pd.to_numeric(baixas_tmp["Horas"], errors="coerce").fillna(0)
+
+    # 🔥 SOMA BAIXAS
+    baixas_agg = (
+        baixas_tmp.groupby("Processo")["Horas"]
+        .sum()
+        .reset_index()
+        .rename(columns={"Horas": "Horas_Baixadas"})
+    )
+
+    # 🔥 MERGE COM BASE
+    base = base.merge(baixas_agg, on="Processo", how="left")
+    base["Horas_Baixadas"] = base["Horas_Baixadas"].fillna(0)
+
+    # 🔥 DESCONTO REAL
+    base["Horas"] = base["Horas"] - base["Horas_Baixadas"]
+    base["Horas"] = base["Horas"].clip(lower=0)
+
+else:
+    base["Horas_Baixadas"] = 0
+
 # segurança numérica
 for col in ["Horas", "Capacidade Processo"]:
     if col not in base.columns:
@@ -1680,18 +1709,15 @@ fig_comp = px.bar(
 # cores corretas
 fig_comp.update_traces(
     selector=dict(name="Horas"),
-    marker_color="#FF7A00"  # laranja
+    marker_color="#FF7A00"
 )
 
 fig_comp.update_traces(
     selector=dict(name="Capacidade Processo"),
-    marker_color="#1f77b4"  # azul
+    marker_color="#1f77b4"
 )
 
-# rótulos em cima
-fig_comp.update_traces(
-    textposition="outside"
-)
+fig_comp.update_traces(textposition="outside")
 
 fig_comp.update_layout(
     yaxis_title="Horas",
