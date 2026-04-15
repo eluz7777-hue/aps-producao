@@ -255,27 +255,6 @@ if df_baixas is None:
     df_baixas = pd.DataFrame()
 
 
-# =========================================================
-# BASE DA FILA (OBRIGATÓRIO PARA GARGALOS)
-# =========================================================
-
-fila = pd.DataFrame()
-
-# 🔥 PRIORIDADE 1
-if "df_programacao" in locals() and isinstance(df_programacao, pd.DataFrame) and not df_programacao.empty:
-    fila = df_programacao.copy()
-
-# 🔥 PRIORIDADE 2
-elif "df" in locals() and isinstance(df, pd.DataFrame) and not df.empty:
-    fila = df.copy()
-
-# 🔥 PRIORIDADE 3 (ESSA É A QUE VAI RESOLVER O SEU CASO)
-elif "df_operacional" in locals() and isinstance(df_operacional, pd.DataFrame) and not df_operacional.empty:
-    fila = df_operacional.copy()
-
-# 🔥 ERRO CONTROLADO
-if fila.empty:
-    st.error("ERRO: Não foi encontrada base de fila (df, df_programacao ou df_operacional)")
 
 # =========================================================
 # GARANTE COLUNA PROCESSO
@@ -504,6 +483,101 @@ if not os.path.exists(arquivo_pv):
 file_mtime = os.path.getmtime(arquivo_pv)
 
 df_pv = carregar_dados(arquivo_pv, file_mtime)
+
+
+# ============================================================
+# 🔥 PIPELINE ÚNICO DE DADOS (DEFINITIVO)
+# ============================================================
+
+# ===============================
+# 1. BASE ORIGINAL
+# ===============================
+if "df_pv" in locals() and isinstance(df_pv, pd.DataFrame) and not df_pv.empty:
+    df_original = df_pv.copy()
+else:
+    st.error("Erro: base df_pv não carregada.")
+    st.stop()
+
+st.write("DF ORIGINAL SHAPE:", df_original.shape)
+
+# ===============================
+# 2. PADRONIZA COLUNAS
+# ===============================
+df_original.columns = df_original.columns.str.upper().str.strip()
+
+mapa = {
+    "CLIENTE": "Cliente",
+    "CODIGO_PV": "CODIGO_PV",
+    "PV": "PV",
+    "ENTREGA": "Data",
+    "DATA_ENTREGA_APS": "Data",
+    "QTD": "QTD"
+}
+
+for col_origem, col_destino in mapa.items():
+    if col_origem in df_original.columns:
+        df_original[col_destino] = df_original[col_origem]
+
+# garante Cliente
+if "Cliente" not in df_original.columns:
+    df_original["Cliente"] = "SEM CLIENTE"
+
+df_original["Cliente"] = df_original["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
+
+# ===============================
+# 3. PROCESSOS → FORMATO LONG
+# ===============================
+processos = [
+    "CORTE - SERRA", "CORTE-PLASMA", "CORTE-LASER",
+    "CORTE-GUILHOTINA", "TORNO CONVENCIONAL", "TORNO CNC",
+    "CENTRO DE USINAGEM", "FRESADORAS", "PRENSA (AMASSAMENTO)",
+    "CALANDRA", "DOBRADEIRA", "ROSQUEADEIRA", "METALFURA",
+    "FURADEIRA DE BANCADA", "SOLDAGEM", "ACABAMENTO",
+    "JATEAMENTO", "PINTURA", "MONTAGEM", "DIVERSOS"
+]
+
+proc_existentes = [p for p in processos if p in df_original.columns]
+
+df_operacional = df_original.melt(
+    id_vars=["PV", "Cliente", "CODIGO_PV", "Data"],
+    value_vars=proc_existentes,
+    var_name="Processo",
+    value_name="Horas"
+)
+
+df_operacional["Horas"] = pd.to_numeric(df_operacional["Horas"], errors="coerce").fillna(0)
+df_operacional = df_operacional[df_operacional["Horas"] > 0]
+
+st.write("DF OPERACIONAL AJUSTADO:", df_operacional.shape)
+
+# ===============================
+# 4. DATA PADRÃO
+# ===============================
+df_operacional["Data"] = pd.to_datetime(df_operacional["Data"], errors="coerce")
+
+df_operacional["Ano"] = df_operacional["Data"].dt.year
+df_operacional["Semana"] = df_operacional["Data"].dt.isocalendar().week
+df_operacional["Mes"] = df_operacional["Data"].dt.month
+
+# ===============================
+# 5. FILA (ÚNICA)
+# ===============================
+fila = df_operacional.copy()
+
+st.write("FILA SHAPE:", fila.shape)
+st.write("COLUNAS FILA:", list(fila.columns))
+
+# ===============================
+# 6. BASE DE BAIXAS
+# ===============================
+try:
+    df_baixas = carregar_baixas_operacionais(BASE_PATH)
+except:
+    df_baixas = pd.DataFrame()
+
+if df_baixas is None:
+    df_baixas = pd.DataFrame()
+
 
 # ===============================
 # NORMALIZAÇÃO FORTE DE CABEÇALHOS
@@ -810,80 +884,8 @@ else:
 st.write("DF ORIGINAL SHAPE:", df_original.shape)
 
 
-# ============================================================
-# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
-# ============================================================
 
-if not df_original.empty:
-    df_operacional = df_original.copy()
-else:
-    df_operacional = pd.DataFrame()
 
-# 🔍 DEBUG
-st.write("DF OPERACIONAL SHAPE:", df_operacional.shape)
-
-# ============================================================
-# 🔹 PADRONIZAÇÃO DE COLUNAS (OBRIGATÓRIO)
-# ============================================================
-
-if not df_operacional.empty:
-
-    # 🔥 PADRONIZA NOMES (UPPER)
-    df_operacional.columns = df_operacional.columns.str.upper().str.strip()
-
-    # 🔥 RENOMEIA PARA PADRÃO DO SISTEMA
-    mapa_colunas = {
-        "CLIENTE": "Cliente",
-        "CODIGO_PV": "CODIGO_PV",
-        "PV": "PV",
-        "ENTREGA": "Data",
-        "DATA_ENTREGA_APS": "Data",
-        "QTD": "QTD"
-    }
-
-    for col_original, col_padrao in mapa_colunas.items():
-        if col_original in df_operacional.columns:
-            df_operacional[col_padrao] = df_operacional[col_original]
-
-    # 🔥 GARANTE COLUNA Cliente
-    if "Cliente" not in df_operacional.columns:
-        df_operacional["Cliente"] = "SEM CLIENTE"
-
-    df_operacional["Cliente"] = (
-        df_operacional["Cliente"]
-        .fillna("SEM CLIENTE")
-        .astype(str)
-        .str.strip()
-    )
-
-    # 🔥 GARANTE PROCESSO (CRIA BASE LONG)
-    col_processos = [
-        "CORTE - SERRA", "CORTE-PLASMA", "CORTE-LASER",
-        "CORTE-GUILHOTINA", "TORNO CONVENCIONAL", "TORNO CNC",
-        "CENTRO DE USINAGEM", "FRESADORAS", "PRENSA (AMASSAMENTO)",
-        "CALANDRA", "DOBRADEIRA", "ROSQUEADEIRA", "METALFURA",
-        "FURADEIRA DE BANCADA", "SOLDAGEM", "ACABAMENTO",
-        "JATEAMENTO", "PINTURA", "MONTAGEM", "DIVERSOS"
-    ]
-
-    col_processos_existentes = [c for c in col_processos if c in df_operacional.columns]
-
-    if col_processos_existentes:
-
-        df_operacional = df_operacional.melt(
-            id_vars=["PV", "Cliente", "CODIGO_PV", "Data"],
-            value_vars=col_processos_existentes,
-            var_name="Processo",
-            value_name="Horas"
-        )
-
-        df_operacional["Horas"] = pd.to_numeric(df_operacional["Horas"], errors="coerce").fillna(0)
-
-        # 🔥 REMOVE ZEROS
-        df_operacional = df_operacional[df_operacional["Horas"] > 0]
-
-# DEBUG
-st.write("DF OPERACIONAL AJUSTADO:", df_operacional.shape)
 
 
 # =========================================================
