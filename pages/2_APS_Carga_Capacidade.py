@@ -822,6 +822,69 @@ else:
 # 🔍 DEBUG
 st.write("DF OPERACIONAL SHAPE:", df_operacional.shape)
 
+# ============================================================
+# 🔹 PADRONIZAÇÃO DE COLUNAS (OBRIGATÓRIO)
+# ============================================================
+
+if not df_operacional.empty:
+
+    # 🔥 PADRONIZA NOMES (UPPER)
+    df_operacional.columns = df_operacional.columns.str.upper().str.strip()
+
+    # 🔥 RENOMEIA PARA PADRÃO DO SISTEMA
+    mapa_colunas = {
+        "CLIENTE": "Cliente",
+        "CODIGO_PV": "CODIGO_PV",
+        "PV": "PV",
+        "ENTREGA": "Data",
+        "DATA_ENTREGA_APS": "Data",
+        "QTD": "QTD"
+    }
+
+    for col_original, col_padrao in mapa_colunas.items():
+        if col_original in df_operacional.columns:
+            df_operacional[col_padrao] = df_operacional[col_original]
+
+    # 🔥 GARANTE COLUNA Cliente
+    if "Cliente" not in df_operacional.columns:
+        df_operacional["Cliente"] = "SEM CLIENTE"
+
+    df_operacional["Cliente"] = (
+        df_operacional["Cliente"]
+        .fillna("SEM CLIENTE")
+        .astype(str)
+        .str.strip()
+    )
+
+    # 🔥 GARANTE PROCESSO (CRIA BASE LONG)
+    col_processos = [
+        "CORTE - SERRA", "CORTE-PLASMA", "CORTE-LASER",
+        "CORTE-GUILHOTINA", "TORNO CONVENCIONAL", "TORNO CNC",
+        "CENTRO DE USINAGEM", "FRESADORAS", "PRENSA (AMASSAMENTO)",
+        "CALANDRA", "DOBRADEIRA", "ROSQUEADEIRA", "METALFURA",
+        "FURADEIRA DE BANCADA", "SOLDAGEM", "ACABAMENTO",
+        "JATEAMENTO", "PINTURA", "MONTAGEM", "DIVERSOS"
+    ]
+
+    col_processos_existentes = [c for c in col_processos if c in df_operacional.columns]
+
+    if col_processos_existentes:
+
+        df_operacional = df_operacional.melt(
+            id_vars=["PV", "Cliente", "CODIGO_PV", "Data"],
+            value_vars=col_processos_existentes,
+            var_name="Processo",
+            value_name="Horas"
+        )
+
+        df_operacional["Horas"] = pd.to_numeric(df_operacional["Horas"], errors="coerce").fillna(0)
+
+        # 🔥 REMOVE ZEROS
+        df_operacional = df_operacional[df_operacional["Horas"] > 0]
+
+# DEBUG
+st.write("DF OPERACIONAL AJUSTADO:", df_operacional.shape)
+
 
 # =========================================================
 # BASE GLOBAL DE BAIXAS (ÚNICA FONTE)
