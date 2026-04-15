@@ -2845,11 +2845,10 @@ else:
                     st.success(f"{sucessos} operações baixadas com sucesso")
 
                 if erros:
-                    st.warning(f"{len(erros)} operações não foram baixadas (possível duplicidade)")
+                    st.warning(f"{len(erros)} operações não foram baixadas (duplicidade ou erro)")
 
                 st.cache_data.clear()
                 st.rerun()
-
 
 # =========================================================
 # DASHBOARD DO CORTE
