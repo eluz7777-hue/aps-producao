@@ -997,10 +997,40 @@ if not df_original.empty:
         )
 
 # ============================================================
-# BASE OPERACIONAL VISUAL (MOSTRA TUDO, MAS COM STATUS)
+# BASE OPERACIONAL (JÁ ESTÁ EM FORMATO LONG)
 # ============================================================
 
 df_operacional = df_original.copy()
+
+# 🔥 GARANTE PADRÃO
+df_operacional["Processo"] = (
+    df_operacional["Processo"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
+
+df_operacional["Horas"] = pd.to_numeric(
+    df_operacional["Horas"], errors="coerce"
+).fillna(0)
+
+df_operacional = df_operacional[df_operacional["Horas"] > 0]
+
+
+# ============================================================
+# 🔥 RESTAURA FORMATO ANTIGO PARA CORTE
+# ============================================================
+
+df_corte_pivot = df_operacional.pivot_table(
+    index=["PV", "Cliente", "CODIGO_PV", "Data"],
+    columns="Processo",
+    values="Horas",
+    aggfunc="sum",
+    fill_value=0
+).reset_index()
+
+df_corte_pivot.columns.name = None
+
 
 # --------------------------------------------
 # FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE
