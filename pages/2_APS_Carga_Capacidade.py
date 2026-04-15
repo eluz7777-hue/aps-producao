@@ -2035,12 +2035,15 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL CORRIGIDA REAL)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL BLINDADA REAL)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
     caminho = garantir_arquivo_baixas(base_path)
 
+    # ------------------------------------------------------------
+    # CARREGA BASE
+    # ------------------------------------------------------------
     try:
         df_existente = pd.read_excel(caminho, dtype=str)
     except Exception:
@@ -2048,6 +2051,9 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
     df_existente = _padronizar_df_baixas(df_existente)
 
+    # ------------------------------------------------------------
+    # NOVO REGISTRO
+    # ------------------------------------------------------------
     novo = pd.DataFrame([registro_baixa])
 
     for col in COLUNAS_BAIXAS:
@@ -2055,7 +2061,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo[col] = ""
 
     # ------------------------------------------------------------
-    # PADRONIZAÇÃO
+    # PADRONIZAÇÃO FORTE
     # ------------------------------------------------------------
     for col in ["PV", "CODIGO_PV", "Processo"]:
         novo[col] = (
@@ -2072,6 +2078,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
         novo["Status_Baixa"]
         .fillna("ATIVA")
         .astype(str)
+        .str.strip()
         .str.upper()
     )
 
@@ -2091,33 +2098,48 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # 🔴 VALIDAÇÃO CORRETA
+    # 🔴 VALIDAÇÃO REAL (BLINDADA)
     # ------------------------------------------------------------
     if not df_existente.empty:
 
-        df_existente["CHAVE_OPERACAO"] = (
-            df_existente["PV"].astype(str).str.strip().str.upper() + "||" +
-            df_existente["Processo"].astype(str).str.strip().str.upper() + "||" +
-            df_existente["CODIGO_PV"].astype(str).str.strip().str.upper()
+        # NORMALIZA BASE INTEIRA (CRÍTICO)
+        df_existente["PV"] = df_existente["PV"].astype(str).str.strip().str.upper()
+        df_existente["CODIGO_PV"] = df_existente["CODIGO_PV"].astype(str).str.strip().str.upper()
+        df_existente["Processo"] = df_existente["Processo"].astype(str).str.strip().str.upper()
+
+        df_existente["Status_Baixa"] = (
+            df_existente["Status_Baixa"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
         )
 
+        df_existente["CHAVE_OPERACAO"] = (
+            df_existente["PV"] + "||" +
+            df_existente["Processo"] + "||" +
+            df_existente["CODIGO_PV"]
+        )
+
+        # FILTRA MESMA OPERAÇÃO
         registros = df_existente[
             df_existente["CHAVE_OPERACAO"] == chave_nova
         ]
 
         if not registros.empty:
 
-            # 🔥 AQUI ESTÁ A CORREÇÃO REAL
+            # 🔥 FILTRA SOMENTE STATUS VÁLIDOS
             registros_ativos = registros[
                 registros["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
             ]
 
+            # 🔥 SÓ BLOQUEIA SE EXISTIR ATIVO REAL
             if not registros_ativos.empty:
 
                 # LOG DE TENTATIVA
                 log = novo.copy()
                 log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
-                log["Motivo_Estorno"] = "Tentativa de baixa duplicada bloqueada"
+                log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
                 log["Data_Baixa"] = pd.Timestamp.now()
 
                 df_existente = pd.concat([df_existente, log], ignore_index=True)
@@ -2144,6 +2166,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             "erro": str(e),
             "tipo": "erro_gravacao"
         }
+
 
 
 
