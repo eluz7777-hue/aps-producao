@@ -681,6 +681,60 @@ def garantir_arquivo_baixas(base_path):
     return caminho
 
 
+# =============================== 
+# PADRONIZAR BAIXAS OPERACIONAIS APS
+# ===============================
+
+def _padronizar_df_baixas(df_baixas):
+
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    df_baixas = df_baixas.copy()
+
+    for col in COLUNAS_BAIXAS:
+        if col not in df_baixas.columns:
+            df_baixas[col] = None
+
+    df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
+
+    colunas_texto = [
+        "PV", "Cliente", "CODIGO_PV", "Processo",
+        "Usuario", "Observacao", "Status_Baixa",
+        "Data_Estorno", "Motivo_Estorno"
+    ]
+
+    for col in colunas_texto:
+        df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
+
+    df_baixas["PV"] = df_baixas["PV"].str.upper()
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].str.upper()
+    df_baixas["Processo"] = df_baixas["Processo"].str.upper()
+    df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
+
+    df_baixas["Status_Baixa"] = (
+        df_baixas["Status_Baixa"]
+        .replace("", "ATIVA")
+        .str.upper()
+    )
+
+    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
+    df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str)
+
+    df_baixas["CHAVE_OPERACAO"] = (
+        df_baixas["PV"] + "||" +
+        df_baixas["Processo"] + "||" +
+        df_baixas["CODIGO_PV"]
+    )
+
+    df_baixas = df_baixas.sort_values(
+        by=["Data_Baixa", "PV", "Processo"],
+        ascending=[False, True, True]
+    ).reset_index(drop=True)
+
+    return df_baixas
+
 
 # ============================================================
 # FUNÇÃO DE CARREGAMENTO
@@ -2007,64 +2061,6 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
 
 
 
-# =============================== 
-# PADRONIZAR BAIXAS OPERACIONAIS APS
-# ===============================
-
-def _padronizar_df_baixas(df_baixas):
-
-    if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-    df_baixas = df_baixas.copy()
-
-    for col in COLUNAS_BAIXAS:
-        if col not in df_baixas.columns:
-            df_baixas[col] = None
-
-    df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
-
-    colunas_texto = [
-        "PV", "Cliente", "CODIGO_PV", "Processo",
-        "Usuario", "Observacao", "Status_Baixa",
-        "Data_Estorno", "Motivo_Estorno"
-    ]
-
-    for col in colunas_texto:
-        df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
-
-    df_baixas["PV"] = df_baixas["PV"].str.upper()
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].str.upper()
-    df_baixas["Processo"] = df_baixas["Processo"].str.upper()
-    df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
-
-    df_baixas["Status_Baixa"] = (
-        df_baixas["Status_Baixa"]
-        .replace("", "ATIVA")
-        .str.upper()
-    )
-
-    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-    df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str)
-
-    df_baixas["CHAVE_OPERACAO"] = (
-        df_baixas["PV"] + "||" +
-        df_baixas["Processo"] + "||" +
-        df_baixas["CODIGO_PV"]
-    )
-
-    df_baixas = df_baixas.sort_values(
-        by=["Data_Baixa", "PV", "Processo"],
-        ascending=[False, True, True]
-    ).reset_index(drop=True)
-
-    return df_baixas
-
-
-
-
-
 # ============================================================
 # SALVAR BAIXA OPERACIONAL (VERSÃO FINAL INTEGRADA APS)
 # ============================================================
@@ -2828,7 +2824,6 @@ else:
 
                 if resultado.get("ok"):
 
-                    # 🔥 RECARREGA BASE IMEDIATAMENTE
                     st.cache_data.clear()
 
                     caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
@@ -2843,7 +2838,11 @@ else:
                     st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
                     st.session_state["reset_corte_unitario"] = True
+
                     st.success("Baixa registrada com sucesso")
+
+                    # 🔥 FORÇA RESET IMEDIATO
+                    st.rerun()
 
                 else:
                     st.error(resultado.get("erro", "Erro ao registrar baixa"))
@@ -2903,11 +2902,16 @@ else:
 
                 if sucessos:
                     st.session_state["reset_corte_lote"] = True
+
                     st.success(f"{sucessos} operações baixadas")
+
+                    # 🔥 LIMPA IMEDIATAMENTE O SELECT
+                    st.session_state["corte_lote"] = []
+
+                    st.rerun()
 
                 if erros:
                     st.warning(f"{erros} não foram baixadas")
-
 
 
 # =========================================================
