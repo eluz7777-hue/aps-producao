@@ -3105,7 +3105,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             df_base_gargalo["Processo"].isin(processos_top3)
         ].copy()
 
-        # 🔒 GARANTE COLUNAS ANTES DE USAR
         for col in ["PV", "Processo", "CODIGO_PV"]:
             if col not in base_gargalos.columns:
                 base_gargalos[col] = ""
@@ -3116,7 +3115,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             base_gargalos["CODIGO_PV"].astype(str).str.upper().str.strip()
         )
 
-        # 🔒 ENTREGA SEGURA
         if "ENTREGA" not in base_gargalos.columns:
             base_gargalos["ENTREGA"] = pd.NaT
 
@@ -3127,7 +3125,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.markdown("### 📋 PVs dos Gargalos")
 
-        processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
+        processo_baixa_sel = st.selectbox(
+            "Selecione o gargalo",
+            processos_top3,
+            key="selectbox_gargalo_processo"
+        )
 
         fila_gargalo = base_gargalos[
             base_gargalos["Processo"] == processo_baixa_sel
@@ -3141,9 +3143,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.divider()
 
-
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE (SEM ALTERAÇÃO)
+        # BAIXA / TERCEIRIZAÇÃO / LOTE
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
@@ -3168,9 +3169,13 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             baixa_sel = col_bx1.selectbox(
                 "Selecione operação",
                 opcoes_baixa,
-                key="selectbox_baixa_gargalo"
+                key="selectbox_baixa_gargalo_unitaria"
             )
-            observacao_baixa = col_bx2.text_input("Observação")
+
+            observacao_baixa = col_bx2.text_input(
+                "Observação",
+                key="input_obs_gargalo"
+            )
 
             registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
 
@@ -3179,7 +3184,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
                 col_btn1, col_btn2 = st.columns(2)
 
-                if col_btn1.button("💾 Baixar"):
+                if col_btn1.button("💾 Baixar", key="btn_baixar_gargalo"):
                     salvar_baixa_operacional(BASE_PATH, {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
@@ -3196,7 +3201,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.cache_data.clear()
                     st.rerun()
 
-                if col_btn2.button("🟣 Terceirizar"):
+                if col_btn2.button("🟣 Terceirizar", key="btn_terceirizar_gargalo"):
                     salvar_baixa_operacional(BASE_PATH, {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
@@ -3217,10 +3222,14 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             st.markdown("#### 📦 Ação em Lote")
 
-            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
+            selecao_lote = st.multiselect(
+                "Selecionar lote",
+                opcoes_baixa,
+                key="multiselect_gargalo_lote"
+            )
 
             if selecao_lote:
-                if st.button("📦 Baixar Lote"):
+                if st.button("📦 Baixar Lote", key="btn_lote_gargalo"):
                     for label in selecao_lote:
                         linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
 
@@ -3242,7 +3251,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.rerun()
 
         st.divider()
-
 
 
 
