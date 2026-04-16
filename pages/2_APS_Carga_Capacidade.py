@@ -2747,12 +2747,14 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 # ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO DEFINITIVA FUNCIONAL)
+# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL)
 # ============================================================
 
 st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
 
-# BASE
+# ------------------------------------------------------------
+# BASE DE CORTE
+# ------------------------------------------------------------
 base_corte = df_operacional.copy()
 base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
 
@@ -2787,11 +2789,29 @@ else:
         opcoes = base_corte_pendente["LABEL"].tolist()
 
         # ------------------------------------------------------------
-        # UNITÁRIO
+        # CONTROLE DE RESET
+        # ------------------------------------------------------------
+        if "reset_corte_unitario" not in st.session_state:
+            st.session_state["reset_corte_unitario"] = False
+
+        if "reset_corte_lote" not in st.session_state:
+            st.session_state["reset_corte_lote"] = False
+
+        if st.session_state["reset_corte_unitario"]:
+            if opcoes:
+                st.session_state["corte_unitario"] = opcoes[0]
+            st.session_state["reset_corte_unitario"] = False
+
+        if st.session_state["reset_corte_lote"]:
+            st.session_state["corte_lote"] = []
+            st.session_state["reset_corte_lote"] = False
+
+        # ------------------------------------------------------------
+        # 🔹 BAIXA UNITÁRIA
         # ------------------------------------------------------------
         st.markdown("#### 🔹 Baixa Unitária")
 
-        escolha = st.selectbox("Operação", opcoes)
+        escolha = st.selectbox("Operação", opcoes, key="corte_unitario")
 
         linha_sel = base_corte_pendente[
             base_corte_pendente["LABEL"] == escolha
@@ -2800,12 +2820,12 @@ else:
         if not linha_sel.empty:
             linha = linha_sel.iloc[0]
 
-            if st.button("💾 Confirmar Baixa"):
+            if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
 
                 resultado = salvar_baixa_operacional(BASE_PATH, {
                     "PV": linha["PV"],
                     "Cliente": linha.get("Cliente", ""),
-                    "CODIGO_PV": linha["CODIGO_PV"],  # 🔴 VOLTA ORIGINAL
+                    "CODIGO_PV": linha["CODIGO_PV"],
                     "Processo": linha["Processo"],
                     "Horas": linha["Horas"],
                     "Data_Baixa": pd.Timestamp.now(),
@@ -2817,22 +2837,38 @@ else:
                 })
 
                 if resultado.get("ok"):
-                    st.success("Baixa registrada com sucesso")
+
+                    # 🔥 RECARREGA BASE IMEDIATAMENTE
                     st.cache_data.clear()
+
+                    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+                    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+
+                    df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+                    df_baixas_ativas = df_baixas[
+                        df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+                    ].copy()
+
+                    st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+                    st.session_state["reset_corte_unitario"] = True
+                    st.success("Baixa registrada com sucesso")
+
                 else:
-                    st.error(resultado.get("erro", "Erro ao registrar"))
+                    st.error(resultado.get("erro", "Erro ao registrar baixa"))
 
         st.divider()
 
         # ------------------------------------------------------------
-        # LOTE
+        # 📦 BAIXA EM LOTE
         # ------------------------------------------------------------
         st.markdown("#### 📦 Baixa em Lote")
 
-        selecao = st.multiselect("Selecionar operações", opcoes)
+        selecao = st.multiselect("Selecionar operações", opcoes, key="corte_lote")
 
         if selecao:
-            if st.button("📦 Baixar Corte em Lote"):
+            if st.button("📦 Baixar Corte em Lote", key="btn_corte_lote"):
 
                 sucessos = 0
                 erros = 0
@@ -2861,13 +2897,26 @@ else:
                     else:
                         erros += 1
 
+                # 🔥 RECARREGA BASE
+                st.cache_data.clear()
+
+                caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+                file_mtime_baixas = os.path.getmtime(caminho_baixas)
+
+                df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+                df_baixas_ativas = df_baixas[
+                    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+                ].copy()
+
+                st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
                 if sucessos:
-                    st.success(f"{sucessos} baixadas com sucesso")
+                    st.session_state["reset_corte_lote"] = True
+                    st.success(f"{sucessos} operações baixadas")
 
                 if erros:
                     st.warning(f"{erros} não foram baixadas")
-
-                st.cache_data.clear()
 
 
 
