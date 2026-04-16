@@ -653,14 +653,30 @@ df_operacional = df_original.copy()
 
 
 # --------------------------------------------
-# FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE
+# FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE (VERSÃO BLINDADA)
 # --------------------------------------------
 def normalizar_chave_operacao(pv, processo, codigo):
-    return (
-        str(pv).strip().upper() + "||" +
-        str(processo).strip().upper() + "||" +
-        str(codigo).strip().upper()
-    )
+
+    def limpar(valor):
+        if pd.isna(valor):
+            return ""
+
+        return (
+            str(valor)
+            .strip()
+            .upper()
+            .replace("  ", " ")
+            .replace(" - ", "-")
+            .replace("- ", "-")
+            .replace(" -", "-")
+        )
+
+    pv = limpar(pv)
+    processo = limpar(processo)
+    codigo = limpar(codigo)
+
+    return f"{pv}||{processo}||{codigo}"
+
 
 # --------------------------------------------
 # GARANTE CHAVE PADRÃO NA BASE OPERACIONAL
