@@ -3165,7 +3165,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             col_bx1, col_bx2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            baixa_sel = col_bx1.selectbox(
+                "Selecione operação",
+                opcoes_baixa,
+                key="selectbox_baixa_gargalo"
+            )
             observacao_baixa = col_bx2.text_input("Observação")
 
             registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
@@ -3267,7 +3271,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             col_bx1, col_bx2 = st.columns(2)
 
-            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            baixa_sel = col_bx1.selectbox(
+                "Selecione operação",
+                opcoes_baixa,
+                key="selectbox_baixa_gargalo"
+            )
             observacao_baixa = col_bx2.text_input("Observação")
 
             registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
