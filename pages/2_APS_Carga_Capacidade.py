@@ -2292,8 +2292,14 @@ df_base_gargalo = df_base_aps[
 # ===============================
 # COLAPSO DO GARGALO (BASE EXECUTIVA)
 # ===============================
+
+# 🔒 GARANTIA DE COLUNAS (EVITA KEYERROR)
+for col in ["Fila Acumulada (h)", "Fila (dias)"]:
+    if col not in df.columns:
+        df[col] = 0
+
 fila_resumo = (
-    df_base_gargalo.groupby("Processo", as_index=False)
+    df.groupby("Processo", as_index=False)
     .agg({
         "Fila Acumulada (h)": "max",
         "Fila (dias)": "max"
@@ -2304,6 +2310,11 @@ fila_resumo = (
     })
 )
 
+# 🔒 GARANTIA DE COLUNAS NO DEM
+for col in ["Horas", "Capacidade", "Ocupacao", "Saldo (h)"]:
+    if col not in dem.columns:
+        dem[col] = 0
+
 dem_colapso = dem.groupby("Processo", as_index=False).agg({
     "Horas": "sum",
     "Capacidade": "sum",
@@ -2313,10 +2324,13 @@ dem_colapso = dem.groupby("Processo", as_index=False).agg({
 
 dem_colapso = dem_colapso.merge(fila_resumo, on="Processo", how="left")
 
+# 🔒 GARANTE VALORES
 dem_colapso["Fila Acumulada Max (h)"] = dem_colapso["Fila Acumulada Max (h)"].fillna(0)
 dem_colapso["Fila Max (dias)"] = dem_colapso["Fila Max (dias)"].fillna(0)
 
-# Classificação inline (blindada contra NameError)
+# ===============================
+# CLASSIFICAÇÃO DE COLAPSO
+# ===============================
 dem_colapso["Semáforo Colapso"] = np.select(
     [
         (dem_colapso["Ocupacao"] >= 120) | (dem_colapso["Fila Max (dias)"] >= 10) | (dem_colapso["Saldo (h)"] < -40),
@@ -2331,6 +2345,9 @@ dem_colapso["Semáforo Colapso"] = np.select(
     default="🟢 Sob Controle"
 )
 
+# ===============================
+# RANKING
+# ===============================
 ranking_colapso = dem_colapso.sort_values(
     by=["Ocupacao", "Fila Max (dias)", "Fila Acumulada Max (h)"],
     ascending=[False, False, False]
@@ -2340,7 +2357,7 @@ ranking_colapso = dem_colapso.sort_values(
 # CAPACIDADE POR PROCESSO
 # ===============================
 
-# 🔒 Garantia mínima
+# 🔒 Garantias críticas
 if dem_proc is None or dem_proc.empty:
     st.error("Erro: dem_proc vazio.")
     st.stop()
@@ -3008,27 +3025,40 @@ col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
 col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 
 
+
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
 # ============================================================
 
-# 🔥 BASE CORRETA DE GARGALO (ADICIONADO)
+# 🔒 GARANTE COLUNA CRÍTICA
+if "Status Operacional" not in df_operacional.columns:
+    df_operacional["Status Operacional"] = "⏳ Pendente"
+
+# 🔥 BASE CORRETA DE GARGALO
 df_base_aps = df_operacional.copy()
 
 df_base_gargalo = df_base_aps[
     df_base_aps["Status Operacional"] == "⏳ Pendente"
 ].copy()
 
+# 🔒 GARANTE COLUNAS ESSENCIAIS
+for col in ["PV", "Processo", "CODIGO_PV", "Horas"]:
+    if col not in df_base_gargalo.columns:
+        df_base_gargalo[col] = ""
+
 with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
     st.subheader("🏭 Operações mais carregadas do APS")
     st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
 
-    # 🔥 CORREÇÃO AQUI (ANTES ERA df)
     gargalos_top3 = (
         df_base_gargalo.groupby("Processo", as_index=False)
         .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
-        .merge(dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]], on="Processo", how="left")
+        .merge(
+            dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]],
+            on="Processo",
+            how="left"
+        )
         .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
         .head(3)
         .reset_index(drop=True)
@@ -3071,16 +3101,24 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
 
-        # 🔥 CORREÇÃO AQUI (ANTES ERA df_operacional)
         base_gargalos = df_base_gargalo[
             df_base_gargalo["Processo"].isin(processos_top3)
         ].copy()
+
+        # 🔒 GARANTE COLUNAS ANTES DE USAR
+        for col in ["PV", "Processo", "CODIGO_PV"]:
+            if col not in base_gargalos.columns:
+                base_gargalos[col] = ""
 
         base_gargalos["CHAVE_OPERACAO"] = (
             base_gargalos["PV"].astype(str).str.upper().str.strip() + "||" +
             base_gargalos["Processo"].astype(str).str.upper().str.strip() + "||" +
             base_gargalos["CODIGO_PV"].astype(str).str.upper().str.strip()
         )
+
+        # 🔒 ENTREGA SEGURA
+        if "ENTREGA" not in base_gargalos.columns:
+            base_gargalos["ENTREGA"] = pd.NaT
 
         base_gargalos["ENTREGA"] = pd.to_datetime(base_gargalos["ENTREGA"], errors="coerce")
         base_gargalos["Dias para Entrega"] = (base_gargalos["ENTREGA"] - hoje).dt.days
@@ -3091,12 +3129,18 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         processo_baixa_sel = st.selectbox("Selecione o gargalo", processos_top3)
 
-        fila_gargalo = base_gargalos[base_gargalos["Processo"] == processo_baixa_sel].copy()
-        fila_gargalo_pendente = fila_gargalo[fila_gargalo["Status Operacional"] == "⏳ Pendente"].copy()
+        fila_gargalo = base_gargalos[
+            base_gargalos["Processo"] == processo_baixa_sel
+        ].copy()
+
+        fila_gargalo_pendente = fila_gargalo[
+            fila_gargalo["Status Operacional"] == "⏳ Pendente"
+        ].copy()
 
         st.dataframe(fila_gargalo, use_container_width=True, height=360)
 
         st.divider()
+
 
         # =========================================================
         # BAIXA / TERCEIRIZAÇÃO / LOTE (SEM ALTERAÇÃO)
@@ -3194,6 +3238,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.rerun()
 
         st.divider()
+
+
+
+
+
         # =========================================================
         # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
         # =========================================================
