@@ -652,6 +652,29 @@ df_operacional = df_original.copy()
 
 
 
+# ============================================================
+# 🔥 CARREGAMENTO OFICIAL DAS BAIXAS (POSIÇÃO CORRETA)
+# ============================================================
+
+caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+
+try:
+    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+except:
+    file_mtime_baixas = 0
+
+df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+df_baixas_ativas = df_baixas[
+    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+].copy()
+
+# 🔒 DISPONIBILIZA GLOBALMENTE
+st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+
+
+
 # --------------------------------------------
 # FUNÇÃO OFICIAL DE NORMALIZAÇÃO DA CHAVE (VERSÃO BLINDADA)
 # --------------------------------------------
@@ -2061,27 +2084,6 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
     except Exception as e:
         st.warning(f"Erro ao ler baixas: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-
-# ============================================================
-# 🔥 CARREGAMENTO OFICIAL DAS BAIXAS (POSIÇÃO CORRETA)
-# ============================================================
-
-caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-
-try:
-    file_mtime_baixas = os.path.getmtime(caminho_baixas)
-except:
-    file_mtime_baixas = 0
-
-df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
-
-df_baixas_ativas = df_baixas[
-    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-].copy()
-
-# 🔒 DISPONIBILIZA GLOBALMENTE
-st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
 
 
