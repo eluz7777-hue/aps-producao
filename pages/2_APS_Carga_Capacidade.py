@@ -236,6 +236,9 @@ def capacidade_semana_por_processo(inicio, fim, processo):
     return horas * recursos * EFICIENCIA
 
 
+
+
+
 # ===============================
 # CACHE (INALTERADO)
 # ===============================
@@ -644,11 +647,39 @@ if not df_original.empty:
         )
 
 
-# ============================================================
-# BASE OPERACIONAL VISUAL
-# ============================================================
 
-df_operacional = df_original.copy()
+# =============================== 
+# BAIXAS OPERACIONAIS APS
+# ===============================
+ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
+
+COLUNAS_BAIXAS = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Data_Baixa",
+    "Usuario",
+    "Observacao",
+    "Status_Baixa",
+    "Data_Estorno",
+    "Motivo_Estorno"
+]
+
+def caminho_arquivo_baixas(base_path):
+    return os.path.join(base_path, ARQUIVO_BAIXAS)
+
+def garantir_arquivo_baixas(base_path):
+    os.makedirs(base_path, exist_ok=True)
+    caminho = caminho_arquivo_baixas(base_path)
+
+    if not os.path.exists(caminho):
+        df_vazio = pd.DataFrame(columns=COLUNAS_BAIXAS)
+        df_vazio.to_excel(caminho, index=False)
+
+    return caminho
+
 
 
 # ============================================================
@@ -685,6 +716,14 @@ df_baixas_ativas = df_baixas[
 ].copy()
 
 st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+
+# ============================================================
+# BASE OPERACIONAL VISUAL
+# ============================================================
+
+df_operacional = df_original.copy()
+
 
 
 # --------------------------------------------
@@ -1967,38 +2006,10 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
 
 
 
+
 # =============================== 
-# BAIXAS OPERACIONAIS APS
+# PADRONIZAR BAIXAS OPERACIONAIS APS
 # ===============================
-ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
-
-COLUNAS_BAIXAS = [
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "Data_Baixa",
-    "Usuario",
-    "Observacao",
-    "Status_Baixa",
-    "Data_Estorno",
-    "Motivo_Estorno"
-]
-
-def caminho_arquivo_baixas(base_path):
-    return os.path.join(base_path, ARQUIVO_BAIXAS)
-
-def garantir_arquivo_baixas(base_path):
-    os.makedirs(base_path, exist_ok=True)
-    caminho = caminho_arquivo_baixas(base_path)
-
-    if not os.path.exists(caminho):
-        df_vazio = pd.DataFrame(columns=COLUNAS_BAIXAS)
-        df_vazio.to_excel(caminho, index=False)
-
-    return caminho
-
 
 def _padronizar_df_baixas(df_baixas):
 
