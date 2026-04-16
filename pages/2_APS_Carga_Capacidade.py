@@ -2086,7 +2086,7 @@ st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL DEFINITIVA)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL INTEGRADA APS)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
@@ -2100,7 +2100,6 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     except Exception:
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
-    # 🔥 NUNCA TRABALHAR DIRETO NO ORIGINAL
     df_existente = df_existente.copy()
 
     # ------------------------------------------------------------
@@ -2113,7 +2112,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo[col] = ""
 
     # ------------------------------------------------------------
-    # PADRONIZAÇÃO DO NOVO
+    # PADRONIZAÇÃO
     # ------------------------------------------------------------
     for col in ["PV", "CODIGO_PV", "Processo"]:
         novo[col] = (
@@ -2135,33 +2134,35 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     )
 
     novo["Horas"] = pd.to_numeric(novo["Horas"], errors="coerce").fillna(0)
-
     novo["Data_Baixa"] = pd.to_datetime(novo["Data_Baixa"], errors="coerce")
 
     # ------------------------------------------------------------
-    # CHAVE
+    # 🔥 CHAVE USANDO FUNÇÃO OFICIAL (CRÍTICO)
     # ------------------------------------------------------------
-    novo["CHAVE_OPERACAO"] = (
-        novo["PV"] + "||" +
-        novo["Processo"] + "||" +
-        novo["CODIGO_PV"]
+    novo["CHAVE_OPERACAO"] = novo.apply(
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
+        axis=1
     )
 
     chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # 🔴 VALIDAÇÃO ISOLADA (SEM CONTAMINAR BASE)
+    # VALIDAÇÃO
     # ------------------------------------------------------------
     if not df_existente.empty:
 
         df_tmp = df_existente.copy()
 
-        # NORMALIZA SOMENTE PARA COMPARAÇÃO
-        df_tmp["PV"] = df_tmp["PV"].astype(str).str.strip().str.upper()
-        df_tmp["CODIGO_PV"] = df_tmp["CODIGO_PV"].astype(str).str.strip().str.upper()
-        df_tmp["Processo"] = df_tmp["Processo"].astype(str).str.strip().str.upper()
+        df_tmp["CHAVE_OPERACAO"] = df_tmp.apply(
+            lambda r: normalizar_chave_operacao(
+                r["PV"], r["Processo"], r["CODIGO_PV"]
+            ),
+            axis=1
+        )
 
-        status_series = (
+        df_tmp["Status_Baixa"] = (
             df_tmp["Status_Baixa"]
             .fillna("")
             .astype(str)
@@ -2169,23 +2170,16 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             .str.upper()
         )
 
-        df_tmp["CHAVE_OPERACAO"] = (
-            df_tmp["PV"] + "||" +
-            df_tmp["Processo"] + "||" +
-            df_tmp["CODIGO_PV"]
-        )
-
         registros = df_tmp[df_tmp["CHAVE_OPERACAO"] == chave_nova]
 
         if not registros.empty:
 
             registros_ativos = registros[
-                status_series.loc[registros.index].isin(["ATIVA", "TERCEIRIZADA"])
+                registros["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
             ]
 
             if not registros_ativos.empty:
 
-                # LOG DE TENTATIVA
                 log = novo.copy()
                 log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
                 log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
@@ -2201,7 +2195,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 }
 
     # ------------------------------------------------------------
-    # SALVAMENTO REAL
+    # SALVAMENTO
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
