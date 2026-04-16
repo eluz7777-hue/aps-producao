@@ -3429,17 +3429,16 @@ st.divider()
 
 
 # --------------------------------------------------------
-# HISTÓRICO PREMIUM DE BAIXA
+# HISTÓRICO PREMIUM DE BAIXA (CORRIGIDO)
 # --------------------------------------------------------
 st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
 st.caption("Rastreabilidade completa das baixas operacionais, terceirizações e estornos.")
 
-if "df_baixas_historico" not in locals() or df_baixas_historico is None:
-    df_baixas_exib = pd.DataFrame(columns=COLUNAS_BAIXAS)
-else:
-    df_baixas_exib = df_baixas_historico.copy()
+# 🔥 FONTE REAL DOS DADOS
+df_baixas_exib = df_baixas.copy()
 
 if not df_baixas_exib.empty:
+
     for col in [
         "PV", "Cliente", "CODIGO_PV", "Processo", "Usuario",
         "Observacao", "Status_Baixa", "Motivo_Estorno", "Data_Estorno"
@@ -3590,7 +3589,6 @@ if not df_baixas_exib.empty:
     )
 else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
-
 
 # ============================================================
 # 🚨 DASHBOARD DE ERROS OPERACIONAIS
