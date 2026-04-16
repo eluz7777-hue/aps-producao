@@ -2273,11 +2273,27 @@ def historico_baixas_completo(df_baixas):
     return _padronizar_df_baixas(df_baixas.copy())
 
 
+
+
+
+# ===============================
+# AJUSTES DOS GARGALOS CORRETOS
+# ===============================
+
+df_base_aps = df_operacional.copy()
+
+df_base_gargalo = df_base_aps[
+    df_base_aps["Status Operacional"] == "⏳ Pendente"
+].copy()
+
+
+
+
 # ===============================
 # COLAPSO DO GARGALO (BASE EXECUTIVA)
 # ===============================
 fila_resumo = (
-    df.groupby("Processo", as_index=False)
+    df_base_gargalo.groupby("Processo", as_index=False)
     .agg({
         "Fila Acumulada (h)": "max",
         "Fila (dias)": "max"
@@ -2995,13 +3011,22 @@ col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 # ============================================================
 # =========== CONTROLE DOS 3 PRINCIPAIS GARGALOS =============
 # ============================================================
+
+# 🔥 BASE CORRETA DE GARGALO (ADICIONADO)
+df_base_aps = df_operacional.copy()
+
+df_base_gargalo = df_base_aps[
+    df_base_aps["Status Operacional"] == "⏳ Pendente"
+].copy()
+
 with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
     st.subheader("🏭 Operações mais carregadas do APS")
     st.caption("Controle operacional dos 3 processos mais carregados com baixa direta de operação concluída.")
 
+    # 🔥 CORREÇÃO AQUI (ANTES ERA df)
     gargalos_top3 = (
-        df.groupby("Processo", as_index=False)
+        df_base_gargalo.groupby("Processo", as_index=False)
         .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
         .merge(dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]], on="Processo", how="left")
         .sort_values(["Horas_Pendentes", "PVs_Pendentes"], ascending=[False, False])
@@ -3045,7 +3070,11 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
         processos_top3 = gargalos_top3["Processo"].dropna().astype(str).tolist()
-        base_gargalos = df_operacional[df_operacional["Processo"].isin(processos_top3)].copy()
+
+        # 🔥 CORREÇÃO AQUI (ANTES ERA df_operacional)
+        base_gargalos = df_base_gargalo[
+            df_base_gargalo["Processo"].isin(processos_top3)
+        ].copy()
 
         base_gargalos["CHAVE_OPERACAO"] = (
             base_gargalos["PV"].astype(str).str.upper().str.strip() + "||" +
@@ -3069,6 +3098,102 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
         st.divider()
 
+        # =========================================================
+        # BAIXA / TERCEIRIZAÇÃO / LOTE (SEM ALTERAÇÃO)
+        # =========================================================
+        st.markdown("### ✅ Dar Baixa em Operação Concluída")
+
+        if fila_gargalo_pendente.empty:
+            st.info("Nenhuma PV pendente disponível.")
+        else:
+            base_baixa = fila_gargalo_pendente.copy()
+
+            base_baixa["ROTULO_BAIXA"] = (
+                "PV " + base_baixa["PV"] +
+                " | " + base_baixa["Processo"] +
+                " | " + base_baixa["CODIGO_PV"] +
+                " | " + base_baixa["Horas"].astype(str) + " h"
+            )
+
+            opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
+
+            st.markdown("#### 🔹 Ação Unitária")
+
+            col_bx1, col_bx2 = st.columns(2)
+
+            baixa_sel = col_bx1.selectbox("Selecione operação", opcoes_baixa)
+            observacao_baixa = col_bx2.text_input("Observação")
+
+            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
+
+            if not registro_baixa_df.empty:
+                linha = registro_baixa_df.iloc[0]
+
+                col_btn1, col_btn2 = st.columns(2)
+
+                if col_btn1.button("💾 Baixar"):
+                    salvar_baixa_operacional(BASE_PATH, {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Usuario": "Sistema",
+                        "Observacao": observacao_baixa,
+                        "Status_Baixa": "ATIVA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    })
+                    st.cache_data.clear()
+                    st.rerun()
+
+                if col_btn2.button("🟣 Terceirizar"):
+                    salvar_baixa_operacional(BASE_PATH, {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "Data_Baixa": pd.Timestamp.now(),
+                        "Usuario": "Sistema",
+                        "Observacao": observacao_baixa,
+                        "Status_Baixa": "TERCEIRIZADA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    })
+                    st.cache_data.clear()
+                    st.rerun()
+
+            st.divider()
+
+            st.markdown("#### 📦 Ação em Lote")
+
+            selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
+
+            if selecao_lote:
+                if st.button("📦 Baixar Lote"):
+                    for label in selecao_lote:
+                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
+
+                        salvar_baixa_operacional(BASE_PATH, {
+                            "PV": linha["PV"],
+                            "Cliente": linha.get("Cliente", ""),
+                            "CODIGO_PV": linha["CODIGO_PV"],
+                            "Processo": linha["Processo"],
+                            "Horas": linha["Horas"],
+                            "Data_Baixa": pd.Timestamp.now(),
+                            "Usuario": "Sistema",
+                            "Observacao": "",
+                            "Status_Baixa": "ATIVA",
+                            "Data_Estorno": "",
+                            "Motivo_Estorno": ""
+                        })
+
+                    st.cache_data.clear()
+                    st.rerun()
+
+        st.divider()
         # =========================================================
         # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
         # =========================================================
@@ -3320,6 +3445,8 @@ else:
         use_container_width=True,
         hide_index=True
     )
+
+
 # ------------------------------------------------------------
 # FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
 # ------------------------------------------------------------
