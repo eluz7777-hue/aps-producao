@@ -2841,7 +2841,6 @@ else:
 
                     st.success("Baixa registrada com sucesso")
 
-                    # 🔥 FORÇA RESET IMEDIATO
                     st.rerun()
 
                 else:
@@ -2905,14 +2904,11 @@ else:
 
                     st.success(f"{sucessos} operações baixadas")
 
-                    # 🔥 LIMPA IMEDIATAMENTE O SELECT
-                    st.session_state["corte_lote"] = []
-
+                    # ✅ CORRETO: NÃO mexer direto no multiselect
                     st.rerun()
 
                 if erros:
                     st.warning(f"{erros} não foram baixadas")
-
 
 # =========================================================
 # DASHBOARD DO CORTE (CORRIGIDO DEFINITIVO)
