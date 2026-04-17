@@ -1359,13 +1359,18 @@ st.caption("Indicadores estratégicos, status geral e leitura executiva da produ
 
 
 
+
 # ============================================================
 # 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
 # ============================================================
 
 st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
 
-# 🔒 proteção
+# 🔒 GARANTE EXISTÊNCIA DAS BASES
+ranking_colapso_safe = globals().get("ranking_colapso", pd.DataFrame())
+df_colapso_safe = globals().get("df_colapso", pd.DataFrame())
+impacto_gargalo_safe = globals().get("impacto_gargalo", pd.DataFrame())
+
 gargalo_atual = None
 gargalo_futuro = None
 processo_critico = None
@@ -1373,26 +1378,26 @@ processo_critico = None
 # -------------------------------
 # 🔥 GARGALO ATUAL
 # -------------------------------
-if ranking_colapso is not None and not ranking_colapso.empty:
-    gargalo_atual = str(ranking_colapso.iloc[0]["Processo"])
-    status_atual = str(ranking_colapso.iloc[0]["Semáforo Colapso"])
+if not ranking_colapso_safe.empty:
+    gargalo_atual = str(ranking_colapso_safe.iloc[0].get("Processo", "N/A"))
+    status_atual = str(ranking_colapso_safe.iloc[0].get("Semáforo Colapso", "N/A"))
 else:
     status_atual = "N/A"
 
 # -------------------------------
 # 🔮 GARGALO FUTURO
 # -------------------------------
-if df_colapso is not None and not df_colapso.empty:
-    gargalo_futuro = str(df_colapso.iloc[0]["Processo"])
-    risco_futuro = str(df_colapso.iloc[0]["Risco Futuro"])
+if not df_colapso_safe.empty:
+    gargalo_futuro = str(df_colapso_safe.iloc[0].get("Processo", "N/A"))
+    risco_futuro = str(df_colapso_safe.iloc[0].get("Risco Futuro", "N/A"))
 else:
     risco_futuro = "N/A"
 
 # -------------------------------
 # 📊 PROCESSO DE MAIOR IMPACTO
 # -------------------------------
-if impacto_gargalo is not None and not impacto_gargalo.empty:
-    processo_critico = str(impacto_gargalo.iloc[0]["Processo"])
+if not impacto_gargalo_safe.empty:
+    processo_critico = str(impacto_gargalo_safe.iloc[0].get("Processo", "N/A"))
 else:
     processo_critico = "N/A"
 
@@ -1412,13 +1417,13 @@ st.divider()
 # -------------------------------
 # 🎯 INTERPRETAÇÃO INTELIGENTE
 # -------------------------------
-if gargalo_atual == gargalo_futuro == processo_critico:
+if gargalo_atual == gargalo_futuro == processo_critico and gargalo_atual:
     st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
 
-elif gargalo_atual == gargalo_futuro:
+elif gargalo_atual and gargalo_atual == gargalo_futuro:
     st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
 
-elif gargalo_futuro == processo_critico:
+elif gargalo_futuro and gargalo_futuro == processo_critico:
     st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo. Antecipar ação.")
 
 elif gargalo_atual:
@@ -1426,6 +1431,7 @@ elif gargalo_atual:
 
 else:
     st.success("Sistema operando dentro da normalidade.")
+
 
 
 
