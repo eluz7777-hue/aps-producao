@@ -1417,90 +1417,7 @@ st.caption("Indicadores estratégicos, status geral e leitura executiva da produ
 
 
 
-# ============================================================
-# 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
-# ============================================================
 
-st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
-
-ranking_colapso_safe = globals().get("ranking_colapso", pd.DataFrame())
-df_colapso_safe = globals().get("df_colapso", pd.DataFrame())
-impacto_gargalo_safe = globals().get("impacto_gargalo", pd.DataFrame())
-
-gargalo_atual = None
-gargalo_futuro = None
-processo_critico = None
-
-# 🔥 Gargalo atual
-if not ranking_colapso_safe.empty:
-
-    base_gargalo = ranking_colapso_safe.copy()
-
-    for col in ["Ocupacao", "Fila Max (dias)"]:
-        if col not in base_gargalo.columns:
-            base_gargalo[col] = 0
-
-    base_gargalo["Ocupacao"] = pd.to_numeric(base_gargalo["Ocupacao"], errors="coerce").fillna(0)
-    base_gargalo["Fila Max (dias)"] = pd.to_numeric(base_gargalo["Fila Max (dias)"], errors="coerce").fillna(0)
-
-    base_gargalo = base_gargalo.sort_values(
-        ["Ocupacao", "Fila Max (dias)"],
-        ascending=[False, False]
-    )
-
-    gargalo_atual = str(base_gargalo.iloc[0].get("Processo", "N/A"))
-
-# 🔮 Gargalo futuro
-if not df_colapso_safe.empty:
-
-    base_futuro = df_colapso_safe.copy()
-
-    if "Dias de Fila" not in base_futuro.columns:
-        base_futuro["Dias de Fila"] = 0
-
-    base_futuro["Dias de Fila"] = pd.to_numeric(
-        base_futuro["Dias de Fila"], errors="coerce"
-    ).fillna(0)
-
-    base_futuro = base_futuro.sort_values("Dias de Fila", ascending=False)
-
-    gargalo_futuro = str(base_futuro.iloc[0].get("Processo", "N/A"))
-
-# 📊 Impacto
-if not impacto_gargalo_safe.empty:
-
-    base_impacto = impacto_gargalo_safe.copy()
-
-    if "Impacto_Total_Dias" not in base_impacto.columns:
-        base_impacto["Impacto_Total_Dias"] = 0
-
-    base_impacto["Impacto_Total_Dias"] = pd.to_numeric(
-        base_impacto["Impacto_Total_Dias"], errors="coerce"
-    ).fillna(0)
-
-    base_impacto = base_impacto.sort_values("Impacto_Total_Dias", ascending=False)
-
-    processo_critico = str(base_impacto.iloc[0].get("Processo", "N/A"))
-
-# métricas
-st.divider()
-c1, c2, c3 = st.columns(3)
-c1.metric("🔥 Gargalo Atual", gargalo_atual or "N/A")
-c2.metric("🔮 Risco Futuro", gargalo_futuro or "N/A")
-c3.metric("📊 Maior Impacto", processo_critico or "N/A")
-st.divider()
-
-# interpretação
-if gargalo_atual and gargalo_atual == gargalo_futuro == processo_critico:
-    st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
-elif gargalo_atual and gargalo_atual == gargalo_futuro:
-    st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
-elif gargalo_futuro and gargalo_futuro == processo_critico:
-    st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo.")
-elif gargalo_atual:
-    st.info(f"📌 Gargalo atual: {gargalo_atual}")
-else:
-    st.success("Sistema operando dentro da normalidade.")
 
 
 # ===============================
@@ -4102,45 +4019,6 @@ if not ranking_colapso.empty:
         st.success("Nenhum gargalo em risco de colapso no momento.")
 else:
     st.info("Sem dados suficientes para cálculo de colapso.")
-
-
-# ============================================================
-# 🔮 COLAPSO FUTURO (NOVO)
-# ============================================================
-st.subheader("🔮 Colapso Futuro (Previsão)")
-
-st.caption("Projeção baseada na carga atual versus capacidade produtiva.")
-
-if df_colapso is not None and not df_colapso.empty:
-
-    colapso_futuro = df_colapso.copy()
-
-    if "Processo" not in colapso_futuro.columns:
-        colapso_futuro["Processo"] = "N/D"
-
-    if "Dias de Fila" not in colapso_futuro.columns:
-        colapso_futuro["Dias de Fila"] = 0
-
-    if "Risco Futuro" not in colapso_futuro.columns:
-        colapso_futuro["Risco Futuro"] = "🟢 Sob controle"
-
-    colapso_futuro["Dias de Fila"] = pd.to_numeric(
-        colapso_futuro["Dias de Fila"], errors="coerce"
-    ).fillna(0)
-
-    colapso_futuro["Dias de Fila_fmt"] = colapso_futuro["Dias de Fila"].apply(
-        lambda x: fmt_br_num(x, 1)
-    )
-
-    st.dataframe(
-        colapso_futuro[
-            ["Processo", "Dias de Fila_fmt", "Risco Futuro"]
-        ].rename(columns={"Dias de Fila_fmt": "Dias de Fila"}),
-        use_container_width=True
-    )
-
-else:
-    st.info("Sem dados suficientes para previsão de colapso futuro.")
 
 
 
