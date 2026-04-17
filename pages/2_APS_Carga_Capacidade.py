@@ -2458,6 +2458,9 @@ ranking_colapso = dem_colapso.sort_values(
     ascending=[False, False, False]
 ).reset_index(drop=True)
 
+
+
+
 # ===============================
 # CAPACIDADE POR PROCESSO
 # ===============================
@@ -2538,6 +2541,64 @@ def faixa_utilizacao(x):
         return "OK"
 
 dem_proc["Faixa"] = dem_proc["Utilização (%)"].apply(faixa_utilizacao)
+
+
+# ============================================================
+# 🔥 ALERTA DE COLAPSO FUTURO (APS INTELIGENTE)
+# ============================================================
+
+df_colapso = dem_proc.copy()
+
+if (
+    not df_colapso.empty
+    and "Capacidade Processo" in df_colapso.columns
+    and "Horas" in df_colapso.columns
+):
+
+    # 🔒 garante numérico
+    df_colapso["Horas"] = pd.to_numeric(
+        df_colapso["Horas"], errors="coerce"
+    ).fillna(0)
+
+    df_colapso["Capacidade Processo"] = pd.to_numeric(
+        df_colapso["Capacidade Processo"], errors="coerce"
+    ).fillna(0)
+
+    # 🔥 dias de fila real (base APS)
+    df_colapso["Dias de Fila"] = np.where(
+        df_colapso["Capacidade Processo"] > 0,
+        df_colapso["Horas"] / df_colapso["Capacidade Processo"],
+        0
+    )
+
+    # 🔥 classificação futura (mais inteligente que Faixa)
+    df_colapso["Risco Futuro"] = np.select(
+        [
+            df_colapso["Dias de Fila"] >= 10,
+            df_colapso["Dias de Fila"] >= 5,
+            df_colapso["Dias de Fila"] >= 3
+        ],
+        [
+            "🔥 Colapso iminente",
+            "🔴 Alto risco",
+            "🟡 Atenção"
+        ],
+        default="🟢 Sob controle"
+    )
+
+    # 🔥 ordena para uso executivo
+    df_colapso = df_colapso.sort_values(
+        "Dias de Fila",
+        ascending=False
+    ).reset_index(drop=True)
+
+else:
+    df_colapso = pd.DataFrame(
+        columns=["Processo", "Dias de Fila", "Risco Futuro"]
+    )
+
+
+
 
 # ===============================
 # ATRASO
