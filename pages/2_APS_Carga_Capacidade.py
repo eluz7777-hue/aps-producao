@@ -1358,6 +1358,77 @@ st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
 
 
+
+# ============================================================
+# 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
+# ============================================================
+
+st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
+
+# 🔒 proteção
+gargalo_atual = None
+gargalo_futuro = None
+processo_critico = None
+
+# -------------------------------
+# 🔥 GARGALO ATUAL
+# -------------------------------
+if ranking_colapso is not None and not ranking_colapso.empty:
+    gargalo_atual = str(ranking_colapso.iloc[0]["Processo"])
+    status_atual = str(ranking_colapso.iloc[0]["Semáforo Colapso"])
+else:
+    status_atual = "N/A"
+
+# -------------------------------
+# 🔮 GARGALO FUTURO
+# -------------------------------
+if df_colapso is not None and not df_colapso.empty:
+    gargalo_futuro = str(df_colapso.iloc[0]["Processo"])
+    risco_futuro = str(df_colapso.iloc[0]["Risco Futuro"])
+else:
+    risco_futuro = "N/A"
+
+# -------------------------------
+# 📊 PROCESSO DE MAIOR IMPACTO
+# -------------------------------
+if impacto_gargalo is not None and not impacto_gargalo.empty:
+    processo_critico = str(impacto_gargalo.iloc[0]["Processo"])
+else:
+    processo_critico = "N/A"
+
+# -------------------------------
+# 🚦 DECISÃO AUTOMÁTICA
+# -------------------------------
+st.divider()
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("🔥 Gargalo Atual", gargalo_atual if gargalo_atual else "N/A")
+col2.metric("🔮 Risco Futuro", gargalo_futuro if gargalo_futuro else "N/A")
+col3.metric("📊 Maior Impacto", processo_critico)
+
+st.divider()
+
+# -------------------------------
+# 🎯 INTERPRETAÇÃO INTELIGENTE
+# -------------------------------
+if gargalo_atual == gargalo_futuro == processo_critico:
+    st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
+
+elif gargalo_atual == gargalo_futuro:
+    st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
+
+elif gargalo_futuro == processo_critico:
+    st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo. Antecipar ação.")
+
+elif gargalo_atual:
+    st.info(f"📌 Gargalo atual identificado em {gargalo_atual}. Monitoramento ativo.")
+
+else:
+    st.success("Sistema operando dentro da normalidade.")
+
+
+
 # ===============================
 # BASE EXECUTIVA
 # ===============================
