@@ -1858,7 +1858,7 @@ fig_carga = px.line(
 st.plotly_chart(fig_carga, use_container_width=True)
 
 # ===============================
-# 4) DISTRIBUIÇÃO DE ATRASO
+# 4) DISTRIBUIÇÃO DE ATRASO + MAPA DE RISCO
 # ===============================
 st.subheader("📊 Distribuição de Atraso por Faixa")
 
@@ -1879,7 +1879,7 @@ df_atraso = df_atraso[df_atraso["Atraso (dias)"] > 0].copy()
 if not df_atraso.empty:
 
     # ===============================
-    # FAIXAS FIXAS (EXECUTIVO)
+    # FAIXAS FIXAS
     # ===============================
     def classificar_faixa(dias):
         if dias <= 2:
@@ -1902,13 +1902,12 @@ if not df_atraso.empty:
         .reset_index(name="Quantidade")
     )
 
-    # ordem correta das faixas
     ordem = ["1-2", "3-5", "6-10", "11+"]
     dist["Faixa"] = pd.Categorical(dist["Faixa"], categories=ordem, ordered=True)
     dist = dist.sort_values("Faixa")
 
     # ===============================
-    # GRÁFICO
+    # GRÁFICO DE FAIXAS
     # ===============================
     fig_bar = px.bar(
         dist,
@@ -1930,7 +1929,7 @@ if not df_atraso.empty:
     fig_bar.update_layout(
         xaxis_title="Faixa de Atraso (dias)",
         yaxis_title="Quantidade de PVs",
-        height=450,
+        height=400,
         showlegend=False
     )
 
@@ -1970,8 +1969,97 @@ if not df_atraso.empty:
         use_container_width=True
     )
 
+    # ============================================================
+    # 🚨 MAPA DE RISCO EXECUTIVO (NOVA CAMADA INTELIGENTE)
+    # ============================================================
+    st.subheader("🚨 Mapa de Risco da Produção")
+
+    df_risco = df.copy()
+
+    risco_base = (
+        df_risco.groupby(["PV", "Processo"], as_index=False)
+        .agg({
+            "Horas": "sum",
+            "Data": "max"
+        })
+    )
+
+    risco_base = risco_base.merge(
+        pv_carga[["PV", "Atraso Real (dias)", "Status Real"]],
+        on="PV",
+        how="left"
+    )
+
+    risco_base["Atraso Real (dias)"] = (
+        pd.to_numeric(risco_base["Atraso Real (dias)"], errors="coerce")
+        .fillna(0)
+    )
+
+    # classificação
+    def classificar_risco(row):
+        if row["Atraso Real (dias)"] > 5:
+            return "Crítico"
+        elif row["Atraso Real (dias)"] > 0:
+            return "Risco"
+        else:
+            return "Controlado"
+
+    risco_base["Nivel"] = risco_base.apply(classificar_risco, axis=1)
+
+    # remove ruído
+    risco_base = risco_base[
+        (risco_base["Atraso Real (dias)"] > 0) |
+        (risco_base["Horas"] > risco_base["Horas"].mean())
+    ]
+
+    # gráfico bubble
+    fig_risco = px.scatter(
+        risco_base,
+        x="Atraso Real (dias)",
+        y="Processo",
+        size="Horas",
+        color="Nivel",
+        hover_data=["PV", "Horas"],
+        color_discrete_map={
+            "Controlado": "green",
+            "Risco": "gold",
+            "Crítico": "red"
+        },
+        title="Impacto Real dos Atrasos na Produção"
+    )
+
+    fig_risco.update_layout(
+        xaxis_title="Dias de Atraso",
+        yaxis_title="Processo",
+        height=550
+    )
+
+    st.plotly_chart(fig_risco, use_container_width=True)
+
+    # ===============================
+    # TOP PROBLEMAS
+    # ===============================
+    st.subheader("🔥 Top Problemas (Prioridade)")
+
+    top_problemas = risco_base.sort_values(
+        ["Atraso Real (dias)", "Horas"],
+        ascending=[False, False]
+    ).head(10)
+
+    st.dataframe(
+        top_problemas[[
+            "PV",
+            "Processo",
+            "Atraso Real (dias)",
+            "Horas",
+            "Nivel"
+        ]],
+        use_container_width=True
+    )
+
 else:
     st.success("Nenhum atraso 🎉")
+
 
 
 # ===============================
