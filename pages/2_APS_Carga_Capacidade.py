@@ -2168,6 +2168,90 @@ st.plotly_chart(fig_comp, use_container_width=True)
 
 
 # ============================================================
+# ===================== ANÁLISE OPERACIONAL ==================
+# ============================================================
+with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
+
+    st.caption("Visões complementares da carga operacional por processo e cliente.")
+
+    # ===============================
+    # BACKLOG POR PROCESSO
+    # ===============================
+    st.subheader("📊 Backlog por Processo")
+
+    backlog = df.groupby("Processo", as_index=False).agg(
+        PVs=("PV", "nunique"),
+        Horas=("Horas", "sum")
+    )
+
+    backlog["Horas"] = backlog["Horas"].round(1)
+
+    fig_backlog = px.bar(
+        backlog.sort_values("Horas", ascending=False),
+        x="Processo",
+        y="Horas",
+        text="Horas"
+    )
+
+    fig_backlog.update_traces(
+        marker_color="#FF7A00",
+        texttemplate="%{y:.1f}",
+        textposition="outside",
+        textfont=dict(size=11, color="white")
+    )
+
+    fig_backlog.update_layout(
+        xaxis_title="Processo",
+        yaxis_title="Horas em Backlog",
+        height=550
+    )
+
+    st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
+
+    # ===============================
+    # CARGA POR CLIENTE
+    # ===============================
+    st.subheader("📊 Carga por Cliente")
+
+    hoje = pd.Timestamp.today().normalize()
+
+    base_op = df.copy()
+
+    if "ENTREGA" in base_op.columns:
+        base_op["ENTREGA"] = pd.to_datetime(base_op["ENTREGA"], errors="coerce")
+        base_op["Dias para Entrega"] = (base_op["ENTREGA"] - hoje).dt.days
+    else:
+        base_op["Dias para Entrega"] = None
+
+    carga_cliente = base_op.groupby("Cliente", as_index=False).agg(
+        Horas=("Horas", "sum"),
+        PVs=("PV", "nunique")
+    )
+
+    carga_cliente["Horas"] = carga_cliente["Horas"].round(1)
+
+    fig_cliente_carga = px.bar(
+        carga_cliente.sort_values("Horas", ascending=False),
+        x="Cliente",
+        y="Horas",
+        text="Horas"
+    )
+
+    fig_cliente_carga.update_traces(
+        marker_color="#1f3b73",
+        texttemplate="%{y:.1f}",
+        textposition="outside",
+        textfont=dict(color="white")
+    )
+
+    fig_cliente_carga.update_layout(height=500)
+
+    st.plotly_chart(fig_cliente_carga, use_container_width=True)
+
+
+
+
+# ============================================================
 # AUDITORIA DE PV 
 # ============================================================
 
@@ -2877,86 +2961,6 @@ risco = pv_carga[
 ].copy()
 
 
-# ============================================================
-# ===================== ANÁLISE OPERACIONAL ==================
-# ============================================================
-with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
-
-    st.caption("Visões complementares da carga operacional por processo e cliente.")
-
-    # ===============================
-    # BACKLOG POR PROCESSO
-    # ===============================
-    st.subheader("📊 Backlog por Processo")
-
-    backlog = df.groupby("Processo", as_index=False).agg(
-        PVs=("PV", "nunique"),
-        Horas=("Horas", "sum")
-    )
-
-    backlog["Horas"] = backlog["Horas"].round(1)
-
-    fig_backlog = px.bar(
-        backlog.sort_values("Horas", ascending=False),
-        x="Processo",
-        y="Horas",
-        text="Horas"
-    )
-
-    fig_backlog.update_traces(
-        marker_color="#FF7A00",
-        texttemplate="%{y:.1f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
-    )
-
-    fig_backlog.update_layout(
-        xaxis_title="Processo",
-        yaxis_title="Horas em Backlog",
-        height=550
-    )
-
-    st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
-
-    # ===============================
-    # CARGA POR CLIENTE
-    # ===============================
-    st.subheader("📊 Carga por Cliente")
-
-    hoje = pd.Timestamp.today().normalize()
-
-    base_op = df.copy()
-
-    if "ENTREGA" in base_op.columns:
-        base_op["ENTREGA"] = pd.to_datetime(base_op["ENTREGA"], errors="coerce")
-        base_op["Dias para Entrega"] = (base_op["ENTREGA"] - hoje).dt.days
-    else:
-        base_op["Dias para Entrega"] = None
-
-    carga_cliente = base_op.groupby("Cliente", as_index=False).agg(
-        Horas=("Horas", "sum"),
-        PVs=("PV", "nunique")
-    )
-
-    carga_cliente["Horas"] = carga_cliente["Horas"].round(1)
-
-    fig_cliente_carga = px.bar(
-        carga_cliente.sort_values("Horas", ascending=False),
-        x="Cliente",
-        y="Horas",
-        text="Horas"
-    )
-
-    fig_cliente_carga.update_traces(
-        marker_color="#1f3b73",
-        texttemplate="%{y:.1f}",
-        textposition="outside",
-        textfont=dict(color="white")
-    )
-
-    fig_cliente_carga.update_layout(height=500)
-
-    st.plotly_chart(fig_cliente_carga, use_container_width=True)
 
 # ============================================================
 # ===================== PAINEL OPERACIONAL ===================
