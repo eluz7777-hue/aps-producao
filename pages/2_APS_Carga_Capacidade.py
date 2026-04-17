@@ -1059,10 +1059,7 @@ if tipo == "Semanal":
 
     dem = dem.merge(cal, on=["Semana", "Ano"], how="left")
 
-    # DEBUG (mantenha por enquanto)
-    st.write("DEBUG dem colunas:", dem.columns.tolist())
-    st.write("DEBUG dem preview:", dem.head())
-
+    
     # 🔒 FUNÇÃO SEGURA
     def calcular_capacidade_segura(r):
         try:
