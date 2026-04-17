@@ -1203,6 +1203,18 @@ pv_carga["Dias Disponíveis"] = (
     pv_carga["DATA_ENTREGA_APS"] - hoje
 ).dt.days
 
+pv_carga["Dias Disponíveis"] = pd.to_numeric(
+    pv_carga["Dias Disponíveis"], errors="coerce"
+).fillna(0)
+
+# 🔥 PRIMEIRO CALCULA ATRASO
+pv_carga["Atraso (dias)"] = np.where(
+    pv_carga["Dias Disponíveis"] < 0,
+    pv_carga["Dias Disponíveis"] * -1,
+    0
+)
+
+# 🔥 DEPOIS USA
 pv_carga["Status Prazo"] = np.where(
     pv_carga["Atraso (dias)"] > 0,
     "Atrasado",
@@ -1211,16 +1223,6 @@ pv_carga["Status Prazo"] = np.where(
         "Risco",
         "OK"
     )
-)
-
-pv_carga["Dias Disponíveis"] = pd.to_numeric(
-    pv_carga["Dias Disponíveis"], errors="coerce"
-).fillna(0)
-
-pv_carga["Atraso (dias)"] = np.where(
-    pv_carga["Dias Disponíveis"] < 0,
-    pv_carga["Dias Disponíveis"] * -1,
-    0
 )
 
 
@@ -1243,7 +1245,7 @@ if not df_previsao.empty:
         })
     )
 
-    # 🔒 PROTEÇÃO CONTRA DUPLICAÇÃO (STREAMLIT RERUN)
+    # 🔒 PROTEÇÃO CONTRA DUPLICAÇÃO
     if "Data Prevista Processo" in pv_carga.columns:
         pv_carga = pv_carga.drop(columns=["Data Prevista Processo"])
 
@@ -1276,6 +1278,7 @@ else:
     pv_carga["Data Prevista Processo"] = pd.NaT
     pv_carga["Atraso Real (dias)"] = 0
     pv_carga["Status Real"] = "⚪ Sem dados"
+
 
 
 
