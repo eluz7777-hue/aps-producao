@@ -4162,55 +4162,6 @@ else:
 
 
 
-
-# ===============================
-# ALERTA DE CAPACIDADE CRÍTICA
-# ===============================
-st.subheader("⚠️ Capacidade Crítica")
-critico = dem[dem["Ocupacao"] > 95].copy()
-
-if not critico.empty:
-    st.error("Capacidade próxima ou acima do limite detectada.")
-
-    critico_exib = critico.copy()
-
-    # saneamento forte das colunas numéricas
-    for col in ["Ocupacao", "Horas", "Capacidade"]:
-        if col not in critico_exib.columns:
-            critico_exib[col] = 0
-
-        critico_exib[col] = pd.to_numeric(
-            critico_exib[col],
-            errors="coerce"
-        ).fillna(0)
-
-    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(
-    lambda x: "🔴" if x >= 100 else "🟠" if x >= 90 else "🟡" if x >= 75 else "🟢"
-    )
-    critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
-    critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
-    critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
-
-    critico_exib = critico_exib.sort_values(
-        ["Ocupacao", "Horas"],
-        ascending=[False, False]
-    ).reset_index(drop=True)
-
-    st.dataframe(
-        critico_exib[
-            ["Semáforo", "Periodo", "Processo", "Horas_fmt", "Capacidade_fmt", "Ocupação_fmt"]
-        ].rename(columns={
-            "Horas_fmt": "Horas",
-            "Capacidade_fmt": "Capacidade",
-            "Ocupação_fmt": "Ocupação (%)"
-        }),
-        use_container_width=True
-    )
-else:
-    st.success("Capacidade sob controle.")
-
-
-
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
 # ===============================
