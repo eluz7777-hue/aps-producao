@@ -3992,9 +3992,7 @@ if not ranking_colapso.empty:
     st.dataframe(
         colapso_exib[
             ["Semáforo Colapso", "Processo", "Ocupação (%)", "Fila Acumulada (h)", "Fila (dias)", "Saldo Exibição (h)"]
-        ].rename(columns={
-            "Saldo Exibição (h)": "Saldo (h)"
-        }),
+        ].rename(columns={"Saldo Exibição (h)": "Saldo (h)"}),
         use_container_width=True
     )
 
@@ -4010,11 +4008,50 @@ if not ranking_colapso.empty:
 else:
     st.info("Sem dados suficientes para cálculo de colapso.")
 
+
+# ============================================================
+# 🔮 COLAPSO FUTURO (NOVO)
+# ============================================================
+st.subheader("🔮 Colapso Futuro (Previsão)")
+
+st.caption("Projeção baseada na carga atual versus capacidade produtiva.")
+
+if df_colapso is not None and not df_colapso.empty:
+
+    colapso_futuro = df_colapso.copy()
+
+    if "Processo" not in colapso_futuro.columns:
+        colapso_futuro["Processo"] = "N/D"
+
+    if "Dias de Fila" not in colapso_futuro.columns:
+        colapso_futuro["Dias de Fila"] = 0
+
+    if "Risco Futuro" not in colapso_futuro.columns:
+        colapso_futuro["Risco Futuro"] = "🟢 Sob controle"
+
+    colapso_futuro["Dias de Fila"] = pd.to_numeric(
+        colapso_futuro["Dias de Fila"], errors="coerce"
+    ).fillna(0)
+
+    colapso_futuro["Dias de Fila_fmt"] = colapso_futuro["Dias de Fila"].apply(
+        lambda x: fmt_br_num(x, 1)
+    )
+
+    st.dataframe(
+        colapso_futuro[
+            ["Processo", "Dias de Fila_fmt", "Risco Futuro"]
+        ].rename(columns={"Dias de Fila_fmt": "Dias de Fila"}),
+        use_container_width=True
+    )
+
+else:
+    st.info("Sem dados suficientes para previsão de colapso futuro.")
+
+
 # ===============================
 # ALERTA DE CAPACIDADE CRÍTICA
 # ===============================
 st.subheader("⚠️ Capacidade Crítica")
-
 critico = dem[dem["Ocupacao"] > 95].copy()
 
 if not critico.empty:
