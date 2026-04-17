@@ -1191,6 +1191,8 @@ pv_carga["DATA_ENTREGA_APS"] = pd.to_datetime(
     errors="coerce"
 )
 
+
+
 # ============================================================
 # 📅 CÁLCULO DE PRAZO
 # ============================================================
@@ -1201,6 +1203,16 @@ pv_carga["Dias Disponíveis"] = (
     pv_carga["DATA_ENTREGA_APS"] - hoje
 ).dt.days
 
+pv_carga["Status Prazo"] = np.where(
+    pv_carga["Atraso (dias)"] > 0,
+    "Atrasado",
+    np.where(
+        pv_carga["Dias Disponíveis"] <= 3,
+        "Risco",
+        "OK"
+    )
+)
+
 pv_carga["Dias Disponíveis"] = pd.to_numeric(
     pv_carga["Dias Disponíveis"], errors="coerce"
 ).fillna(0)
@@ -1210,6 +1222,63 @@ pv_carga["Atraso (dias)"] = np.where(
     pv_carga["Dias Disponíveis"] * -1,
     0
 )
+
+
+# ============================================================
+# 🔮 PREVISÃO REAL DE ENTREGA (APS INTELIGENTE)
+# ============================================================
+
+df_previsao = df.copy()
+
+if not df_previsao.empty:
+
+    df_previsao["Data Prevista Processo"] = df_previsao["Data"] + pd.to_timedelta(
+        df_previsao["Fila (dias)"], unit="D"
+    )
+
+    pv_previsao = (
+        df_previsao.groupby("PV", as_index=False)
+        .agg({
+            "Data Prevista Processo": "max"
+        })
+    )
+
+    # 🔒 PROTEÇÃO CONTRA DUPLICAÇÃO (STREAMLIT RERUN)
+    if "Data Prevista Processo" in pv_carga.columns:
+        pv_carga = pv_carga.drop(columns=["Data Prevista Processo"])
+
+    pv_carga = pv_carga.merge(
+        pv_previsao,
+        on="PV",
+        how="left"
+    )
+
+    pv_carga["Atraso Real (dias)"] = (
+        pv_carga["Data Prevista Processo"] - pv_carga["DATA_ENTREGA_APS"]
+    ).dt.days
+
+    pv_carga["Atraso Real (dias)"] = pd.to_numeric(
+        pv_carga["Atraso Real (dias)"],
+        errors="coerce"
+    ).fillna(0)
+
+    pv_carga["Status Real"] = np.where(
+        pv_carga["Atraso Real (dias)"] > 0,
+        "🔴 Vai atrasar",
+        np.where(
+            pv_carga["Atraso Real (dias)"] >= -2,
+            "🟡 Risco real",
+            "🟢 OK"
+        )
+    )
+
+else:
+    pv_carga["Data Prevista Processo"] = pd.NaT
+    pv_carga["Atraso Real (dias)"] = 0
+    pv_carga["Status Real"] = "⚪ Sem dados"
+
+
+
 
 # ============================================================
 # 🚦 STATUS EXECUTIVO
