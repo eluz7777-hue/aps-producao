@@ -4132,10 +4132,13 @@ col4.metric(
 
 st.divider()
 
+
+
 # -------------------------------
-# 🎯 INTERPRETAÇÃO INTELIGENTE
+# 🎯 INTERPRETAÇÃO INTELIGENTE (REFINADA)
 # -------------------------------
-if gargalo_atual == gargalo_futuro == processo_critico and gargalo_atual:
+
+if gargalo_atual and gargalo_atual == gargalo_futuro == processo_critico:
     st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
 
 elif gargalo_atual and gargalo_atual == gargalo_futuro:
@@ -4143,6 +4146,12 @@ elif gargalo_atual and gargalo_atual == gargalo_futuro:
 
 elif gargalo_futuro and gargalo_futuro == processo_critico:
     st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo. Antecipar ação.")
+
+elif gargalo_atual and processo_critico and gargalo_atual != processo_critico:
+    st.info(
+        f"⚠️ Impacto concentrado em {processo_critico}, "
+        f"mas a restrição real do sistema está em {gargalo_atual}."
+    )
 
 elif gargalo_atual:
     st.info(f"📌 Gargalo atual identificado em {gargalo_atual}. Monitoramento ativo.")
