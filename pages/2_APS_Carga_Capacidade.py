@@ -1502,33 +1502,68 @@ s3.metric("🟢 OK", fmt_br_int(ok))
 s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
 
 # ===============================
-# 🔥 DESTAQUES DA OPERAÇÃO (CORRIGIDO)
+# 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
 # ===============================
 st.subheader("🔥 Destaques da Operação")
 
 d1, d2, d3, d4 = st.columns(4)
 
-# 🔥 Gargalo imediato (fila real)
+# ------------------------------------------------------------
+# 🔥 GARGALO IMEDIATO (COM FALLBACK INTELIGENTE)
+# ------------------------------------------------------------
+gargalo_imediato = None
+
 try:
     df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
-    resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
-    gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
-except:
+
+    if df_dash_tmp is not None and not df_dash_tmp.empty:
+        resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
+        gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
+
+except Exception as e:
     gargalo_imediato = None
 
-d1.metric("🔥 Gargalo Imediato (Operacional)", gargalo_imediato if gargalo_imediato else "N/D")
+# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
+if not gargalo_imediato or gargalo_imediato == "-":
+    try:
+        gargalo_imediato = (
+            df.groupby("Processo")["Horas"]
+            .sum()
+            .sort_values(ascending=False)
+            .index[0]
+        )
+    except:
+        gargalo_imediato = None
 
-# 📊 Gargalo de capacidade
-d2.metric("📊 Gargalo de Capacidade", gargalo_exec if gargalo_exec else "N/D")
+d1.metric(
+    "🔥 Gargalo Imediato (Operacional)",
+    gargalo_imediato if gargalo_imediato else "N/D"
+)
 
-# 🧠 Gargalo raiz (impacto)
+# ------------------------------------------------------------
+# 📊 GARGALO DE CAPACIDADE
+# ------------------------------------------------------------
+d2.metric(
+    "📊 Gargalo de Capacidade",
+    gargalo_exec if gargalo_exec else "N/D"
+)
+
+# ------------------------------------------------------------
+# 🧠 GARGALO RAIZ (IMPACTO)
+# ------------------------------------------------------------
 d3.metric(
     "🧠 Gargalo Raiz (Impacto)",
     gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
 )
 
-# 📍 Pico de ocupação
-d4.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
+# ------------------------------------------------------------
+# 📍 PICO DE OCUPAÇÃO
+# ------------------------------------------------------------
+d4.metric(
+    "📍 Pico de Ocupação",
+    fmt_br_pct(ocupacao_max, 1)
+)
+
 
 # ============================================================
 # ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
