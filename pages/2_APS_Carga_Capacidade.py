@@ -1318,6 +1318,39 @@ if pv_carga.empty:
     st.error("Erro crítico: pv_carga não foi gerado corretamente.")
     st.stop()
 
+
+
+# ============================================================
+# 🔥 GARGALO POR IMPACTO REAL (APS INTELIGENTE)
+# ============================================================
+
+df_impacto = df.copy()
+
+if not df_impacto.empty and "Fila (dias)" in df_impacto.columns:
+
+    df_impacto["Fila (dias)"] = pd.to_numeric(
+        df_impacto["Fila (dias)"], errors="coerce"
+    ).fillna(0)
+
+    impacto_gargalo = (
+        df_impacto.groupby("Processo", as_index=False)
+        .agg(
+            Impacto_Total_Dias=("Fila (dias)", "sum"),
+            PVs_Impactadas=("PV", "nunique")
+        )
+    )
+
+    impacto_gargalo = impacto_gargalo.sort_values(
+        ["Impacto_Total_Dias", "PVs_Impactadas"],
+        ascending=[False, False]
+    ).reset_index(drop=True)
+
+else:
+    impacto_gargalo = pd.DataFrame(
+        columns=["Processo", "Impacto_Total_Dias", "PVs_Impactadas"]
+    )
+
+
 # ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
