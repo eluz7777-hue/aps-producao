@@ -4104,15 +4104,31 @@ else:
     processo_critico = "N/A"
 
 # -------------------------------
-# 🚦 DECISÃO AUTOMÁTICA
+# 🚦 DECISÃO AUTOMÁTICA (REFINADA)
 # -------------------------------
 st.divider()
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("🔥 Gargalo Atual", gargalo_atual if gargalo_atual else "N/A")
-col2.metric("🔮 Risco Futuro", gargalo_futuro if gargalo_futuro else "N/A")
-col3.metric("📊 Maior Impacto", processo_critico)
+col1.metric(
+    "🔥 Gargalo Atual",
+    gargalo_atual if gargalo_atual else "N/A"
+)
+
+col2.metric(
+    "🔮 Risco Futuro",
+    gargalo_futuro if gargalo_futuro else "N/A"
+)
+
+col3.metric(
+    "📊 Maior Impacto (acúmulo)",
+    processo_critico if processo_critico else "N/A"
+)
+
+col4.metric(
+    "🏭 Gargalo Real",
+    gargalo_atual if gargalo_atual else "N/A"
+)
 
 st.divider()
 
