@@ -1351,16 +1351,6 @@ else:
     )
 
 
-# ============================================================
-# ==================== PAINEL EXECUTIVO APS ==================
-# ============================================================
-st.markdown("## 📊 Painel Executivo APS")
-st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
-
-
-
-
-
 
 
 # ===============================
@@ -1416,6 +1406,103 @@ if not dem_proc.empty:
         .iloc[0]["Processo"]
     )
 
+
+
+# ============================================================
+# ==================== PAINEL EXECUTIVO APS ==================
+# ============================================================
+st.markdown("## 📊 Painel Executivo APS")
+st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
+
+
+
+
+# ============================================================
+# 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
+# ============================================================
+
+st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
+
+ranking_colapso_safe = globals().get("ranking_colapso", pd.DataFrame())
+df_colapso_safe = globals().get("df_colapso", pd.DataFrame())
+impacto_gargalo_safe = globals().get("impacto_gargalo", pd.DataFrame())
+
+gargalo_atual = None
+gargalo_futuro = None
+processo_critico = None
+
+# 🔥 Gargalo atual
+if not ranking_colapso_safe.empty:
+
+    base_gargalo = ranking_colapso_safe.copy()
+
+    for col in ["Ocupacao", "Fila Max (dias)"]:
+        if col not in base_gargalo.columns:
+            base_gargalo[col] = 0
+
+    base_gargalo["Ocupacao"] = pd.to_numeric(base_gargalo["Ocupacao"], errors="coerce").fillna(0)
+    base_gargalo["Fila Max (dias)"] = pd.to_numeric(base_gargalo["Fila Max (dias)"], errors="coerce").fillna(0)
+
+    base_gargalo = base_gargalo.sort_values(
+        ["Ocupacao", "Fila Max (dias)"],
+        ascending=[False, False]
+    )
+
+    gargalo_atual = str(base_gargalo.iloc[0].get("Processo", "N/A"))
+
+# 🔮 Gargalo futuro
+if not df_colapso_safe.empty:
+
+    base_futuro = df_colapso_safe.copy()
+
+    if "Dias de Fila" not in base_futuro.columns:
+        base_futuro["Dias de Fila"] = 0
+
+    base_futuro["Dias de Fila"] = pd.to_numeric(
+        base_futuro["Dias de Fila"], errors="coerce"
+    ).fillna(0)
+
+    base_futuro = base_futuro.sort_values("Dias de Fila", ascending=False)
+
+    gargalo_futuro = str(base_futuro.iloc[0].get("Processo", "N/A"))
+
+# 📊 Impacto
+if not impacto_gargalo_safe.empty:
+
+    base_impacto = impacto_gargalo_safe.copy()
+
+    if "Impacto_Total_Dias" not in base_impacto.columns:
+        base_impacto["Impacto_Total_Dias"] = 0
+
+    base_impacto["Impacto_Total_Dias"] = pd.to_numeric(
+        base_impacto["Impacto_Total_Dias"], errors="coerce"
+    ).fillna(0)
+
+    base_impacto = base_impacto.sort_values("Impacto_Total_Dias", ascending=False)
+
+    processo_critico = str(base_impacto.iloc[0].get("Processo", "N/A"))
+
+# métricas
+st.divider()
+c1, c2, c3 = st.columns(3)
+c1.metric("🔥 Gargalo Atual", gargalo_atual or "N/A")
+c2.metric("🔮 Risco Futuro", gargalo_futuro or "N/A")
+c3.metric("📊 Maior Impacto", processo_critico or "N/A")
+st.divider()
+
+# interpretação
+if gargalo_atual and gargalo_atual == gargalo_futuro == processo_critico:
+    st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
+elif gargalo_atual and gargalo_atual == gargalo_futuro:
+    st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
+elif gargalo_futuro and gargalo_futuro == processo_critico:
+    st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo.")
+elif gargalo_atual:
+    st.info(f"📌 Gargalo atual: {gargalo_atual}")
+else:
+    st.success("Sistema operando dentro da normalidade.")
+
+
 # ===============================
 # KPIs PRINCIPAIS
 # ===============================
@@ -1426,6 +1513,9 @@ k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
 k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
 k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
 k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
+
+
+
 
 # ===============================
 # FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
