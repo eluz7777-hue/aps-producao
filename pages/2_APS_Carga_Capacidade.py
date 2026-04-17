@@ -1360,78 +1360,6 @@ st.caption("Indicadores estratégicos, status geral e leitura executiva da produ
 
 
 
-# ============================================================
-# 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
-# ============================================================
-
-st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
-
-# 🔒 GARANTE EXISTÊNCIA DAS BASES
-ranking_colapso_safe = globals().get("ranking_colapso", pd.DataFrame())
-df_colapso_safe = globals().get("df_colapso", pd.DataFrame())
-impacto_gargalo_safe = globals().get("impacto_gargalo", pd.DataFrame())
-
-gargalo_atual = None
-gargalo_futuro = None
-processo_critico = None
-
-# -------------------------------
-# 🔥 GARGALO ATUAL
-# -------------------------------
-if not ranking_colapso_safe.empty:
-    gargalo_atual = str(ranking_colapso_safe.iloc[0].get("Processo", "N/A"))
-    status_atual = str(ranking_colapso_safe.iloc[0].get("Semáforo Colapso", "N/A"))
-else:
-    status_atual = "N/A"
-
-# -------------------------------
-# 🔮 GARGALO FUTURO
-# -------------------------------
-if not df_colapso_safe.empty:
-    gargalo_futuro = str(df_colapso_safe.iloc[0].get("Processo", "N/A"))
-    risco_futuro = str(df_colapso_safe.iloc[0].get("Risco Futuro", "N/A"))
-else:
-    risco_futuro = "N/A"
-
-# -------------------------------
-# 📊 PROCESSO DE MAIOR IMPACTO
-# -------------------------------
-if not impacto_gargalo_safe.empty:
-    processo_critico = str(impacto_gargalo_safe.iloc[0].get("Processo", "N/A"))
-else:
-    processo_critico = "N/A"
-
-# -------------------------------
-# 🚦 DECISÃO AUTOMÁTICA
-# -------------------------------
-st.divider()
-
-col1, col2, col3 = st.columns(3)
-
-col1.metric("🔥 Gargalo Atual", gargalo_atual if gargalo_atual else "N/A")
-col2.metric("🔮 Risco Futuro", gargalo_futuro if gargalo_futuro else "N/A")
-col3.metric("📊 Maior Impacto", processo_critico)
-
-st.divider()
-
-# -------------------------------
-# 🎯 INTERPRETAÇÃO INTELIGENTE
-# -------------------------------
-if gargalo_atual == gargalo_futuro == processo_critico and gargalo_atual:
-    st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
-
-elif gargalo_atual and gargalo_atual == gargalo_futuro:
-    st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
-
-elif gargalo_futuro and gargalo_futuro == processo_critico:
-    st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo. Antecipar ação.")
-
-elif gargalo_atual:
-    st.info(f"📌 Gargalo atual identificado em {gargalo_atual}. Monitoramento ativo.")
-
-else:
-    st.success("Sistema operando dentro da normalidade.")
-
 
 
 
@@ -4123,6 +4051,171 @@ if df_colapso is not None and not df_colapso.empty:
 
 else:
     st.info("Sem dados suficientes para previsão de colapso futuro.")
+
+
+
+# ============================================================
+# 🔮 COLAPSO FUTURO (NOVO)
+# ============================================================
+st.subheader("🔮 Colapso Futuro (Previsão)")
+
+st.caption("Projeção baseada na carga atual versus capacidade produtiva.")
+
+if df_colapso is not None and not df_colapso.empty:
+
+    colapso_futuro = df_colapso.copy()
+
+    if "Processo" not in colapso_futuro.columns:
+        colapso_futuro["Processo"] = "N/D"
+
+    if "Dias de Fila" not in colapso_futuro.columns:
+        colapso_futuro["Dias de Fila"] = 0
+
+    if "Risco Futuro" not in colapso_futuro.columns:
+        colapso_futuro["Risco Futuro"] = "🟢 Sob controle"
+
+    colapso_futuro["Dias de Fila"] = pd.to_numeric(
+        colapso_futuro["Dias de Fila"], errors="coerce"
+    ).fillna(0)
+
+    colapso_futuro["Dias de Fila_fmt"] = colapso_futuro["Dias de Fila"].apply(
+        lambda x: fmt_br_num(x, 1)
+    )
+
+    st.dataframe(
+        colapso_futuro[
+            ["Processo", "Dias de Fila_fmt", "Risco Futuro"]
+        ].rename(columns={"Dias de Fila_fmt": "Dias de Fila"}),
+        use_container_width=True
+    )
+
+else:
+    st.info("Sem dados suficientes para previsão de colapso futuro.")
+
+
+
+# ============================================================
+# 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
+# ============================================================
+
+st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
+
+# 🔒 GARANTE EXISTÊNCIA DAS BASES
+ranking_colapso_safe = globals().get("ranking_colapso", pd.DataFrame())
+df_colapso_safe = globals().get("df_colapso", pd.DataFrame())
+impacto_gargalo_safe = globals().get("impacto_gargalo", pd.DataFrame())
+
+gargalo_atual = None
+gargalo_futuro = None
+processo_critico = None
+
+# -------------------------------
+# 🔥 GARGALO ATUAL
+# -------------------------------
+if not ranking_colapso_safe.empty:
+    gargalo_atual = str(ranking_colapso_safe.iloc[0].get("Processo", "N/A"))
+    status_atual = str(ranking_colapso_safe.iloc[0].get("Semáforo Colapso", "N/A"))
+else:
+    status_atual = "N/A"
+
+# -------------------------------
+# 🔮 GARGALO FUTURO
+# -------------------------------
+if not df_colapso_safe.empty:
+    gargalo_futuro = str(df_colapso_safe.iloc[0].get("Processo", "N/A"))
+    risco_futuro = str(df_colapso_safe.iloc[0].get("Risco Futuro", "N/A"))
+else:
+    risco_futuro = "N/A"
+
+# -------------------------------
+# 📊 PROCESSO DE MAIOR IMPACTO
+# -------------------------------
+if not impacto_gargalo_safe.empty:
+    processo_critico = str(impacto_gargalo_safe.iloc[0].get("Processo", "N/A"))
+else:
+    processo_critico = "N/A"
+
+# -------------------------------
+# 🚦 DECISÃO AUTOMÁTICA
+# -------------------------------
+st.divider()
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("🔥 Gargalo Atual", gargalo_atual if gargalo_atual else "N/A")
+col2.metric("🔮 Risco Futuro", gargalo_futuro if gargalo_futuro else "N/A")
+col3.metric("📊 Maior Impacto", processo_critico)
+
+st.divider()
+
+# -------------------------------
+# 🎯 INTERPRETAÇÃO INTELIGENTE
+# -------------------------------
+if gargalo_atual == gargalo_futuro == processo_critico and gargalo_atual:
+    st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
+
+elif gargalo_atual and gargalo_atual == gargalo_futuro:
+    st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
+
+elif gargalo_futuro and gargalo_futuro == processo_critico:
+    st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo. Antecipar ação.")
+
+elif gargalo_atual:
+    st.info(f"📌 Gargalo atual identificado em {gargalo_atual}. Monitoramento ativo.")
+
+else:
+    st.success("Sistema operando dentro da normalidade.")
+
+
+
+
+
+# ===============================
+# ALERTA DE CAPACIDADE CRÍTICA
+# ===============================
+st.subheader("⚠️ Capacidade Crítica")
+critico = dem[dem["Ocupacao"] > 95].copy()
+
+if not critico.empty:
+    st.error("Capacidade próxima ou acima do limite detectada.")
+
+    critico_exib = critico.copy()
+
+    # saneamento forte das colunas numéricas
+    for col in ["Ocupacao", "Horas", "Capacidade"]:
+        if col not in critico_exib.columns:
+            critico_exib[col] = 0
+
+        critico_exib[col] = pd.to_numeric(
+            critico_exib[col],
+            errors="coerce"
+        ).fillna(0)
+
+    critico_exib["Semáforo"] = critico_exib["Ocupacao"].apply(
+    lambda x: "🔴" if x >= 100 else "🟠" if x >= 90 else "🟡" if x >= 75 else "🟢"
+    )
+    critico_exib["Horas_fmt"] = critico_exib["Horas"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Capacidade_fmt"] = critico_exib["Capacidade"].apply(lambda x: fmt_br_num(x, 1))
+    critico_exib["Ocupação_fmt"] = critico_exib["Ocupacao"].apply(lambda x: fmt_br_pct(x, 1))
+
+    critico_exib = critico_exib.sort_values(
+        ["Ocupacao", "Horas"],
+        ascending=[False, False]
+    ).reset_index(drop=True)
+
+    st.dataframe(
+        critico_exib[
+            ["Semáforo", "Periodo", "Processo", "Horas_fmt", "Capacidade_fmt", "Ocupação_fmt"]
+        ].rename(columns={
+            "Horas_fmt": "Horas",
+            "Capacidade_fmt": "Capacidade",
+            "Ocupação_fmt": "Ocupação (%)"
+        }),
+        use_container_width=True
+    )
+else:
+    st.success("Capacidade sob controle.")
+
 
 
 # ===============================
