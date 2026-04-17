@@ -1871,45 +1871,58 @@ df_atraso["Atraso (dias)"] = (
     pd.to_numeric(df_atraso["Atraso (dias)"], errors="coerce")
     .fillna(0)
     .clip(lower=0)
+    .astype(int)
 )
 
 df_atraso = df_atraso[df_atraso["Atraso (dias)"] > 0].copy()
 
 if not df_atraso.empty:
 
-    max_atraso = int(df_atraso["Atraso (dias)"].max())
-    bins = list(range(0, max_atraso + 3, 2))
+    # ===============================
+    # FAIXAS FIXAS (EXECUTIVO)
+    # ===============================
+    def classificar_faixa(dias):
+        if dias <= 2:
+            return "1-2"
+        elif dias <= 5:
+            return "3-5"
+        elif dias <= 10:
+            return "6-10"
+        else:
+            return "11+"
 
-    labels = []
-    for i in range(len(bins)-1):
-        inicio = bins[i] + 1
-        fim = bins[i+1]
-        labels.append(f"{inicio}-{fim}")
+    df_atraso["Faixa"] = df_atraso["Atraso (dias)"].apply(classificar_faixa)
 
-    df_atraso["Faixa"] = pd.cut(
-        df_atraso["Atraso (dias)"],
-        bins=bins,
-        labels=labels,
-        include_lowest=True
-    )
-
+    # ===============================
+    # AGRUPAMENTO
+    # ===============================
     dist = (
-        df_atraso.groupby("Faixa", observed=False)["PV"]
+        df_atraso.groupby("Faixa")["PV"]
         .nunique()
         .reset_index(name="Quantidade")
     )
 
-    dist = dist[dist["Quantidade"] > 0]
+    # ordem correta das faixas
+    ordem = ["1-2", "3-5", "6-10", "11+"]
+    dist["Faixa"] = pd.Categorical(dist["Faixa"], categories=ordem, ordered=True)
+    dist = dist.sort_values("Faixa")
 
-    dist["Ordem"] = dist["Faixa"].astype(str).str.extract(r"(\d+)").astype(int)
-    dist = dist.sort_values("Ordem")
-
+    # ===============================
+    # GRÁFICO
+    # ===============================
     fig_bar = px.bar(
         dist,
         x="Faixa",
         y="Quantidade",
         text="Quantidade",
-        title="Escalonamento de Atraso (em dias)",
+        title="Distribuição de Atraso por Faixa (dias)",
+        color="Faixa",
+        color_discrete_map={
+            "1-2": "green",
+            "3-5": "gold",
+            "6-10": "orange",
+            "11+": "red"
+        }
     )
 
     fig_bar.update_traces(textposition="outside")
@@ -1918,13 +1931,14 @@ if not df_atraso.empty:
         xaxis_title="Faixa de Atraso (dias)",
         yaxis_title="Quantidade de PVs",
         height=450,
-        showlegend=False,
-        uniformtext_minsize=8,
-        uniformtext_mode='hide'
+        showlegend=False
     )
 
     st.plotly_chart(fig_bar, use_container_width=True)
 
+    # ===============================
+    # MÉTRICAS
+    # ===============================
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -1936,14 +1950,17 @@ if not df_atraso.empty:
     with col3:
         st.metric("Total em atraso", f"{len(df_atraso)} PVs")
 
+    # ===============================
+    # DETALHAMENTO
+    # ===============================
     faixa_select = st.selectbox(
         "Selecionar faixa para detalhamento",
-        dist["Faixa"].astype(str).tolist(),
+        ordem,
         key="faixa_bar_select"
     )
 
     detalhe = df_atraso[
-        df_atraso["Faixa"].astype(str) == faixa_select
+        df_atraso["Faixa"] == faixa_select
     ].copy()
 
     st.subheader("📋 Detalhamento da Faixa")
@@ -1955,6 +1972,7 @@ if not df_atraso.empty:
 
 else:
     st.success("Nenhum atraso 🎉")
+
 
 # ===============================
 # 5) PV POR CLIENTE
