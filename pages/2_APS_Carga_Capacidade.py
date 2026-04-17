@@ -4511,7 +4511,7 @@ with st.expander("🧩 Roteiro de Fabricação por Código", expanded=False):
 # ============================================================
 with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
-    st.subheader("🔎 Verificar quais PVs estouram a capacidade do processo")
+    st.subheader("🔎 Simulação de impacto e capacidade do processo")
 
     processo_gargalo_sel = st.selectbox(
         "Selecione o processo gargalo",
@@ -4519,9 +4519,27 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
         key="gargalo_processo_select"
     )
 
+    # ============================================================
+    # 🎛️ CONTROLES DE SIMULAÇÃO
+    # ============================================================
+    col_sim1, col_sim2 = st.columns(2)
+
+    with col_sim1:
+        add_recurso = st.slider(
+            "➕ Recursos adicionais",
+            0, 5, 0
+        )
+
+    with col_sim2:
+        reduzir_carga = st.slider(
+            "➖ Redução de carga (%)",
+            0, 50, 0
+        )
+
     df_gargalo = df[df["Processo"] == processo_gargalo_sel].copy()
 
     if not df_gargalo.empty:
+
         gargalo_pv = (
             df_gargalo.groupby(["PV", "Cliente", "Data"], as_index=False)["Horas"]
             .sum()
@@ -4529,10 +4547,23 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
             .reset_index(drop=True)
         )
 
+        # ============================================================
+        # 🔧 SIMULAÇÃO DE REDUÇÃO DE CARGA
+        # ============================================================
+        if reduzir_carga > 0:
+            gargalo_pv["Horas"] = gargalo_pv["Horas"] * (1 - reduzir_carga / 100)
+
         gargalo_pv["Carga Acumulada (h)"] = gargalo_pv["Horas"].cumsum()
 
-        recursos_gargalo = MAQUINAS.get(processo_gargalo_sel, 0)
-        capacidade_dia_gargalo = capacidade_diaria_real(processo_gargalo_sel)
+        # ============================================================
+        # 🔧 CAPACIDADE COM SIMULAÇÃO
+        # ============================================================
+        recursos_base = MAQUINAS.get(processo_gargalo_sel, 0)
+        recursos_gargalo = recursos_base + add_recurso
+
+        capacidade_dia_gargalo = capacidade_diaria_real(processo_gargalo_sel) * (
+            recursos_gargalo / max(recursos_base, 1)
+        )
 
         hoje = pd.Timestamp.today().normalize()
 
@@ -4554,20 +4585,46 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
             capacidade_dia_gargalo > 0,
             np.ceil(np.abs(np.minimum(gargalo_pv["Saldo Gargalo (h)"], 0)) / capacidade_dia_gargalo),
             0
+        ).astype(int)
+
+        # ============================================================
+        # 🚨 DETECÇÃO DE COLAPSO
+        # ============================================================
+        colapso = gargalo_pv[gargalo_pv["Saldo Gargalo (h)"] < 0]
+
+        if not colapso.empty:
+            primeira_quebra = colapso.iloc[0]
+            st.error(
+                f"🚨 Colapso ocorre em {primeira_quebra['Data']} (PV {primeira_quebra['PV']})"
+            )
+        else:
+            st.success("✅ Processo suporta toda a carga no cenário atual")
+
+        # ============================================================
+        # 📊 GRÁFICO DE EVOLUÇÃO
+        # ============================================================
+        fig_gargalo = px.line(
+            gargalo_pv,
+            x="Data",
+            y="Saldo Gargalo (h)",
+            title="Evolução do Gargalo (Saldo)",
+            markers=True
         )
 
-        gargalo_pv["Dias de Estouro"] = gargalo_pv["Dias de Estouro"].astype(int)
+        fig_gargalo.add_hline(y=0, line_dash="dash")
 
+        st.plotly_chart(fig_gargalo, use_container_width=True)
+
+        # ============================================================
+        # 📋 TABELA
+        # ============================================================
         def semaforo_gargalo(x):
-            if x == "SIM":
-                return "🔴"
-            return "🟢"
+            return "🔴" if x == "SIM" else "🟢"
 
         gargalo_pv["Semáforo"] = gargalo_pv["Estoura Gargalo?"].apply(semaforo_gargalo)
 
-        st.subheader(f"📋 Sequência de PVs no processo: {processo_gargalo_sel}")
-
         exib_gargalo = gargalo_pv.copy()
+
         exib_gargalo["Horas"] = exib_gargalo["Horas"].round(1)
         exib_gargalo["Carga Acumulada (h)"] = exib_gargalo["Carga Acumulada (h)"].round(1)
         exib_gargalo["Horas Disponíveis até Entrega"] = exib_gargalo["Horas Disponíveis até Entrega"].round(1)
@@ -4575,6 +4632,8 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
         if "Data" in exib_gargalo.columns:
             exib_gargalo["Data"] = pd.to_datetime(exib_gargalo["Data"], errors="coerce").dt.strftime("%d/%m/%Y")
+
+        st.subheader(f"📋 Sequência de PVs no processo: {processo_gargalo_sel}")
 
         st.dataframe(
             exib_gargalo[
@@ -4594,6 +4653,9 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
             use_container_width=True
         )
 
+        # ============================================================
+        # 📊 KPIs
+        # ============================================================
         total_estouro = (gargalo_pv["Estoura Gargalo?"] == "SIM").sum()
         total_ok = (gargalo_pv["Estoura Gargalo?"] == "NÃO").sum()
 
