@@ -1328,27 +1328,62 @@ df_impacto = df.copy()
 
 if not df_impacto.empty and "Fila (dias)" in df_impacto.columns:
 
+    # ------------------------------------------------------------
+    # NORMALIZAÇÃO SEGURA
+    # ------------------------------------------------------------
     df_impacto["Fila (dias)"] = pd.to_numeric(
         df_impacto["Fila (dias)"], errors="coerce"
     ).fillna(0)
 
+    df_impacto["PV"] = df_impacto["PV"].astype(str).str.strip()
+    df_impacto["Processo"] = df_impacto["Processo"].astype(str).str.strip()
+
+    # ------------------------------------------------------------
+    # CÁLCULO DE IMPACTO (RAIZ)
+    # ------------------------------------------------------------
     impacto_gargalo = (
         df_impacto.groupby("Processo", as_index=False)
         .agg(
             Impacto_Total_Dias=("Fila (dias)", "sum"),
-            PVs_Impactadas=("PV", "nunique")
+            PVs_Impactadas=("PV", "nunique"),
+            Fila_Media_Dias=("Fila (dias)", "mean")
         )
     )
 
+    # ------------------------------------------------------------
+    # SCORE INTELIGENTE (MAIS CONFIÁVEL QUE SOMA PURA)
+    # ------------------------------------------------------------
+    impacto_gargalo["Score_Impacto"] = (
+        (impacto_gargalo["Impacto_Total_Dias"] * 0.6) +
+        (impacto_gargalo["PVs_Impactadas"] * 2.0) +
+        (impacto_gargalo["Fila_Media_Dias"] * 3.0)
+    )
+
+    # ------------------------------------------------------------
+    # ORDENAÇÃO FINAL (GARGALO REAL)
+    # ------------------------------------------------------------
     impacto_gargalo = impacto_gargalo.sort_values(
-        ["Impacto_Total_Dias", "PVs_Impactadas"],
+        ["Score_Impacto", "Impacto_Total_Dias"],
         ascending=[False, False]
     ).reset_index(drop=True)
 
+    # ------------------------------------------------------------
+    # 🔥 DEFINIÇÃO DO GARGALO RAIZ
+    # ------------------------------------------------------------
+    gargalo_raiz = impacto_gargalo.iloc[0]["Processo"]
+
 else:
     impacto_gargalo = pd.DataFrame(
-        columns=["Processo", "Impacto_Total_Dias", "PVs_Impactadas"]
+        columns=[
+            "Processo",
+            "Impacto_Total_Dias",
+            "PVs_Impactadas",
+            "Fila_Media_Dias",
+            "Score_Impacto"
+        ]
     )
+
+    gargalo_raiz = None
 
 
 
@@ -1414,12 +1449,6 @@ if not dem_proc.empty:
 st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
 
-
-
-
-
-
-
 # ===============================
 # KPIs PRINCIPAIS
 # ===============================
@@ -1430,9 +1459,6 @@ k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
 k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
 k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
 k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
-
-
-
 
 # ===============================
 # FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
@@ -1476,14 +1502,54 @@ s3.metric("🟢 OK", fmt_br_int(ok))
 s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
 
 # ===============================
-# DESTAQUES DA OPERAÇÃO
+# 🔥 DESTAQUES DA OPERAÇÃO (CORRIGIDO)
 # ===============================
 st.subheader("🔥 Destaques da Operação")
 
-d1, d2, d3 = st.columns(3)
-d1.metric("🔥 Gargalo Principal", gargalo_exec if gargalo_exec else "N/D")
-d2.metric("🏗️ Processo Mais Carregado", processo_mais_carga if processo_mais_carga else "N/D")
-d3.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
+d1, d2, d3, d4 = st.columns(4)
+
+# 🔥 Gargalo imediato (fila real)
+try:
+    df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
+    resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
+    gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
+except:
+    gargalo_imediato = None
+
+d1.metric("🔥 Gargalo Imediato (Operacional)", gargalo_imediato if gargalo_imediato else "N/D")
+
+# 📊 Gargalo de capacidade
+d2.metric("📊 Gargalo de Capacidade", gargalo_exec if gargalo_exec else "N/D")
+
+# 🧠 Gargalo raiz (impacto)
+d3.metric(
+    "🧠 Gargalo Raiz (Impacto)",
+    gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
+)
+
+# 📍 Pico de ocupação
+d4.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
+
+# ============================================================
+# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
+# ============================================================
+
+try:
+    if (
+        gargalo_raiz
+        and gargalo_imediato
+        and gargalo_raiz != gargalo_imediato
+    ):
+        st.warning(
+            f"⚠️ O gargalo imediato ({gargalo_imediato}) pode ser consequência do gargalo raiz ({gargalo_raiz}). "
+            "Atuar na origem pode estabilizar todo o fluxo produtivo."
+        )
+except:
+    pass
+
+
+
+
 
 # ============================================================
 # Mini Dashboard por Gargalo (INTELIGENTE)
@@ -3538,7 +3604,7 @@ else:
         st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
 
     with col_g5:
-        st.metric("Gargalo Crítico", f"🔴 {cards_gargalos['gargalo_critico']}")
+        st.metric("🔥 Gargalo Imediato (Operacional)", f"🔴 {cards_gargalos['gargalo_critico']}")
 
     # ------------------------------------------------------------
     # CLASSIFICAÇÃO
