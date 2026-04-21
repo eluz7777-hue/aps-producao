@@ -22,20 +22,31 @@ if df.empty:
     st.stop()
 
 # ============================================================
-# 📌 KPIs PRINCIPAIS
+# 📌 KPI PRINCIPAIS (CORRIGIDO)
 # ============================================================
+
 st.subheader("📌 Indicadores Principais")
 
+df["Horas"] = pd.to_numeric(df.get("Horas", 0), errors="coerce").fillna(0)
+
 carga_total = df["Horas"].sum()
+total_pvs = df["PV"].nunique() if "PV" in df.columns else 0
 
-processos = df.groupby("Processo")["Horas"].sum()
+# 🔒 GARGALO
+if "Processo" in df.columns:
+    processos = df.groupby("Processo")["Horas"].sum()
+    gargalo = processos.idxmax() if not processos.empty else "N/D"
+else:
+    processos = pd.Series()
+    gargalo = "N/D"
 
-gargalo = processos.idxmax() if not processos.empty else "N/D"
-
-total_pvs = df["PV"].nunique()
-
-atrasos = df[df.get("Dias para Entrega", 0) < 0]
-pct_atraso = (len(atrasos) / total_pvs * 100) if total_pvs > 0 else 0
+# 🔒 ATRASO (CORREÇÃO AQUI)
+if "Dias para Entrega" in df.columns:
+    atrasos = df[df["Dias para Entrega"] < 0]
+    pct_atraso = (len(atrasos) / total_pvs * 100) if total_pvs > 0 else 0
+else:
+    atrasos = pd.DataFrame()
+    pct_atraso = 0
 
 k1, k2, k3, k4 = st.columns(4)
 
@@ -43,6 +54,7 @@ k1.metric("🏭 Carga Total (h)", f"{carga_total:,.1f}")
 k2.metric("📦 PVs", total_pvs)
 k3.metric("🚨 % em Atraso", f"{pct_atraso:.1f}%")
 k4.metric("🔥 Gargalo Atual", gargalo)
+
 
 # ============================================================
 # 🧠 STATUS EXECUTIVO
