@@ -776,7 +776,29 @@ st.session_state["df_baixas_ativas"] = df_baixas_ativas
 # BASE OPERACIONAL VISUAL
 # ============================================================
 
+# 🔒 GARANTIA DA BASE PRINCIPAL
+if "df" not in locals() or df is None:
+    df = df_original.copy()
+
+# 🔒 BASE OPERACIONAL
 df_operacional = df_original.copy()
+
+
+# ============================================================
+# 🔒 COMPARTILHAMENTO DE DADOS ENTRE MÓDULOS (APS → INDICADORES)
+# ============================================================
+
+try:
+    # 🔹 df principal (APS)
+    if isinstance(df, pd.DataFrame) and not df.empty:
+        st.session_state["df"] = df.copy()
+
+    # 🔹 df operacional
+    if isinstance(df_operacional, pd.DataFrame) and not df_operacional.empty:
+        st.session_state["df_operacional"] = df_operacional.copy()
+
+except Exception as e:
+    st.warning(f"Erro ao compartilhar dados com outros módulos: {e}")
 
 
 
