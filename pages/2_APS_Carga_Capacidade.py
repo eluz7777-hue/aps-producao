@@ -3708,19 +3708,19 @@ else:
     col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
 
     with col_g1:
-        st.metric("Processos", cards_gargalos["total_processos"])
+        st.metric("Processos", cards_gargalos.get("total_processos", 0))
 
     with col_g2:
-        st.metric("Itens na Fila", cards_gargalos["total_itens_fila"])
+        st.metric("Itens na Fila", cards_gargalos.get("total_itens_fila", 0))
 
     with col_g3:
-        st.metric("Horas na Fila", f"{cards_gargalos['total_horas_fila']:.1f}h")
+        st.metric("Horas na Fila", f"{cards_gargalos.get('total_horas_fila', 0):.1f}h")
 
     with col_g4:
-        st.metric("Baixas Ativas", cards_gargalos["total_baixas_ativas"])
+        st.metric("Baixas Ativas", cards_gargalos.get("total_baixas_ativas", 0))
 
     with col_g5:
-        st.metric("🔥 Gargalo Imediato (Operacional)", f"🔴 {cards_gargalos['gargalo_critico']}")
+        st.metric("🔥 Gargalo Imediato (Operacional)", f"🔴 {cards_gargalos.get('gargalo_critico', 'N/D')}")
 
     # ------------------------------------------------------------
     # CLASSIFICAÇÃO
@@ -3730,13 +3730,13 @@ else:
     col_s1, col_s2, col_s3 = st.columns(3)
 
     with col_s1:
-        st.metric("🔴 Críticos", cards_gargalos["qtd_criticos"])
+        st.metric("🔴 Críticos", cards_gargalos.get("qtd_criticos", 0))
 
     with col_s2:
-        st.metric("🟡 Atenção", cards_gargalos["qtd_atencao"])
+        st.metric("🟡 Atenção", cards_gargalos.get("qtd_atencao", 0))
 
     with col_s3:
-        st.metric("🟢 Controlados", cards_gargalos["qtd_controlados"])
+        st.metric("🟢 Controlados", cards_gargalos.get("qtd_controlados", 0))
 
     # ------------------------------------------------------------
     # TOP 3
@@ -3780,28 +3780,52 @@ else:
 
 
 # ============================================================
-# PVs dos Gargalos
+# 🔍 DETALHAMENTO DO GARGALO SELECIONADO
 # ============================================================
-st.markdown("### 📋 PVs dos Gargalos")
+st.markdown("### 🔍 Detalhamento do Gargalo Selecionado")
 
-processo_baixa_sel = st.selectbox(
-    "Selecione o gargalo",
-    processos_top3,
-    key="selectbox_gargalo_processo"
+# 🔒 GARANTIA
+if not df_mini_gargalos.empty:
+    processos_top3 = df_mini_gargalos["Processo"].dropna().unique().tolist()
+else:
+    processos_top3 = []
+
+if "base_gargalos" not in locals() or base_gargalos is None:
+    base_gargalos = pd.DataFrame()
+
+if processos_top3:
+
+    processo_baixa_sel = st.selectbox(
+        "Selecione o gargalo",
+        processos_top3,
+        key="selectbox_gargalo_processo"
     )
 
     fila_gargalo = base_gargalos[
-    base_gargalos["Processo"] == processo_baixa_sel
+        base_gargalos["Processo"] == processo_baixa_sel
     ].copy()
 
-    fila_gargalo_pendente = fila_gargalo[
-    fila_gargalo["Status Operacional"] == "⏳ Pendente"
-    ].copy()
+    if not fila_gargalo.empty:
 
-    st.dataframe(fila_gargalo, use_container_width=True, height=360)
+        if "Dias para Entrega" in fila_gargalo.columns:
+            fila_gargalo = fila_gargalo.sort_values(
+                ["Dias para Entrega", "Horas"],
+                ascending=[True, False]
+            )
 
-    st.divider()
+        st.dataframe(
+            fila_gargalo,
+            use_container_width=True,
+            height=360
+        )
 
+    else:
+        st.info("Nenhuma PV encontrada para o gargalo selecionado.")
+
+else:
+    st.info("Nenhum gargalo disponível para detalhamento.")
+
+st.divider()
        
 # ============================================================
 # PVs POR CLIENTE
