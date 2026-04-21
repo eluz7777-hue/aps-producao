@@ -3779,31 +3779,30 @@ else:
     )
 
 
-
-
+# ============================================================
+# PVs dos Gargalos
+# ============================================================
 st.markdown("### 📋 PVs dos Gargalos")
 
-        processo_baixa_sel = st.selectbox(
-            "Selecione o gargalo",
-            processos_top3,
-            key="selectbox_gargalo_processo"
-        )
+processo_baixa_sel = st.selectbox(
+    "Selecione o gargalo",
+    processos_top3,
+    key="selectbox_gargalo_processo"
+    )
 
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == processo_baixa_sel
-        ].copy()
+    fila_gargalo = base_gargalos[
+    base_gargalos["Processo"] == processo_baixa_sel
+    ].copy()
 
-        fila_gargalo_pendente = fila_gargalo[
-            fila_gargalo["Status Operacional"] == "⏳ Pendente"
-        ].copy()
+    fila_gargalo_pendente = fila_gargalo[
+    fila_gargalo["Status Operacional"] == "⏳ Pendente"
+    ].copy()
 
-        st.dataframe(fila_gargalo, use_container_width=True, height=360)
+    st.dataframe(fila_gargalo, use_container_width=True, height=360)
 
-        st.divider()
+    st.divider()
 
-        # 🔥 (RESTANTE DO BLOCO DE BAIXAS CONTINUA EXATAMENTE IGUAL — NÃO ALTERADO)
-
-
+       
 # ============================================================
 # PVs POR CLIENTE
 # ============================================================
