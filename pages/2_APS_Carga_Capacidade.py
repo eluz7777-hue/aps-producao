@@ -3518,27 +3518,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
         base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-        st.markdown("### 📋 PVs dos Gargalos")
-
-        processo_baixa_sel = st.selectbox(
-            "Selecione o gargalo",
-            processos_top3,
-            key="selectbox_gargalo_processo"
-        )
-
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == processo_baixa_sel
-        ].copy()
-
-        fila_gargalo_pendente = fila_gargalo[
-            fila_gargalo["Status Operacional"] == "⏳ Pendente"
-        ].copy()
-
-        st.dataframe(fila_gargalo, use_container_width=True, height=360)
-
-        st.divider()
-
-        # 🔥 (RESTANTE DO BLOCO DE BAIXAS CONTINUA EXATAMENTE IGUAL — NÃO ALTERADO)
+        
 
 
 
@@ -3799,6 +3779,34 @@ else:
     )
 
 
+
+
+st.markdown("### 📋 PVs dos Gargalos")
+
+        processo_baixa_sel = st.selectbox(
+            "Selecione o gargalo",
+            processos_top3,
+            key="selectbox_gargalo_processo"
+        )
+
+        fila_gargalo = base_gargalos[
+            base_gargalos["Processo"] == processo_baixa_sel
+        ].copy()
+
+        fila_gargalo_pendente = fila_gargalo[
+            fila_gargalo["Status Operacional"] == "⏳ Pendente"
+        ].copy()
+
+        st.dataframe(fila_gargalo, use_container_width=True, height=360)
+
+        st.divider()
+
+        # 🔥 (RESTANTE DO BLOCO DE BAIXAS CONTINUA EXATAMENTE IGUAL — NÃO ALTERADO)
+
+
+# ============================================================
+# PVs POR CLIENTE
+# ============================================================
 
 st.subheader("🔎 Busca rápida de PV / Cliente")
 
