@@ -3461,10 +3461,14 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
     if gargalos_top3.empty:
         st.info("Nenhum gargalo pendente encontrado no APS.")
+
     else:
         gargalos_top3["Capacidade Processo"] = gargalos_top3["Capacidade Processo"].round(1)
         gargalos_top3["Horas_Pendentes"] = gargalos_top3["Horas_Pendentes"].round(1)
-        gargalos_top3["Utilização (%)"] = pd.to_numeric(gargalos_top3["Utilização (%)"], errors="coerce").fillna(0).round(0).astype(int)
+        gargalos_top3["Utilização (%)"] = pd.to_numeric(
+            gargalos_top3["Utilização (%)"], errors="coerce"
+        ).fillna(0).round(0).astype(int)
+
         gargalos_top3["Ranking"] = gargalos_top3.index + 1
 
         gargalos_top3["Dias de Fila"] = np.where(
@@ -3518,17 +3522,19 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         base_gargalos["Semáforo"] = base_gargalos["Dias para Entrega"].apply(semaforo_entrega)
         base_gargalos["ENTREGA_FMT"] = base_gargalos["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-        
-
-
+        # 🔒 CORREÇÃO DEFINITIVA DO ERRO (SEM ALTERAR LÓGICA)
+        fila_gargalo_pendente = base_gargalos[
+            base_gargalos["Status Operacional"] == "⏳ Pendente"
+        ].copy()
 
         # =========================================================
-        # BAIXA / TERCEIRIZAÇÃO / LOTE (CORRIGIDO)
+        # BAIXA / TERCEIRIZAÇÃO / LOTE
         # =========================================================
         st.markdown("### ✅ Dar Baixa em Operação Concluída")
 
         if fila_gargalo_pendente.empty:
             st.info("Nenhuma PV pendente disponível.")
+
         else:
             base_baixa = fila_gargalo_pendente.copy()
 
@@ -3541,7 +3547,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             opcoes_baixa = base_baixa["ROTULO_BAIXA"].tolist()
 
-            # 🔹 UNITÁRIO
             st.markdown("#### 🔹 Ação Unitária")
 
             col_bx1, col_bx2 = st.columns(2)
@@ -3551,9 +3556,12 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                 opcoes_baixa,
                 key="selectbox_baixa_gargalo"
             )
+
             observacao_baixa = col_bx2.text_input("Observação")
 
-            registro_baixa_df = base_baixa[base_baixa["ROTULO_BAIXA"] == baixa_sel]
+            registro_baixa_df = base_baixa[
+                base_baixa["ROTULO_BAIXA"] == baixa_sel
+            ]
 
             if not registro_baixa_df.empty:
                 linha = registro_baixa_df.iloc[0]
@@ -3596,7 +3604,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 
             st.divider()
 
-            # 📦 LOTE
             st.markdown("#### 📦 Ação em Lote")
 
             selecao_lote = st.multiselect("Selecionar lote", opcoes_baixa)
@@ -3604,7 +3611,9 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
             if selecao_lote:
                 if st.button("📦 Baixar Lote"):
                     for label in selecao_lote:
-                        linha = base_baixa[base_baixa["ROTULO_BAIXA"] == label].iloc[0]
+                        linha = base_baixa[
+                            base_baixa["ROTULO_BAIXA"] == label
+                        ].iloc[0]
 
                         salvar_baixa_operacional(BASE_PATH, {
                             "PV": linha["PV"],
@@ -3624,7 +3633,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                     st.rerun()
 
         st.divider()
-
 
 
 # ============================================================
