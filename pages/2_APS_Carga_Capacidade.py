@@ -2170,12 +2170,12 @@ st.plotly_chart(fig_comp, use_container_width=True)
 # ============================================================
 # ===================== ANÁLISE OPERACIONAL ==================
 # ============================================================
-with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
+with st.expander("🏭 Análise Operacional Detalhada", expanded=True):
 
     st.caption("Visões complementares da carga operacional por processo e cliente.")
 
     # ===============================
-    # BACKLOG POR PROCESSO
+    # 📊 BACKLOG POR PROCESSO
     # ===============================
     st.subheader("📊 Backlog por Processo")
 
@@ -2184,10 +2184,12 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
         Horas=("Horas", "sum")
     )
 
-    backlog["Horas"] = backlog["Horas"].round(1)
+    backlog["Horas"] = pd.to_numeric(backlog["Horas"], errors="coerce").fillna(0).round(1)
+
+    backlog = backlog.sort_values("Horas", ascending=False)
 
     fig_backlog = px.bar(
-        backlog.sort_values("Horas", ascending=False),
+        backlog,
         x="Processo",
         y="Horas",
         text="Horas"
@@ -2196,20 +2198,19 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
     fig_backlog.update_traces(
         marker_color="#FF7A00",
         texttemplate="%{y:.1f}",
-        textposition="outside",
-        textfont=dict(size=11, color="white")
+        textposition="outside"
     )
 
     fig_backlog.update_layout(
         xaxis_title="Processo",
         yaxis_title="Horas em Backlog",
-        height=550
+        height=500
     )
 
-    st.plotly_chart(fig_backlog, use_container_width=True, key="grafico_backlog_processo")
+    st.plotly_chart(fig_backlog, use_container_width=True)
 
     # ===============================
-    # CARGA POR CLIENTE
+    # 📊 CARGA POR CLIENTE
     # ===============================
     st.subheader("📊 Carga por Cliente")
 
@@ -2228,10 +2229,12 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
         PVs=("PV", "nunique")
     )
 
-    carga_cliente["Horas"] = carga_cliente["Horas"].round(1)
+    carga_cliente["Horas"] = pd.to_numeric(carga_cliente["Horas"], errors="coerce").fillna(0).round(1)
+
+    carga_cliente = carga_cliente.sort_values("Horas", ascending=False)
 
     fig_cliente_carga = px.bar(
-        carga_cliente.sort_values("Horas", ascending=False),
+        carga_cliente,
         x="Cliente",
         y="Horas",
         text="Horas"
@@ -2240,14 +2243,16 @@ with st.expander("🏭 Análise Operacional Detalhada", expanded=False):
     fig_cliente_carga.update_traces(
         marker_color="#1f3b73",
         texttemplate="%{y:.1f}",
-        textposition="outside",
-        textfont=dict(color="white")
+        textposition="outside"
     )
 
-    fig_cliente_carga.update_layout(height=500)
+    fig_cliente_carga.update_layout(
+        xaxis_title="Cliente",
+        yaxis_title="Horas",
+        height=500
+    )
 
     st.plotly_chart(fig_cliente_carga, use_container_width=True)
-
 
 
 
