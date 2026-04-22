@@ -156,26 +156,36 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO (FINAL SEM SOBRESCRITA)
+# 🏭 PRODUÇÃO (VERSÃO ESTÁVEL FINAL)
 # ============================================================
 
 with tab3:
 
     st.header("🏭 Indicadores de Produção")
 
-    # 🔒 base protegida
-    if df_aps.empty or "PV" not in df_aps.columns:
-        st.error("Base APS corrompida ou sobrescrita.")
-        st.write("Colunas atuais:", df_aps.columns.tolist())
+    # 🔒 validação real
+    required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
+
+    missing = [c for c in required_cols if c not in df_base.columns]
+
+    if df_base.empty or missing:
+        st.error("Base APS não disponível para Produção.")
+        st.write("Colunas atuais:", df_base.columns.tolist())
         st.stop()
 
-    base = df_aps.copy()
+    base = df_base.copy()
 
+    # ========================================================
+    # 📅 TRATAMENTO
+    # ========================================================
     base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
     base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
     base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
 
+    # ========================================================
+    # 📦 CONSOLIDAÇÃO
+    # ========================================================
     pv = base.groupby("PV", as_index=False).agg(
         Data_real=("Data", "max"),
         Data_planejada=("DATA_ENTREGA_APS", "min")
@@ -185,6 +195,9 @@ with tab3:
         pv["Data_real"] - pv["Data_planejada"]
     ).dt.days.fillna(0)
 
+    # ========================================================
+    # 📊 KPIs
+    # ========================================================
     total = len(pv)
     atrasadas = pv[pv["Atraso_dias"] > 0]
     pct = (len(atrasadas) / total * 100) if total > 0 else 0
@@ -196,17 +209,22 @@ with tab3:
 
     st.divider()
 
+    # ========================================================
+    # 📅 AGRUPAMENTO POR MÊS
+    # ========================================================
     pv["Mes"] = pv["Data_planejada"].dt.month
 
     resumo = pv.groupby("Mes").agg(
-        Total=("PV","count"),
+        Total=("PV", "count"),
         Atrasadas=("Atraso_dias", lambda x: (x > 0).sum())
     ).reset_index()
 
-    resumo["Pct"] = (resumo["Atrasadas"]/resumo["Total"]*100)
+    resumo["Pct"] = (resumo["Atrasadas"] / resumo["Total"] * 100)
 
-    meses = pd.DataFrame({"Mes": list(range(1,13))})
+    # garante meses
+    meses = pd.DataFrame({"Mes": list(range(1, 13))})
     resumo = meses.merge(resumo, on="Mes", how="left")
+
     resumo["Pct"] = resumo["Pct"].fillna(0)
 
     nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
@@ -214,16 +232,27 @@ with tab3:
 
     resumo["Label"] = resumo["Pct"].apply(lambda x: f"{x:.1f}%")
 
-    fig = px.bar(resumo, x="Mes_nome", y="Pct", text="Label")
+    # ========================================================
+    # 📊 GRÁFICO PADRÃO
+    # ========================================================
+    fig = px.bar(
+        resumo,
+        x="Mes_nome",
+        y="Pct",
+        text="Label"
+    )
 
     fig.update_traces(textposition="outside")
 
     fig.update_layout(
         title="Atraso por Mês (%)",
-        yaxis_title="% Atraso"
+        yaxis_title="% Atraso",
+        xaxis_title="Mês"
     )
 
-    fig.add_hline(y=5, line_dash="dash", line_color="red")
+    # meta
+    META = 5
+    fig.add_hline(y=META, line_dash="dash", line_color="red")
 
     st.plotly_chart(fig, use_container_width=True)
 
