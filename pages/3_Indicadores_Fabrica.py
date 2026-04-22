@@ -59,7 +59,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 # ============================================================
-# 💰 COMERCIAL (INDICADOR ESTRATÉGICO COMPLETO)
+# 💰 COMERCIAL (INDICADOR ESTRATÉGICO COMPLETO - PADRÃO FINAL)
 # ============================================================
 
 with tab1:
@@ -67,6 +67,7 @@ with tab1:
     import os
     import pandas as pd
     import streamlit as st
+    import plotly.express as px
 
     st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
     st.caption("Meta: ≥ 25%")
@@ -75,13 +76,13 @@ with tab1:
     META = 0.25
 
     # ========================================================
-    # 📊 BASE CONTROLADA
+    # 📊 BASE CONTROLADA (ATUALIZAR MÊS A MÊS)
     # ========================================================
     indicador_comercial = {
         "Jan": {"valor": 0.1463, "arquivo": "INDC. COMERCIAL - JANEIRO.docx"},
         "Fev": {"valor": 0.1282, "arquivo": "INDI. COMERCIAL - FEVEREIRO.docx"},
         "Mar": {"valor": 0.1875, "arquivo": "INDC. COMERCIAL - MARÇO.docx"},
-        # próximos meses você só adiciona aqui
+        # "Abr": {"valor": 0.22, "arquivo": "INDC. COMERCIAL - ABRIL.docx"},
     }
 
     # ========================================================
@@ -101,7 +102,7 @@ with tab1:
             arquivos.append(None)
 
     # ========================================================
-    # 📊 MÉDIA AUTOMÁTICA (ACM)
+    # 📊 MÉDIA ACUMULADA (ACM)
     # ========================================================
     valores_validos = [v for v in valores if v is not None]
 
@@ -111,28 +112,74 @@ with tab1:
         media_acm = None
 
     # ========================================================
-    # 📊 DATAFRAME FINAL
+    # 📊 DATAFRAME BASE
     # ========================================================
     df = pd.DataFrame({
         "Mês": meses_ordem,
         "Valor": valores
     })
 
-    # adiciona coluna ACM
+    # adiciona ACM
     df = pd.concat([
         df,
         pd.DataFrame([{"Mês": "ACM", "Valor": media_acm}])
     ], ignore_index=True)
 
     # ========================================================
-    # 📊 GRÁFICO DE COLUNAS
+    # 📊 PREPARAÇÃO PARA GRÁFICO
     # ========================================================
-    st.markdown(f"### 📊 Desempenho Comercial - {ANO}")
-
     df_plot = df.copy()
-    df_plot["Valor"] = df_plot["Valor"].fillna(0)
+    df_plot["Valor"] = df_plot["Valor"] * 100  # converte para %
 
-    st.bar_chart(df_plot.set_index("Mês"))
+    # separar meses e ACM
+    df_meses = df_plot[df_plot["Mês"] != "ACM"].copy()
+    df_acm = df_plot[df_plot["Mês"] == "ACM"].copy()
+
+    # ordenar meses corretamente
+    df_meses["Mês"] = pd.Categorical(df_meses["Mês"], categories=meses_ordem, ordered=True)
+    df_meses = df_meses.sort_values("Mês")
+
+    # juntar novamente
+    df_plot = pd.concat([df_meses, df_acm])
+
+    # ========================================================
+    # 🏷️ RÓTULOS (SEM DECIMAL / ACM COM 1 CASA)
+    # ========================================================
+    def formatar(row):
+        if pd.isna(row["Valor"]):
+            return ""
+        if row["Mês"] == "ACM":
+            return f"{row['Valor']:.1f}%"
+        return f"{row['Valor']:.0f}%"
+
+    df_plot["Label"] = df_plot.apply(formatar, axis=1)
+
+    # ========================================================
+    # 📊 GRÁFICO DE COLUNAS PROFISSIONAL
+    # ========================================================
+    fig = px.bar(
+        df_plot,
+        x="Mês",
+        y="Valor",
+        text="Label"
+    )
+
+    fig.update_traces(
+        textposition="outside"
+    )
+
+    fig.update_layout(
+        title=f"📊 Desempenho Comercial - {ANO}",
+        yaxis_title="% Conversão",
+        xaxis_title="",
+        showlegend=False,
+        height=500
+    )
+
+    # eixo Y sem casas decimais
+    fig.update_yaxes(tickformat=".0f")
+
+    st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
     # 🎯 SELECT MÊS
@@ -142,7 +189,7 @@ with tab1:
     mes_sel = st.selectbox(
         "Selecionar mês para análise",
         meses_com_dado,
-        index=len(meses_com_dado)-1
+        index=len(meses_com_dado) - 1
     )
 
     valor = indicador_comercial[mes_sel]["valor"]
@@ -155,9 +202,9 @@ with tab1:
     # ========================================================
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("Resultado", f"{valor*100:.2f}%")
+    c1.metric("Resultado", f"{valor*100:.0f}%")
     c2.metric("Meta", f"{META*100:.0f}%")
-    c3.metric("Desvio", f"{gap*100:.2f}%", delta_color="inverse")
+    c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
 
     if valor >= META:
         st.success("🟢 Dentro da meta")
@@ -165,7 +212,7 @@ with tab1:
         st.error("🔴 Fora da meta")
 
     # ========================================================
-    # 📎 EVIDÊNCIA
+    # 📎 EVIDÊNCIA ISO
     # ========================================================
     caminho_base = "data/Indicadores Comerciais"
     caminho_arquivo = os.path.join(caminho_base, arquivo)
@@ -177,9 +224,11 @@ with tab1:
                 data=file,
                 file_name=arquivo
             )
+    else:
+        st.warning("Arquivo de evidência não encontrado.")
 
     # ========================================================
-    # 🚨 REGRA ISO (3 MESES FORA)
+    # 🚨 REGRA ISO (3 MESES FORA DA META)
     # ========================================================
     if len(valores_validos) >= 3:
         ultimos_3 = valores_validos[-3:]
@@ -188,6 +237,8 @@ with tab1:
             st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
         else:
             st.success("Indicador sob controle recente")
+
+
 
 # ============================================================
 # 🧪 QUALIDADE
