@@ -59,7 +59,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 # ============================================================
-# 💰 COMERCIAL (INDICADOR + EVIDÊNCIA ISO)
+# 💰 COMERCIAL (INDICADOR ESTRATÉGICO COMPLETO)
 # ============================================================
 
 with tab1:
@@ -71,75 +71,101 @@ with tab1:
     st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
     st.caption("Meta: ≥ 25%")
 
-    # ========================================================
-    # 📊 BASE (CONTROLADA PELO SISTEMA)
-    # ========================================================
-    indicador_comercial = {
-        "Jan/26": {
-            "valor": 0.1463,
-            "arquivo": "INDC. COMERCIAL - JANEIRO.docx"
-        },
-        "Fev/26": {
-            "valor": 0.1282,
-            "arquivo": "INDI. COMERCIAL - FEVEREIRO.docx"
-        },
-        "Mar/26": {
-            "valor": 0.1875,
-            "arquivo": "INDC. COMERCIAL - MARÇO.docx"
-        },
-    }
-
+    ANO = "2026"
     META = 0.25
 
-    meses = list(indicador_comercial.keys())
+    # ========================================================
+    # 📊 BASE CONTROLADA
+    # ========================================================
+    indicador_comercial = {
+        "Jan": {"valor": 0.1463, "arquivo": "INDC. COMERCIAL - JANEIRO.docx"},
+        "Fev": {"valor": 0.1282, "arquivo": "INDI. COMERCIAL - FEVEREIRO.docx"},
+        "Mar": {"valor": 0.1875, "arquivo": "INDC. COMERCIAL - MARÇO.docx"},
+        # próximos meses você só adiciona aqui
+    }
 
     # ========================================================
-    # 🎯 SELECTOR DE MÊS
+    # 📅 ORDEM FIXA DOS MESES
     # ========================================================
+    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    valores = []
+    arquivos = []
+
+    for mes in meses_ordem:
+        if mes in indicador_comercial:
+            valores.append(indicador_comercial[mes]["valor"])
+            arquivos.append(indicador_comercial[mes]["arquivo"])
+        else:
+            valores.append(None)
+            arquivos.append(None)
+
+    # ========================================================
+    # 📊 MÉDIA AUTOMÁTICA (ACM)
+    # ========================================================
+    valores_validos = [v for v in valores if v is not None]
+
+    if valores_validos:
+        media_acm = sum(valores_validos) / len(valores_validos)
+    else:
+        media_acm = None
+
+    # ========================================================
+    # 📊 DATAFRAME FINAL
+    # ========================================================
+    df = pd.DataFrame({
+        "Mês": meses_ordem,
+        "Valor": valores
+    })
+
+    # adiciona coluna ACM
+    df = pd.concat([
+        df,
+        pd.DataFrame([{"Mês": "ACM", "Valor": media_acm}])
+    ], ignore_index=True)
+
+    # ========================================================
+    # 📊 GRÁFICO DE COLUNAS
+    # ========================================================
+    st.markdown(f"### 📊 Desempenho Comercial - {ANO}")
+
+    df_plot = df.copy()
+    df_plot["Valor"] = df_plot["Valor"].fillna(0)
+
+    st.bar_chart(df_plot.set_index("Mês"))
+
+    # ========================================================
+    # 🎯 SELECT MÊS
+    # ========================================================
+    meses_com_dado = [m for m in meses_ordem if m in indicador_comercial]
+
     mes_sel = st.selectbox(
-        "Selecionar mês",
-        meses,
-        index=len(meses) - 1
+        "Selecionar mês para análise",
+        meses_com_dado,
+        index=len(meses_com_dado)-1
     )
 
-    dados_mes = indicador_comercial[mes_sel]
-    valor = dados_mes["valor"]
-    arquivo = dados_mes["arquivo"]
+    valor = indicador_comercial[mes_sel]["valor"]
+    arquivo = indicador_comercial[mes_sel]["arquivo"]
 
-    # ========================================================
-    # 📊 KPI + GAP
-    # ========================================================
     gap = valor - META
 
-    if valor >= META:
-        status = "🟢 Dentro da meta"
-    else:
-        status = "🔴 Fora da meta"
-
+    # ========================================================
+    # 📊 KPI
+    # ========================================================
     c1, c2, c3 = st.columns(3)
 
     c1.metric("Resultado", f"{valor*100:.2f}%")
     c2.metric("Meta", f"{META*100:.0f}%")
     c3.metric("Desvio", f"{gap*100:.2f}%", delta_color="inverse")
 
-    st.write(f"Status: {status}")
-
-    st.divider()
-
-    # ========================================================
-    # 📈 HISTÓRICO
-    # ========================================================
-    df_hist = pd.DataFrame({
-        "Mês": meses,
-        "Valor": [v["valor"] for v in indicador_comercial.values()]
-    })
-
-    df_hist["Meta"] = META
-
-    st.line_chart(df_hist.set_index("Mês"))
+    if valor >= META:
+        st.success("🟢 Dentro da meta")
+    else:
+        st.error("🔴 Fora da meta")
 
     # ========================================================
-    # 📎 EVIDÊNCIA ISO (DOWNLOAD DO .DOCX)
+    # 📎 EVIDÊNCIA
     # ========================================================
     caminho_base = "data/Indicadores Comerciais"
     caminho_arquivo = os.path.join(caminho_base, arquivo)
@@ -147,27 +173,21 @@ with tab1:
     if os.path.exists(caminho_arquivo):
         with open(caminho_arquivo, "rb") as file:
             st.download_button(
-                label="📎 Baixar evidência do indicador",
+                label="📎 Baixar evidência do mês",
                 data=file,
                 file_name=arquivo
             )
-    else:
-        st.warning("Arquivo de evidência não encontrado na pasta.")
 
     # ========================================================
-    # 🚨 REGRA ISO (3 MESES FORA DA META)
+    # 🚨 REGRA ISO (3 MESES FORA)
     # ========================================================
-    valores = [v["valor"] for v in indicador_comercial.values()]
-
-    if len(valores) >= 3:
-        ultimos_3 = valores[-3:]
+    if len(valores_validos) >= 3:
+        ultimos_3 = valores_validos[-3:]
 
         if all(v < META for v in ultimos_3):
-            st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA (abrir plano de ação)")
+            st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
         else:
-            st.success("Indicador sob controle no período recente")
-
-
+            st.success("Indicador sob controle recente")
 
 # ============================================================
 # 🧪 QUALIDADE
