@@ -546,23 +546,18 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BASE OPERACIONAL (SEU EXCEL REAL)
+# 🔧 MANUTENÇÃO — BASE LIMPA (VERSÃO FINAL)
 # ============================================================
 
 with tab4:
 
     import os
     import pandas as pd
-    import plotly.express as px
+    import plotly.graph_objects as go
 
     st.header("🔧 Custo de Manutenção")
 
-    # ========================================================
-    # 📂 CAMINHO
-    # ========================================================
     caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
-
-    st.write("DEBUG caminho:", caminho)
 
     if not os.path.exists(caminho):
         st.error("Arquivo não encontrado")
@@ -573,68 +568,90 @@ with tab4:
     # ========================================================
     df = pd.read_excel(caminho)
 
-    st.write("Colunas:", df.columns.tolist())
-
-    # ========================================================
-    # 🔒 PADRONIZAÇÃO
-    # ========================================================
     df.columns = [c.strip() for c in df.columns]
 
     # ========================================================
-    # 🎯 COLUNAS REAIS DO SEU ARQUIVO
+    # 🎯 COLUNAS (AGORA DIRETAS)
     # ========================================================
-    col_mes = "Mês Fechamento"
-    col_custo = "Custo_Total"
-
-    if col_mes not in df.columns or col_custo not in df.columns:
-        st.error("Colunas obrigatórias não encontradas")
-        st.stop()
+    col_mes = "Mes"
+    col_np = "Corretiva_NP"
+    col_cp = "Corretiva_P"
+    col_prev = "Preventiva"
+    col_pred = "Preditiva"
+    col_melh = "Melhoria"
+    col_fat = "Faturamento"
 
     # ========================================================
     # 🧹 LIMPEZA
     # ========================================================
-    df[col_custo] = pd.to_numeric(df[col_custo], errors="coerce").fillna(0)
+    def limpar(v):
+        if pd.isna(v):
+            return 0
+        v = str(v)
+        v = v.replace("R$", "").replace(".", "").replace(",", ".").strip()
+        try:
+            return float(v)
+        except:
+            return 0
+
+    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_fat]:
+        df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 AGRUPAMENTO POR MÊS
+    # 📊 TOTAL + META
     # ========================================================
-    df_mes = df.groupby(col_mes)[col_custo].sum().reset_index()
+    df["Total"] = (
+        df[col_np] +
+        df[col_cp] +
+        df[col_prev] +
+        df[col_pred] +
+        df[col_melh]
+    )
+
+    df["Meta"] = df[col_fat] * 0.005
 
     # ========================================================
-    # 📊 ORDENAÇÃO DOS MESES
+    # 📊 FORMATAÇÃO
     # ========================================================
-    ordem = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-             "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
-
-    df_mes[col_mes] = pd.Categorical(df_mes[col_mes], categories=ordem, ordered=True)
-    df_mes = df_mes.sort_values(col_mes)
+    def formatar(v):
+        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
-    fig = px.bar(
-        df_mes,
-        x=col_mes,
-        y=col_custo,
-        text=df_mes[col_custo].apply(lambda x: f"R$ {x:,.0f}")
+    fig = go.Figure()
+
+    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
+    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
+    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+
+    fig.add_scatter(
+        name="Meta (0,5%)",
+        x=df[col_mes],
+        y=df["Meta"],
+        mode="lines+markers",
+        line=dict(color="red", dash="dash")
     )
 
-    fig.update_traces(textposition="outside")
-
     fig.update_layout(
+        barmode="stack",
         yaxis_title="R$",
-        xaxis_title="Mês",
         height=500
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI
+    # 📊 KPI FINAL
     # ========================================================
-    ultimo = df_mes[col_custo].dropna().iloc[-1]
+    ultimo = df["Total"].iloc[-1]
+    meta_atual = df["Meta"].iloc[-1]
 
     c1, c2 = st.columns(2)
 
-    c1.metric("💸 Custo Atual", f"R$ {ultimo:,.0f}")
-    c2.metric("Status", "📊 Em Monitoramento")
+    c1.metric("💸 Custo Atual", formatar(ultimo))
+
+    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
+    c2.metric("Status", status)
