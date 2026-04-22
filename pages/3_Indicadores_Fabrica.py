@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
 
@@ -7,27 +8,25 @@ st.title("📊 Indicadores da Fábrica")
 st.caption("Painel estratégico alinhado à ISO 9001")
 
 # ============================================================
-# 🔒 BASE APS (APENAS PARA INDICADORES)
+# 🔒 BASE APS
 # ============================================================
 
 df = st.session_state.get("df", pd.DataFrame())
 
 # ============================================================
-# 🚦 VISÃO GERAL (SAÚDE DA FÁBRICA)
+# 🚦 VISÃO GERAL
 # ============================================================
 
 st.subheader("🚦 Saúde da Fábrica")
 
 total_pvs = df["PV"].nunique() if "PV" in df.columns else 0
 
-# 🔴 atraso (único dado vindo do APS)
 if "Dias para Entrega" in df.columns:
     atrasos = df[df["Dias para Entrega"] < 0]
     pct_atraso = (len(atrasos) / total_pvs * 100) if total_pvs > 0 else 0
 else:
     pct_atraso = 0
 
-# 🟡 classificação simples (ISO mindset)
 def classificar(valor):
     if valor > 20:
         return "🔴 Crítico"
@@ -37,14 +36,13 @@ def classificar(valor):
         return "🟢 Controlado"
 
 c1, c2 = st.columns(2)
-
 c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
 c2.metric("Status Produção", classificar(pct_atraso))
 
 st.divider()
 
 # ============================================================
-# 📊 ABAS ESTRATÉGICAS
+# 📊 ABAS
 # ============================================================
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -55,6 +53,124 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📦 Fornecedores",
     "👷 RH"
 ])
+
+# ============================================================
+# 💰 COMERCIAL
+# ============================================================
+
+with tab1:
+
+    st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
+    st.caption("Meta: ≥ 25%")
+
+    ANO = "2026"
+    META = 0.25
+
+    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    indicador = {
+        "Jan": 0.1463,
+        "Fev": 0.1282,
+        "Mar": 0.1875,
+    }
+
+    valores = [indicador.get(m, None) for m in meses_ordem]
+    valores_validos = [v for v in valores if v is not None]
+
+    media = sum(valores_validos)/len(valores_validos) if valores_validos else None
+
+    df_plot = pd.DataFrame({"Mês": meses_ordem, "Valor": valores})
+    df_plot = pd.concat([df_plot, pd.DataFrame([{"Mês":"ACM","Valor":media}])])
+
+    df_plot["Valor"] = df_plot["Valor"] * 100
+
+    def label(row):
+        if pd.isna(row["Valor"]):
+            return ""
+        return f"{row['Valor']:.1f}%" if row["Mês"]=="ACM" else f"{row['Valor']:.0f}%"
+
+    df_plot["Label"] = df_plot.apply(label, axis=1)
+
+    fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
+
+    fig.add_hline(
+        y=META*100,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Meta"
+    )
+
+    max_val = df_plot["Valor"].max()
+
+    fig.update_yaxes(range=[0, max(max_val*1.2, META*100*1.2)], tickformat=".0f")
+
+    fig.update_traces(textposition="outside")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================
+# 🧪 QUALIDADE
+# ============================================================
+
+with tab2:
+
+    st.header("🧪 Indicadores de Qualidade")
+
+    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    def indicador_padrao(titulo, meta, dados, percentual=True):
+
+        st.subheader(titulo)
+
+        valores = [dados.get(m, None) for m in meses_ordem]
+        valores_validos = [v for v in valores if v is not None]
+
+        media = sum(valores_validos)/len(valores_validos) if valores_validos else None
+
+        df_plot = pd.DataFrame({"Mês": meses_ordem, "Valor": valores})
+        df_plot = pd.concat([df_plot, pd.DataFrame([{"Mês":"ACM","Valor":media}])])
+
+        if percentual:
+            df_plot["Valor"] = df_plot["Valor"] * 100
+            meta_plot = meta * 100
+        else:
+            meta_plot = meta
+
+        def label(row):
+            if pd.isna(row["Valor"]):
+                return ""
+            return f"{row['Valor']:.1f}%"
+
+        df_plot["Label"] = df_plot.apply(label, axis=1)
+
+        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
+
+        fig.add_hline(
+            y=meta_plot,
+            line_dash="dash",
+            line_color="red",
+            annotation_text="Meta"
+        )
+
+        max_val = df_plot["Valor"].max()
+
+        fig.update_yaxes(range=[0, max(max_val*1.2, meta_plot*1.2)], tickformat=".1f")
+
+        fig.update_traces(textposition="outside")
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+
+    indicador_padrao("🧪 NC Externas (%)", 0.02,
+                    {"Jan":0.012,"Fev":0.018,"Mar":0.015})
+
+    indicador_padrao("♻️ Refugo (%)", 0.03,
+                    {"Jan":0.025,"Fev":0.028,"Mar":0.031})
+
+    indicador_padrao("🔧 Retrabalho (%)", 0.05,
+                    {"Jan":0.04,"Fev":0.045,"Mar":0.052})
+
 
 
 
