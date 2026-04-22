@@ -546,125 +546,110 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — CUSTO DE MANUTENÇÃO (DOCX COM TABELA)
+# 🔧 MANUTENÇÃO — CUSTO MENSAL (EXCEL CONSOLIDADO)
 # ============================================================
 
 with tab4:
 
     import os
     import pandas as pd
-    import plotly.express as px
-    from docx import Document
+    import plotly.graph_objects as go
 
     st.header("🔧 Custo de Manutenção")
 
     # ========================================================
-    # 📂 CAMINHO DO ARQUIVO
+    # 📂 CAMINHO (CORRIGIDO DEFINITIVO)
     # ========================================================
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
 
-    caminho = os.path.abspath(os.path.join(
-        BASE_DIR,
-        "..",
-        "data",
-        "Indicadores_manutencao",
-        "manutencao.docx"
-    ))
+    st.write("DEBUG caminho:", caminho)  # apagar depois
 
     if not os.path.exists(caminho):
         st.error("Arquivo não encontrado")
         st.stop()
 
     # ========================================================
-    # 📄 LEITURA DO WORD (TABELA)
+    # 📊 LEITURA
     # ========================================================
-    doc = Document(caminho)
+    df = pd.read_excel(caminho)
 
-    if not doc.tables:
-        st.error("Nenhuma tabela encontrada no arquivo Word")
-        st.stop()
-
-    tabela = doc.tables[0]
-
-    dados = []
-    for row in tabela.rows:
-        linha = [cell.text.strip() for cell in row.cells]
-        dados.append(linha)
+    # DEBUG (pode remover depois)
+    st.write("Colunas:", df.columns.tolist())
 
     # ========================================================
-    # 🔍 EXTRAÇÃO DOS DADOS
+    # 🔒 LIMPEZA
     # ========================================================
-    def parse_valor(v):
+    df.columns = [c.strip() for c in df.columns]
+
+    # ========================================================
+    # 🎯 COLUNAS EXATAS DO SEU ARQUIVO
+    # ========================================================
+    col_mes = "Mês"
+    col_np  = "Corretiva não programada"
+    col_cp  = "Corretiva programada"
+    col_prev = "Preventiva"
+    col_pred = "Preditiva"
+    col_melh = "Melhoria de Máquinas"
+    col_meta = "0,5% do Faturamento Bruto Mensal"
+    col_total = "Total Geral"
+
+    # ========================================================
+    # 🧹 FUNÇÃO DE LIMPEZA DE VALOR
+    # ========================================================
+    def limpar(v):
+        if pd.isna(v):
+            return 0
+        v = str(v)
+        v = v.replace("R$", "").replace(".", "").replace(",", ".").strip()
         try:
-            return float(v.replace(".", "").replace(",", "."))
+            return float(v)
         except:
-            return 0.0
+            return 0
 
-    def pegar_linha(nome):
-        for linha in dados:
-            if linha and nome.lower() in linha[0].lower():
-                valores = [parse_valor(v) for v in linha[1:13]]
-                return (valores + [0]*12)[:12]
-        return [0]*12
-
-    corretiva_np = pegar_linha("corretiva não programada")
-    corretiva_p  = pegar_linha("corretiva programada")
-    preventiva   = pegar_linha("preventiva")
-    preditiva    = pegar_linha("preditiva")
-    melhoria     = pegar_linha("melhoria")
-    meta         = pegar_linha("0,5")
+    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta, col_total]:
+        if col in df.columns:
+            df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 CONSOLIDAÇÃO
+    # 📊 FILTRA LINHAS VÁLIDAS
     # ========================================================
-    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    total = [
-        corretiva_np[i] +
-        corretiva_p[i] +
-        preventiva[i] +
-        preditiva[i] +
-        melhoria[i]
-        for i in range(12)
-    ]
-
-    df_plot = pd.DataFrame({
-        "Mês": meses,
-        "Custo": total,
-        "Meta": meta
-    })
+    df = df[df[col_mes].notna()]
 
     # ========================================================
-    # 📊 GRÁFICO
+    # 📊 GRÁFICO (EMPILHADO IGUAL WORD)
     # ========================================================
-    fig = px.bar(
-        df_plot,
-        x="Mês",
-        y="Custo",
-        text=df_plot["Custo"].apply(lambda x: f"R$ {x:,.0f}")
-    )
+    fig = go.Figure()
 
-    fig.update_traces(textposition="outside")
+    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
+    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
+    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
 
     fig.add_scatter(
-        x=df_plot["Mês"],
-        y=df_plot["Meta"],
-        mode="lines+markers",
-        name="Meta"
+        name="Meta",
+        x=df[col_mes],
+        y=df[col_meta],
+        mode="lines+markers"
     )
 
     fig.update_layout(
+        barmode="stack",
         yaxis_title="R$",
+        xaxis_title="Mês",
         height=500
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI ATUAL
+    # 📊 KPI ATUAL (ÚLTIMO VALOR VÁLIDO)
     # ========================================================
-    ultimo = next((v for v in reversed(total) if v > 0), 0)
-    meta_atual = next((v for v in reversed(meta) if v > 0), 0)
+    total_validos = df[col_total].replace(0, pd.NA).dropna()
+    meta_validos = df[col_meta].replace(0, pd.NA).dropna()
+
+    ultimo = total_validos.iloc[-1] if not total_validos.empty else 0
+    meta_atual = meta_validos.iloc[-1] if not meta_validos.empty else 0
 
     c1, c2 = st.columns(2)
 
