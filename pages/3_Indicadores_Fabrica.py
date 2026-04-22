@@ -606,111 +606,109 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO — DEFINITIVO (BASE REAL APS)
+# 🏭 PRODUÇÃO — DEFINITIVO E ROBUSTO (SEM ERRO)
 # ============================================================
 
 with tab3:
 
     st.subheader("🏭 Produção (Indicadores Estratégicos)")
 
-    df_base = df_base.copy()
+    base = df.copy()
 
     # ========================================================
-    # 🔒 VALIDAÇÃO EXATA (SEM ADIVINHAÇÃO)
+    # 🔒 VALIDAÇÃO REAL
     # ========================================================
-    colunas_necessarias = ["PV", "Data", "DATA_ENTREGA_APS"]
+    required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
 
-    faltando = [c for c in colunas_necessarias if c not in df_base.columns]
+    missing = [c for c in required_cols if c not in base.columns]
 
-    if faltando:
-        st.error(f"Colunas obrigatórias não encontradas: {faltando}")
-        st.write("Colunas disponíveis:", df_base.columns.tolist())
+    if missing:
+        st.error(f"Colunas faltando: {missing}")
+        st.write("Colunas atuais:", list(base.columns))
         st.stop()
 
     # ========================================================
-    # 📅 TRATAMENTO DE DATAS
+    # 🔧 LIMPEZA DE DADOS
     # ========================================================
-    df_base["Data"] = pd.to_datetime(df_base["Data"], errors="coerce")
-    df_base["DATA_ENTREGA_APS"] = pd.to_datetime(df_base["DATA_ENTREGA_APS"], errors="coerce")
+    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
-    df_base = df_base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+    # remove linhas inválidas
+    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+
+    if base.empty:
+        st.warning("Sem dados válidos após tratamento.")
+        st.stop()
 
     # ========================================================
     # 📦 CONSOLIDAÇÃO POR PV
     # ========================================================
-    pv_base = df_base.groupby("PV", as_index=False).agg({
-        "Data": "max",                  # última operação executada
-        "DATA_ENTREGA_APS": "min"       # data planejada
-    })
+    pv = base.groupby("PV", as_index=False).agg(
+        Data_real=("Data", "max"),
+        Data_planejada=("DATA_ENTREGA_APS", "min")
+    )
 
     # ========================================================
-    # ⏱️ ATRASO REAL
+    # ⏱️ CÁLCULO DE ATRASO
     # ========================================================
-    pv_base["Atraso (dias)"] = (
-        pv_base["Data"] - pv_base["DATA_ENTREGA_APS"]
-    ).dt.days
+    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days
 
-    pv_base["Atraso (dias)"] = pv_base["Atraso (dias)"].fillna(0)
+    pv["Atraso_dias"] = pv["Atraso_dias"].fillna(0)
 
     # ========================================================
-    # 🚨 KPIs
+    # 📊 KPIs
     # ========================================================
-    total = len(pv_base)
-    atrasadas = pv_base[pv_base["Atraso (dias)"] > 0]
+    total = len(pv)
+    atrasadas = pv[pv["Atraso_dias"] > 0]
 
-    pct_atraso = (len(atrasadas) / total * 100) if total > 0 else 0
+    pct = (len(atrasadas) / total * 100) if total > 0 else 0
 
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
+    c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
     c2.metric("📦 PVs Atrasadas", len(atrasadas))
     c3.metric("📦 Total PVs", total)
 
     st.divider()
 
     # ========================================================
-    # 📊 GRÁFICO POR MÊS
+    # 📅 AGRUPAMENTO POR MÊS
     # ========================================================
-    pv_base["Mes"] = pv_base["DATA_ENTREGA_APS"].dt.month
+    pv["Mes"] = pv["Data_planejada"].dt.month
 
-    resumo = pv_base.groupby("Mes").agg(
+    resumo = pv.groupby("Mes").agg(
         Total=("PV", "count"),
-        Atrasadas=("Atraso (dias)", lambda x: (x > 0).sum())
+        Atrasadas=("Atraso_dias", lambda x: (x > 0).sum())
     ).reset_index()
 
-    resumo["% Atraso"] = (resumo["Atrasadas"] / resumo["Total"] * 100).round(1)
+    resumo["Pct"] = (resumo["Atrasadas"] / resumo["Total"] * 100).round(1)
 
-    # garantir meses 1–12
+    # garante meses 1–12
     meses = pd.DataFrame({"Mes": list(range(1, 13))})
     resumo = meses.merge(resumo, on="Mes", how="left")
 
-    resumo["% Atraso"] = resumo["% Atraso"].fillna(0)
+    resumo["Pct"] = resumo["Pct"].fillna(0)
 
-    nomes_meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x: nomes_meses[x-1])
+    nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x: nomes[x-1])
 
     # ========================================================
-    # 🎯 META
+    # 📊 GRÁFICO
     # ========================================================
-    META = 5
-
     import plotly.graph_objects as go
+
+    META = 5
 
     fig = go.Figure()
 
     fig.add_bar(
         x=resumo["Mes_nome"],
-        y=resumo["% Atraso"],
-        text=resumo["% Atraso"].astype(str) + "%",
+        y=resumo["Pct"],
+        text=resumo["Pct"].astype(str) + "%",
         textposition="outside"
     )
 
-    fig.add_hline(
-        y=META,
-        line_dash="dash",
-        annotation_text=f"Meta {META}%"
-    )
+    fig.add_hline(y=META, line_dash="dash", annotation_text=f"Meta {META}%")
 
     fig.update_layout(
         title="Atraso por Mês (%)",
@@ -722,10 +720,10 @@ with tab3:
     # ========================================================
     # 🚨 REGRA ISO
     # ========================================================
-    ultimos = resumo["% Atraso"].tail(3)
+    ultimos = resumo["Pct"].tail(3)
 
     if len(ultimos) == 3 and all(v > META for v in ultimos):
-        st.error("🚨 3 meses consecutivos acima da meta — abrir plano de ação")
+        st.error("🚨 3 meses consecutivos acima da meta — ação necessária")
 
 
 # ============================================================
