@@ -413,6 +413,9 @@ with tab3:
     st.header("🏭 Atraso de Entregas (Tempo Real)")
     st.caption("PVs com data de entrega vencida e ainda em aberto")
 
+    # ========================================================
+    # 🔒 VALIDAÇÃO DA BASE
+    # ========================================================
     if df_aps.empty:
         st.warning("Abra o APS para visualizar os indicadores de produção.")
         st.stop()
@@ -433,6 +436,9 @@ with tab3:
 
     hoje = pd.Timestamp.today().normalize()
 
+    # ========================================================
+    # 📦 AGRUPAMENTO POR PV
+    # ========================================================
     pv = base.groupby("PV", as_index=False).agg(
         data_entrega=("DATA_ENTREGA_APS", "min")
     )
@@ -440,18 +446,22 @@ with tab3:
     pv = pv.dropna(subset=["data_entrega"])
 
     # ========================================================
-    # 🚨 ATRASO
+    # 🚨 REGRA DE ATRASO (TEMPO REAL)
     # ========================================================
     pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
     pv["Atrasada"] = pv["Atraso_dias"] > 0
 
     atrasadas = pv[pv["Atrasada"]].copy()
 
+    # ========================================================
+    # 📊 KPIs
+    # ========================================================
     total = len(pv)
     qtd_atrasadas = len(atrasadas)
     pct = (qtd_atrasadas / total * 100) if total > 0 else 0
 
     c1, c2, c3 = st.columns(3)
+
     c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
     c2.metric("📦 PVs Atrasadas", qtd_atrasadas)
     c3.metric("📦 Total PVs", total)
@@ -459,18 +469,20 @@ with tab3:
     st.divider()
 
     # ========================================================
-    # 📊 DISTRIBUIÇÃO POR FAIXAS (NOVO PADRÃO)
+    # 📊 DISTRIBUIÇÃO POR FAIXAS (CORRETO)
     # ========================================================
     st.subheader("📊 Distribuição do atraso por faixa (dias)")
 
     if qtd_atrasadas > 0:
 
-        # 🔥 criação das faixas
-        bins = list(range(0, int(atrasadas["Atraso_dias"].max()) + 3, 2))
+        # 🔒 GARANTE INTEIRO
+        atrasadas["Atraso_dias"] = atrasadas["Atraso_dias"].astype(int)
 
+        # 🔥 FAIXAS FIXAS (GESTÃO)
+        bins = [0, 2, 4, 6, 8, 10, 15, 20, 30, 9999]
         labels = [
-            f"{bins[i]+1}-{bins[i+1]}"
-            for i in range(len(bins)-1)
+            "1-2", "3-4", "5-6", "7-8", "9-10",
+            "11-15", "16-20", "21-30", "30+"
         ]
 
         atrasadas["Faixa"] = pd.cut(
@@ -483,21 +495,18 @@ with tab3:
         resumo = (
             atrasadas.groupby("Faixa")
             .size()
+            .reindex(labels, fill_value=0)
             .reset_index(name="Quantidade")
         )
 
-        resumo = resumo.sort_values("Faixa")
-
         # ====================================================
-        # 🎨 COR GRADIENTE (gravidade)
+        # 🎨 GRÁFICO EM COLUNAS COM GRADIENTE
         # ====================================================
-        resumo["Ordem"] = range(len(resumo))
-
         fig = px.bar(
             resumo,
             x="Faixa",
             y="Quantidade",
-            color="Ordem",
+            color="Quantidade",
             color_continuous_scale="Reds",
             text="Quantidade"
         )
@@ -505,7 +514,7 @@ with tab3:
         fig.update_traces(textposition="outside")
 
         fig.update_layout(
-            title="Distribuição de Atraso (Dias)",
+            title="Distribuição de Atraso por Faixa",
             xaxis_title="Faixa de atraso (dias)",
             yaxis_title="Quantidade de PVs",
             coloraxis_showscale=False,
