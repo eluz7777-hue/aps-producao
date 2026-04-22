@@ -543,8 +543,10 @@ with tab3:
 
 
 
+
+
 # ============================================================
-# 🔧 MANUTENÇÃO — INDICADORES (PADRÃO DEFINITIVO)
+# 🔧 MANUTENÇÃO — INDICADORES (AJUSTADO AO EXCEL REAL)
 # ============================================================
 
 with tab4:
@@ -554,7 +556,7 @@ with tab4:
     st.header("🔧 Indicadores de Manutenção")
 
     # ========================================================
-    # 📂 CAMINHO CORRETO (PADRÃO PROJETO)
+    # 📂 CAMINHO
     # ========================================================
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -566,69 +568,81 @@ with tab4:
         "manutencao.xlsx"
     ))
 
-    # DEBUG TEMPORÁRIO (pode remover depois)
-    st.write("Arquivo:", caminho)
-    st.write("Existe?", os.path.exists(caminho))
-
     if not os.path.exists(caminho):
-        st.error("Arquivo de manutenção não encontrado.")
+        st.error("Arquivo não encontrado")
+        st.write(caminho)
         st.stop()
 
     # ========================================================
     # 📊 LEITURA
     # ========================================================
-    df_manut = pd.read_excel(caminho)
+    df = pd.read_excel(caminho)
+
+    # 🔍 DEBUG (REMOVE DEPOIS)
+    st.write("Colunas do Excel:", df.columns.tolist())
 
     # ========================================================
     # 🔒 NORMALIZAÇÃO
     # ========================================================
-    df_manut.columns = [c.strip().lower() for c in df_manut.columns]
+    df.columns = [c.strip().lower() for c in df.columns]
 
-    col_mes = next((c for c in df_manut.columns if "mes" in c), None)
-    col_disp = next((c for c in df_manut.columns if "disp" in c), None)
-    col_paradas = next((c for c in df_manut.columns if "parad" in c), None)
+    # ========================================================
+    # 🎯 DETECÇÃO REAL DAS COLUNAS
+    # ========================================================
+    col_mes = next((c for c in df.columns if "mes" in c), None)
 
-    if not all([col_mes, col_disp, col_paradas]):
-        st.error("Colunas esperadas não encontradas.")
-        st.write(df_manut.columns.tolist())
+    # tenta várias possibilidades reais
+    col_disp = next((c for c in df.columns if "disp" in c), None)
+    col_paradas = next((c for c in df.columns if "parad" in c or "quebra" in c), None)
+
+    if col_mes is None:
+        st.error("Coluna de mês não encontrada")
         st.stop()
 
-    df_manut = df_manut.rename(columns={
+    if col_disp is None:
+        st.error("Coluna de disponibilidade não encontrada")
+        st.stop()
+
+    if col_paradas is None:
+        st.error("Coluna de paradas não encontrada")
+        st.stop()
+
+    # ========================================================
+    # 🧠 PADRONIZAÇÃO
+    # ========================================================
+    df = df.rename(columns={
         col_mes: "Mes",
         col_disp: "Disponibilidade",
         col_paradas: "Paradas"
     })
 
-    # ========================================================
-    # 📅 PADRÃO DE MESES
-    # ========================================================
-    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    df["Mes"] = df["Mes"].astype(str).str[:3].str.title()
 
-    df_manut["Mes"] = df_manut["Mes"].astype(str).str[:3].str.title()
+    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     # ========================================================
     # 🔧 FUNÇÃO PADRÃO
     # ========================================================
-    def plot_indicador(titulo, coluna, meta, menor_melhor=True):
+    def plotar(coluna, titulo, meta, menor_melhor):
 
         st.subheader(titulo)
 
-        dados = dict(zip(df_manut["Mes"], df_manut[coluna]))
+        dados = dict(zip(df["Mes"], df[coluna]))
 
-        valores = [dados.get(m, None) for m in meses_ordem]
+        valores = [dados.get(m, None) for m in meses]
         validos = [v for v in valores if pd.notna(v)]
 
         media = sum(validos)/len(validos) if validos else None
 
         df_plot = pd.DataFrame({
-            "Mês": meses_ordem,
+            "Mês": meses,
             "Valor": valores
         })
 
         df_plot = pd.concat([
             df_plot,
             pd.DataFrame([{"Mês": "ACM", "Valor": media}])
-        ], ignore_index=True)
+        ])
 
         df_plot["Label"] = df_plot["Valor"].apply(
             lambda x: "" if pd.isna(x) else f"{x:.1f}%"
@@ -647,31 +661,24 @@ with tab4:
             y=meta,
             line_dash="dash",
             line_color="red",
-            annotation_text="Meta"
-        )
-
-        fig.update_layout(
-            height=450,
-            showlegend=False
+            annotation_text=f"Meta {meta}%"
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # ====================================================
-        # 🚨 REGRA ISO
-        # ====================================================
+        # ISO
         if len(validos) >= 3:
-            ultimos_3 = validos[-3:]
+            ultimos = validos[-3:]
 
             if menor_melhor:
-                fora = all(v > meta for v in ultimos_3)
+                fora = all(v > meta for v in ultimos)
             else:
-                fora = all(v < meta for v in ultimos_3)
+                fora = all(v < meta for v in ultimos)
 
             if fora:
-                st.error("🚨 3 meses fora da meta — ação obrigatória")
+                st.error("🚨 Fora da meta (3 meses)")
             else:
-                st.success("Indicador sob controle")
+                st.success("Sob controle")
 
         st.divider()
 
@@ -679,16 +686,5 @@ with tab4:
     # 📊 INDICADORES
     # ========================================================
 
-    plot_indicador(
-        "⚙️ Disponibilidade (%)",
-        "Disponibilidade",
-        meta=90,
-        menor_melhor=False
-    )
-
-    plot_indicador(
-        "🚨 Paradas Não Planejadas (%)",
-        "Paradas",
-        meta=5,
-        menor_melhor=True
-    )
+    plotar("Disponibilidade", "⚙️ Disponibilidade (%)", 90, False)
+    plotar("Paradas", "🚨 Paradas Não Planejadas (%)", 5, True)
