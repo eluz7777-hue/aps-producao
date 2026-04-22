@@ -6,25 +6,26 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
 
 # ============================================================
-# 🔒 BASE APS (ÚNICA FONTE)
+# 🔒 BASE APS (PROTEGIDA E ÚNICA)
 # ============================================================
 
-df = st.session_state.get("df", pd.DataFrame())
+df_raw = st.session_state.get("df", pd.DataFrame())
 
-if df is None or not isinstance(df, pd.DataFrame):
-    df = pd.DataFrame()
+if df_raw is None or not isinstance(df_raw, pd.DataFrame):
+    df_raw = pd.DataFrame()
 
-df_base = df.copy()
+# 🔒 BASE OFICIAL
+df_aps = df_raw.copy()
 
 # ============================================================
-# 🔍 DEBUG (TEMPORÁRIO)
+# 🔍 DEBUG
 # ============================================================
 
 st.write("DEBUG INDICADORES → df recebido:")
-st.write(df_base.columns.tolist())
+st.write(df_aps.columns.tolist())
 
 # ============================================================
-# 🚦 VISÃO GERAL (CORRETO COM BASE APS REAL)
+# 🚦 VISÃO GERAL (CORRETA)
 # ============================================================
 
 st.subheader("🚦 Saúde da Fábrica")
@@ -32,15 +33,11 @@ st.subheader("🚦 Saúde da Fábrica")
 pct_atraso = 0
 
 required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
-missing = [c for c in required_cols if c not in df_base.columns]
+missing = [c for c in required_cols if c not in df_aps.columns]
 
-if missing:
-    st.error(f"Colunas obrigatórias não encontradas: {missing}")
-    st.stop()
+if not df_aps.empty and not missing:
 
-if not df_base.empty:
-
-    base = df_base.copy()
+    base = df_aps.copy()
 
     base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
     base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
@@ -72,7 +69,7 @@ c1, c2 = st.columns(2)
 c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
 c2.metric("Status Produção", classificar(pct_atraso))
 
-if df_base.empty:
+if df_aps.empty:
     st.info("Abra o APS para habilitar indicadores de produção.")
 
 st.divider()
@@ -89,6 +86,8 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📦 Fornecedores",
     "👷 RH"
 ])
+
+
 
 # ============================================================
 # 💰 COMERCIAL
@@ -154,38 +153,31 @@ with tab2:
     indicador("Retrabalho (%)",0.05,{"Jan":0.04,"Fev":0.045,"Mar":0.052})
 
 
-
 # ============================================================
-# 🏭 PRODUÇÃO (VERSÃO ESTÁVEL FINAL)
+# 🏭 PRODUÇÃO (DEFINITIVO — SEM SOBRESCRITA)
 # ============================================================
 
 with tab3:
 
     st.header("🏭 Indicadores de Produção")
 
-    # 🔒 validação real
+    # 🔒 validação REAL
     required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
 
-    missing = [c for c in required_cols if c not in df_base.columns]
+    missing = [c for c in required_cols if c not in df_aps.columns]
 
-    if df_base.empty or missing:
-        st.error("Base APS não disponível para Produção.")
-        st.write("Colunas atuais:", df_base.columns.tolist())
+    if df_aps.empty or missing:
+        st.error("Base APS corrompida (foi sobrescrita em algum ponto).")
+        st.write("Colunas atuais:", df_aps.columns.tolist())
         st.stop()
 
-    base = df_base.copy()
+    base = df_aps.copy()
 
-    # ========================================================
-    # 📅 TRATAMENTO
-    # ========================================================
     base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
     base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
     base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
 
-    # ========================================================
-    # 📦 CONSOLIDAÇÃO
-    # ========================================================
     pv = base.groupby("PV", as_index=False).agg(
         Data_real=("Data", "max"),
         Data_planejada=("DATA_ENTREGA_APS", "min")
@@ -195,9 +187,6 @@ with tab3:
         pv["Data_real"] - pv["Data_planejada"]
     ).dt.days.fillna(0)
 
-    # ========================================================
-    # 📊 KPIs
-    # ========================================================
     total = len(pv)
     atrasadas = pv[pv["Atraso_dias"] > 0]
     pct = (len(atrasadas) / total * 100) if total > 0 else 0
@@ -209,22 +198,17 @@ with tab3:
 
     st.divider()
 
-    # ========================================================
-    # 📅 AGRUPAMENTO POR MÊS
-    # ========================================================
     pv["Mes"] = pv["Data_planejada"].dt.month
 
     resumo = pv.groupby("Mes").agg(
-        Total=("PV", "count"),
+        Total=("PV","count"),
         Atrasadas=("Atraso_dias", lambda x: (x > 0).sum())
     ).reset_index()
 
-    resumo["Pct"] = (resumo["Atrasadas"] / resumo["Total"] * 100)
+    resumo["Pct"] = (resumo["Atrasadas"]/resumo["Total"]*100)
 
-    # garante meses
-    meses = pd.DataFrame({"Mes": list(range(1, 13))})
+    meses = pd.DataFrame({"Mes": list(range(1,13))})
     resumo = meses.merge(resumo, on="Mes", how="left")
-
     resumo["Pct"] = resumo["Pct"].fillna(0)
 
     nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
@@ -232,29 +216,19 @@ with tab3:
 
     resumo["Label"] = resumo["Pct"].apply(lambda x: f"{x:.1f}%")
 
-    # ========================================================
-    # 📊 GRÁFICO PADRÃO
-    # ========================================================
-    fig = px.bar(
-        resumo,
-        x="Mes_nome",
-        y="Pct",
-        text="Label"
-    )
+    fig = px.bar(resumo, x="Mes_nome", y="Pct", text="Label")
 
     fig.update_traces(textposition="outside")
 
     fig.update_layout(
         title="Atraso por Mês (%)",
-        yaxis_title="% Atraso",
-        xaxis_title="Mês"
+        yaxis_title="% Atraso"
     )
 
-    # meta
-    META = 5
-    fig.add_hline(y=META, line_dash="dash", line_color="red")
+    fig.add_hline(y=5, line_dash="dash", line_color="red")
 
     st.plotly_chart(fig, use_container_width=True)
+
 
 
 # ============================================================
