@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — VERSÃO FINAL LIMPA (EXCEL PADRÃO)
+# 🔧 MANUTENÇÃO — BLOCO LIMPO FINAL (SEM DEBUG)
 # ============================================================
 
 with tab4:
@@ -560,26 +560,28 @@ with tab4:
     caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
 
     if not os.path.exists(caminho):
-        st.error("Arquivo não encontrado")
+        st.error("Arquivo de manutenção não encontrado")
         st.stop()
 
-    # 🔥 AGORA É SIMPLES
+    # 🔥 leitura direta (excel já está correto)
     df = pd.read_excel(caminho)
 
     df.columns = [str(c).strip() for c in df.columns]
 
-    st.write("Colunas:", df.columns.tolist())
-
     # ========================================================
-    # 🔍 COLUNAS DIRETAS
+    # 🔍 COLUNAS FIXAS (BASE NOVA)
     # ========================================================
-    col_mes = "Mês"
-    col_np = "Corretiva não programada"
-    col_cp = "Corretiva programada"
-    col_prev = "Preventiva"
-    col_pred = "Preditiva"
-    col_melh = "Melhoria de Máquinas"
-    col_meta = "0,5% do Faturamento Bruto Mensal"
+    try:
+        col_mes = "Mês"
+        col_np = "Corretiva não programada"
+        col_cp = "Corretiva programada"
+        col_prev = "Preventiva"
+        col_pred = "Preditiva"
+        col_melh = "Melhoria de Máquinas"
+        col_meta = "0,5% do Faturamento Bruto Mensal"
+    except:
+        st.error("Estrutura do Excel inválida")
+        st.stop()
 
     # ========================================================
     # 🧹 LIMPEZA
@@ -587,15 +589,15 @@ with tab4:
     def limpar(v):
         if pd.isna(v):
             return 0
-        v = str(v)
-        v = v.replace("R$", "").replace(".", "").replace(",", ".").strip()
+        v = str(v).replace("R$", "").replace(".", "").replace(",", ".")
         try:
             return float(v)
         except:
             return 0
 
     for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
-        df[col] = df[col].apply(limpar)
+        if col in df.columns:
+            df[col] = df[col].apply(limpar)
 
     # ========================================================
     # 📊 TOTAL
