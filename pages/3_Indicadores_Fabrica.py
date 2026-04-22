@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — LEITURA AUTOMÁTICA DE HEADER (DEFINITIVO)
+# 🔧 MANUTENÇÃO — VERSÃO FINAL LIMPA (EXCEL PADRÃO)
 # ============================================================
 
 with tab4:
@@ -563,69 +563,23 @@ with tab4:
         st.error("Arquivo não encontrado")
         st.stop()
 
-    # ========================================================
-    # 📊 LEITURA BRUTA (SEM HEADER)
-    # ========================================================
-    df_raw = pd.read_excel(caminho, header=None)
+    # 🔥 AGORA É SIMPLES
+    df = pd.read_excel(caminho)
 
-    # DEBUG
-    st.write("Prévia bruta:")
-    st.write(df_raw.head(10))
-
-    # ========================================================
-    # 🔍 ENCONTRAR LINHA DO HEADER REAL
-    # ========================================================
-    header_idx = None
-
-    for i in range(len(df_raw)):
-        linha = df_raw.iloc[i].astype(str).str.lower().tolist()
-
-        if any("mes" in c for c in linha) and any("corretiva" in c for c in linha):
-            header_idx = i
-            break
-
-    if header_idx is None:
-        st.error("Não consegui encontrar o cabeçalho automaticamente")
-        st.stop()
-
-    # ========================================================
-    # 📊 RECRIAR DATAFRAME COM HEADER CORRETO
-    # ========================================================
-    df = pd.read_excel(caminho, header=header_idx)
     df.columns = [str(c).strip() for c in df.columns]
 
-    st.write("Header identificado na linha:", header_idx)
-    st.write("Colunas reais:", df.columns.tolist())
+    st.write("Colunas:", df.columns.tolist())
 
     # ========================================================
-    # 🔍 MAPEAMENTO
+    # 🔍 COLUNAS DIRETAS
     # ========================================================
-    cols = {c.lower(): c for c in df.columns}
-
-    def encontrar(nome):
-        return next((cols[c] for c in cols if nome in c), None)
-
-    col_mes = encontrar("mes")
-    col_np = encontrar("nao")
-    col_cp = encontrar("programada")
-    col_prev = encontrar("preventiva")
-    col_pred = encontrar("preditiva")
-    col_melh = encontrar("melhoria")
-    col_fat = encontrar("fatur")
-
-    st.write("Mapeamento:", {
-        "mes": col_mes,
-        "np": col_np,
-        "cp": col_cp,
-        "prev": col_prev,
-        "pred": col_pred,
-        "melh": col_melh,
-        "fat": col_fat
-    })
-
-    if not col_mes or not col_np or not col_cp:
-        st.error("Colunas obrigatórias não encontradas")
-        st.stop()
+    col_mes = "Mês"
+    col_np = "Corretiva não programada"
+    col_cp = "Corretiva programada"
+    col_prev = "Preventiva"
+    col_pred = "Preditiva"
+    col_melh = "Melhoria de Máquinas"
+    col_meta = "0,5% do Faturamento Bruto Mensal"
 
     # ========================================================
     # 🧹 LIMPEZA
@@ -640,45 +594,32 @@ with tab4:
         except:
             return 0
 
-    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_fat]:
-        if col:
-            df[col] = df[col].apply(limpar)
+    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
+        df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL + META
+    # 📊 TOTAL
     # ========================================================
     df["Total"] = (
-        (df[col_np] if col_np else 0) +
-        (df[col_cp] if col_cp else 0) +
-        (df[col_prev] if col_prev else 0) +
-        (df[col_pred] if col_pred else 0) +
-        (df[col_melh] if col_melh else 0)
+        df[col_np] +
+        df[col_cp] +
+        df[col_prev] +
+        df[col_pred] +
+        df[col_melh]
     )
 
-    if col_fat:
-        df["Meta"] = df[col_fat] * 0.005
-    else:
-        df["Meta"] = 0
+    df["Meta"] = df[col_meta]
 
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
     fig = go.Figure()
 
-    if col_np:
-        fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
-
-    if col_cp:
-        fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-
-    if col_prev:
-        fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-
-    if col_pred:
-        fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-
-    if col_melh:
-        fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
+    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
+    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
 
     fig.add_scatter(
         name="Meta (0,5%)",
@@ -688,7 +629,12 @@ with tab4:
         line=dict(color="red", dash="dash")
     )
 
-    fig.update_layout(barmode="stack", height=500)
+    fig.update_layout(
+        barmode="stack",
+        height=500,
+        yaxis_title="R$",
+        xaxis_title="Mês"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -705,5 +651,5 @@ with tab4:
 
     c1.metric("💸 Custo Atual", formatar(ultimo))
 
-    status = "🟢 OK" if meta_atual > 0 and ultimo <= meta_atual else "🔴 Acima da Meta"
+    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
     c2.metric("Status", status)
