@@ -56,14 +56,118 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "👷 RH"
 ])
 
+
+
 # ============================================================
-# 💰 COMERCIAL
+# 💰 COMERCIAL (INDICADOR + EVIDÊNCIA ISO)
 # ============================================================
 
 with tab1:
-    st.subheader("💰 Indicadores Comerciais")
 
-    st.info("➡️ Aqui entra: conversão orçamento → pedido, volume, tendência")
+    import os
+    import pandas as pd
+    import streamlit as st
+
+    st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
+    st.caption("Meta: ≥ 25%")
+
+    # ========================================================
+    # 📊 BASE (CONTROLADA PELO SISTEMA)
+    # ========================================================
+    indicador_comercial = {
+        "Jan/26": {
+            "valor": 0.1463,
+            "arquivo": "INDC. COMERCIAL - JANEIRO.docx"
+        },
+        "Fev/26": {
+            "valor": 0.1282,
+            "arquivo": "INDI. COMERCIAL - FEVEREIRO.docx"
+        },
+        "Mar/26": {
+            "valor": 0.1875,
+            "arquivo": "INDC. COMERCIAL - MARÇO.docx"
+        },
+    }
+
+    META = 0.25
+
+    meses = list(indicador_comercial.keys())
+
+    # ========================================================
+    # 🎯 SELECTOR DE MÊS
+    # ========================================================
+    mes_sel = st.selectbox(
+        "Selecionar mês",
+        meses,
+        index=len(meses) - 1
+    )
+
+    dados_mes = indicador_comercial[mes_sel]
+    valor = dados_mes["valor"]
+    arquivo = dados_mes["arquivo"]
+
+    # ========================================================
+    # 📊 KPI + GAP
+    # ========================================================
+    gap = valor - META
+
+    if valor >= META:
+        status = "🟢 Dentro da meta"
+    else:
+        status = "🔴 Fora da meta"
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Resultado", f"{valor*100:.2f}%")
+    c2.metric("Meta", f"{META*100:.0f}%")
+    c3.metric("Desvio", f"{gap*100:.2f}%", delta_color="inverse")
+
+    st.write(f"Status: {status}")
+
+    st.divider()
+
+    # ========================================================
+    # 📈 HISTÓRICO
+    # ========================================================
+    df_hist = pd.DataFrame({
+        "Mês": meses,
+        "Valor": [v["valor"] for v in indicador_comercial.values()]
+    })
+
+    df_hist["Meta"] = META
+
+    st.line_chart(df_hist.set_index("Mês"))
+
+    # ========================================================
+    # 📎 EVIDÊNCIA ISO (DOWNLOAD DO .DOCX)
+    # ========================================================
+    caminho_base = "data/Indicadores Comerciais"
+    caminho_arquivo = os.path.join(caminho_base, arquivo)
+
+    if os.path.exists(caminho_arquivo):
+        with open(caminho_arquivo, "rb") as file:
+            st.download_button(
+                label="📎 Baixar evidência do indicador",
+                data=file,
+                file_name=arquivo
+            )
+    else:
+        st.warning("Arquivo de evidência não encontrado na pasta.")
+
+    # ========================================================
+    # 🚨 REGRA ISO (3 MESES FORA DA META)
+    # ========================================================
+    valores = [v["valor"] for v in indicador_comercial.values()]
+
+    if len(valores) >= 3:
+        ultimos_3 = valores[-3:]
+
+        if all(v < META for v in ultimos_3):
+            st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA (abrir plano de ação)")
+        else:
+            st.success("Indicador sob controle no período recente")
+
+
 
 # ============================================================
 # 🧪 QUALIDADE
