@@ -8,36 +8,41 @@ st.title("📊 Indicadores da Fábrica")
 st.caption("Painel estratégico alinhado à ISO 9001")
 
 # ============================================================
-# 🔒 BASE APS (VALIDAÇÃO FORTE)
+# 🔒 BASE APS (SEM BLOQUEIO GLOBAL)
 # ============================================================
 
-df = st.session_state.get("df", None)
-
-if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-    st.error("Base do APS não carregada corretamente.")
-    st.stop()
-
-# validação mínima obrigatória
-colunas_criticas = ["PV", "ENTREGA", "Dias para Entrega"]
-
-faltando = [c for c in colunas_criticas if c not in df.columns]
-
-if faltando:
-    st.error("Base recebida NÃO é o APS original.")
-    st.write("Colunas disponíveis:", list(df.columns))
-    st.stop()
+df = st.session_state.get("df", pd.DataFrame())
 
 # ============================================================
-# 🚦 VISÃO GERAL
+# 🚦 VISÃO GERAL (SAÚDE DA FÁBRICA)
 # ============================================================
 
 st.subheader("🚦 Saúde da Fábrica")
 
-total_pvs = df["PV"].nunique()
+# valor padrão
+pct_atraso = 0
 
-atrasos = df[df["Dias para Entrega"] < 0]
-pct_atraso = (len(atrasos) / total_pvs * 100) if total_pvs > 0 else 0
+# só calcula se a base estiver válida
+if (
+    not df.empty
+    and isinstance(df, pd.DataFrame)
+    and "PV" in df.columns
+    and "Dias para Entrega" in df.columns
+):
 
+    try:
+        total_pvs = df["PV"].nunique()
+
+        atrasos = df[
+            pd.to_numeric(df["Dias para Entrega"], errors="coerce") < 0
+        ]
+
+        pct_atraso = (len(atrasos) / total_pvs * 100) if total_pvs > 0 else 0
+
+    except Exception:
+        pct_atraso = 0
+
+# classificação ISO
 def classificar(valor):
     if valor > 20:
         return "🔴 Crítico"
@@ -46,9 +51,15 @@ def classificar(valor):
     else:
         return "🟢 Controlado"
 
+# métricas
 c1, c2 = st.columns(2)
+
 c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
 c2.metric("Status Produção", classificar(pct_atraso))
+
+# aviso inteligente (não bloqueia)
+if df.empty:
+    st.info("ℹ️ Para indicadores de produção, abra o módulo APS primeiro.")
 
 st.divider()
 
@@ -603,87 +614,38 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO — INDICADORES APS (ROBUSTO)
+# 🏭 PRODUÇÃO (APS REAL — NÃO BLOQUEIA A TELA)
 # ============================================================
 
 with tab3:
 
-    import pandas as pd
-    import plotly.express as px
-    import streamlit as st
-
     st.header("🏭 Indicadores de Produção")
 
+    # ✅ só valida aqui
     if df.empty:
-        st.warning("Base do APS não carregada.")
+        st.warning("Abra o módulo APS primeiro para carregar os dados.")
+        st.stop()
+
+    colunas_criticas = ["PV", "ENTREGA", "Dias para Entrega"]
+
+    faltando = [c for c in colunas_criticas if c not in df.columns]
+
+    if faltando:
+        st.error("Base APS inválida.")
+        st.write("Colunas atuais:", list(df.columns))
         st.stop()
 
     base = df.copy()
 
-    # ========================================================
-    # 🔍 NORMALIZAÇÃO DE COLUNAS
-    # ========================================================
+    base["Dias para Entrega"] = pd.to_numeric(base["Dias para Entrega"], errors="coerce")
+    base["ENTREGA"] = pd.to_datetime(base["ENTREGA"], errors="coerce")
 
-    base.columns = base.columns.str.strip()
-
-    # detectar coluna PV automaticamente
-    col_pv = None
-    for c in base.columns:
-        if c.lower() in ["pv", "num_pv", "ordem", "pedido"]:
-            col_pv = c
-            break
-
-    if col_pv is None:
-        st.error("Coluna de PV não encontrada na base.")
-        st.write("Colunas disponíveis:", list(base.columns))
-        st.stop()
-
-    # detectar coluna dias
-    col_dias = None
-    for c in base.columns:
-        if "dias" in c.lower():
-            col_dias = c
-            break
-
-    if col_dias is None:
-        st.error("Coluna 'Dias para Entrega' não encontrada.")
-        st.stop()
-
-    # detectar entrega
-    col_entrega = None
-    for c in base.columns:
-        if "entrega" in c.lower():
-            col_entrega = c
-            break
-
-    if col_entrega is None:
-        st.error("Coluna ENTREGA não encontrada.")
-        st.stop()
-
-    # ========================================================
-    # 🔧 TRATAMENTO
-    # ========================================================
-
-    base[col_dias] = pd.to_numeric(base[col_dias], errors="coerce")
-    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
-
-    base = base.dropna(subset=[col_entrega])
-
-    # ========================================================
-    # 🔥 AGRUPAMENTO POR PV (CORRETO)
-    # ========================================================
-
-    pv_base = base.groupby(col_pv, as_index=False).agg(
-        ENTREGA=(col_entrega, "max"),
-        DIAS=(col_dias, "min")
+    pv_base = base.groupby("PV", as_index=False).agg(
+        ENTREGA=("ENTREGA", "max"),
+        DIAS=("Dias para Entrega", "min")
     )
 
     pv_base["Atrasado"] = pv_base["DIAS"] < 0
-
-    # ========================================================
-    # 📅 MÊS
-    # ========================================================
-
     pv_base["Mes"] = pv_base["ENTREGA"].dt.month
 
     mapa = {
@@ -693,62 +655,21 @@ with tab3:
 
     pv_base["Mes"] = pv_base["Mes"].map(mapa)
 
-    # ========================================================
-    # 📊 RESUMO
-    # ========================================================
-
     resumo = pv_base.groupby("Mes").agg(
-        Total_PVs=(col_pv, "count"),
-        Atrasados=("Atrasado", "sum")
+        Total=("PV","count"),
+        Atrasados=("Atrasado","sum")
     ).reset_index()
 
-    resumo["Atraso_%"] = (resumo["Atrasados"] / resumo["Total_PVs"]) * 100
-    resumo["No_Prazo_%"] = 100 - resumo["Atraso_%"]
-
-    ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-    resumo["Mes"] = pd.Categorical(resumo["Mes"], categories=ordem, ordered=True)
-    resumo = resumo.sort_values("Mes")
-
-    # ========================================================
-    # 🚨 ATRASO
-    # ========================================================
-
-    st.subheader("🚨 Atraso (%)")
-
-    META_ATRASO = 5
-
+    resumo["Atraso_%"] = (resumo["Atrasados"]/resumo["Total"])*100
     resumo["Label"] = resumo["Atraso_%"].apply(lambda x: f"{x:.1f}%")
 
     fig = px.bar(resumo, x="Mes", y="Atraso_%", text="Label")
 
-    fig.add_hline(y=META_ATRASO, line_dash="dash", line_color="red")
+    fig.add_hline(y=5, line_dash="dash", line_color="red")
 
     fig.update_traces(textposition="outside")
 
-    fig.update_yaxes(range=[0, max(resumo["Atraso_%"].max()*1.2, META_ATRASO*1.2)])
-
     st.plotly_chart(fig, use_container_width=True)
-
-    # ========================================================
-    # ✅ NO PRAZO
-    # ========================================================
-
-    st.subheader("✅ PVs no Prazo (%)")
-
-    META_PRAZO = 95
-
-    resumo["Label"] = resumo["No_Prazo_%"].apply(lambda x: f"{x:.1f}%")
-
-    fig2 = px.bar(resumo, x="Mes", y="No_Prazo_%", text="Label")
-
-    fig2.add_hline(y=META_PRAZO, line_dash="dash", line_color="red")
-
-    fig2.update_traces(textposition="outside")
-
-    fig2.update_yaxes(range=[0, max(resumo["No_Prazo_%"].max()*1.2, META_PRAZO*1.2)])
-
-    st.plotly_chart(fig2, use_container_width=True)
-
 
 
 
