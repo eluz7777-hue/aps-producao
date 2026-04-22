@@ -540,3 +540,155 @@ with tab3:
 
     else:
         st.success("Nenhuma PV em atraso no momento")
+
+
+
+# ============================================================
+# 🔧 MANUTENÇÃO — INDICADORES (PADRÃO DEFINITIVO)
+# ============================================================
+
+with tab4:
+
+    import os
+
+    st.header("🔧 Indicadores de Manutenção")
+
+    # ========================================================
+    # 📂 CAMINHO CORRETO (PADRÃO PROJETO)
+    # ========================================================
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    caminho = os.path.abspath(os.path.join(
+        BASE_DIR,
+        "..",
+        "data",
+        "Indicadores_manutencao",
+        "manutencao.xlsx"
+    ))
+
+    # DEBUG TEMPORÁRIO (pode remover depois)
+    st.write("Arquivo:", caminho)
+    st.write("Existe?", os.path.exists(caminho))
+
+    if not os.path.exists(caminho):
+        st.error("Arquivo de manutenção não encontrado.")
+        st.stop()
+
+    # ========================================================
+    # 📊 LEITURA
+    # ========================================================
+    df_manut = pd.read_excel(caminho)
+
+    # ========================================================
+    # 🔒 NORMALIZAÇÃO
+    # ========================================================
+    df_manut.columns = [c.strip().lower() for c in df_manut.columns]
+
+    col_mes = next((c for c in df_manut.columns if "mes" in c), None)
+    col_disp = next((c for c in df_manut.columns if "disp" in c), None)
+    col_paradas = next((c for c in df_manut.columns if "parad" in c), None)
+
+    if not all([col_mes, col_disp, col_paradas]):
+        st.error("Colunas esperadas não encontradas.")
+        st.write(df_manut.columns.tolist())
+        st.stop()
+
+    df_manut = df_manut.rename(columns={
+        col_mes: "Mes",
+        col_disp: "Disponibilidade",
+        col_paradas: "Paradas"
+    })
+
+    # ========================================================
+    # 📅 PADRÃO DE MESES
+    # ========================================================
+    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    df_manut["Mes"] = df_manut["Mes"].astype(str).str[:3].str.title()
+
+    # ========================================================
+    # 🔧 FUNÇÃO PADRÃO
+    # ========================================================
+    def plot_indicador(titulo, coluna, meta, menor_melhor=True):
+
+        st.subheader(titulo)
+
+        dados = dict(zip(df_manut["Mes"], df_manut[coluna]))
+
+        valores = [dados.get(m, None) for m in meses_ordem]
+        validos = [v for v in valores if pd.notna(v)]
+
+        media = sum(validos)/len(validos) if validos else None
+
+        df_plot = pd.DataFrame({
+            "Mês": meses_ordem,
+            "Valor": valores
+        })
+
+        df_plot = pd.concat([
+            df_plot,
+            pd.DataFrame([{"Mês": "ACM", "Valor": media}])
+        ], ignore_index=True)
+
+        df_plot["Label"] = df_plot["Valor"].apply(
+            lambda x: "" if pd.isna(x) else f"{x:.1f}%"
+        )
+
+        fig = px.bar(
+            df_plot,
+            x="Mês",
+            y="Valor",
+            text="Label"
+        )
+
+        fig.update_traces(textposition="outside")
+
+        fig.add_hline(
+            y=meta,
+            line_dash="dash",
+            line_color="red",
+            annotation_text="Meta"
+        )
+
+        fig.update_layout(
+            height=450,
+            showlegend=False
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ====================================================
+        # 🚨 REGRA ISO
+        # ====================================================
+        if len(validos) >= 3:
+            ultimos_3 = validos[-3:]
+
+            if menor_melhor:
+                fora = all(v > meta for v in ultimos_3)
+            else:
+                fora = all(v < meta for v in ultimos_3)
+
+            if fora:
+                st.error("🚨 3 meses fora da meta — ação obrigatória")
+            else:
+                st.success("Indicador sob controle")
+
+        st.divider()
+
+    # ========================================================
+    # 📊 INDICADORES
+    # ========================================================
+
+    plot_indicador(
+        "⚙️ Disponibilidade (%)",
+        "Disponibilidade",
+        meta=90,
+        menor_melhor=False
+    )
+
+    plot_indicador(
+        "🚨 Paradas Não Planejadas (%)",
+        "Paradas",
+        meta=5,
+        menor_melhor=True
+    )
