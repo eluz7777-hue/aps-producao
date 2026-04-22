@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL ROBUSTO (SEM ERRO DE COLUNA)
+# 🔧 MANUTENÇÃO — LEITURA AUTOMÁTICA DE HEADER (DEFINITIVO)
 # ============================================================
 
 with tab4:
@@ -557,9 +557,6 @@ with tab4:
 
     st.header("🔧 Custo de Manutenção")
 
-    # ========================================================
-    # 📂 CAMINHO
-    # ========================================================
     caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
 
     if not os.path.exists(caminho):
@@ -567,16 +564,41 @@ with tab4:
         st.stop()
 
     # ========================================================
-    # 📊 LEITURA
+    # 📊 LEITURA BRUTA (SEM HEADER)
     # ========================================================
-    df = pd.read_excel(caminho)
+    df_raw = pd.read_excel(caminho, header=None)
+
+    # DEBUG
+    st.write("Prévia bruta:")
+    st.write(df_raw.head(10))
+
+    # ========================================================
+    # 🔍 ENCONTRAR LINHA DO HEADER REAL
+    # ========================================================
+    header_idx = None
+
+    for i in range(len(df_raw)):
+        linha = df_raw.iloc[i].astype(str).str.lower().tolist()
+
+        if any("mes" in c for c in linha) and any("corretiva" in c for c in linha):
+            header_idx = i
+            break
+
+    if header_idx is None:
+        st.error("Não consegui encontrar o cabeçalho automaticamente")
+        st.stop()
+
+    # ========================================================
+    # 📊 RECRIAR DATAFRAME COM HEADER CORRETO
+    # ========================================================
+    df = pd.read_excel(caminho, header=header_idx)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # DEBUG (deixe por enquanto)
-    st.write("Colunas encontradas:", df.columns.tolist())
+    st.write("Header identificado na linha:", header_idx)
+    st.write("Colunas reais:", df.columns.tolist())
 
     # ========================================================
-    # 🔍 MAPEAMENTO INTELIGENTE
+    # 🔍 MAPEAMENTO
     # ========================================================
     cols = {c.lower(): c for c in df.columns}
 
@@ -584,7 +606,7 @@ with tab4:
         return next((cols[c] for c in cols if nome in c), None)
 
     col_mes = encontrar("mes")
-    col_np = encontrar("nao program")
+    col_np = encontrar("nao")
     col_cp = encontrar("programada")
     col_prev = encontrar("preventiva")
     col_pred = encontrar("preditiva")
@@ -602,11 +624,11 @@ with tab4:
     })
 
     if not col_mes or not col_np or not col_cp:
-        st.error("Não consegui identificar as colunas obrigatórias")
+        st.error("Colunas obrigatórias não encontradas")
         st.stop()
 
     # ========================================================
-    # 🧹 LIMPEZA NUMÉRICA (PADRÃO BR)
+    # 🧹 LIMPEZA
     # ========================================================
     def limpar(v):
         if pd.isna(v):
@@ -639,12 +661,6 @@ with tab4:
         df["Meta"] = 0
 
     # ========================================================
-    # 📊 FORMATAÇÃO BR
-    # ========================================================
-    def formatar(v):
-        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-    # ========================================================
     # 📊 GRÁFICO
     # ========================================================
     fig = go.Figure()
@@ -672,12 +688,7 @@ with tab4:
         line=dict(color="red", dash="dash")
     )
 
-    fig.update_layout(
-        barmode="stack",
-        yaxis_title="R$",
-        xaxis_title="Mês",
-        height=500
-    )
+    fig.update_layout(barmode="stack", height=500)
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -686,6 +697,9 @@ with tab4:
     # ========================================================
     ultimo = df["Total"].iloc[-1]
     meta_atual = df["Meta"].iloc[-1]
+
+    def formatar(v):
+        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     c1, c2 = st.columns(2)
 
