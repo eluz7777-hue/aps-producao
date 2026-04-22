@@ -6,3 +6,4 @@ sqlalchemy
 mysql-connector-python
 openpyxl
 holidays
+python-docx
