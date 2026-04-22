@@ -240,14 +240,197 @@ with tab1:
 
 
 
+
 # ============================================================
-# 🧪 QUALIDADE
+# 🧪 QUALIDADE — PAINEL ESTRATÉGICO COMPLETO
 # ============================================================
 
 with tab2:
-    st.subheader("🧪 Indicadores de Qualidade")
 
-    st.info("➡️ Aqui entra: NC interna, externa, refugo, retrabalho")
+    import pandas as pd
+    import streamlit as st
+    import plotly.express as px
+
+    st.header("🧪 Indicadores de Qualidade")
+
+    ANO = "2026"
+
+    # ============================================================
+    # 🔹 1) NC EXTERNAS (%)
+    # ============================================================
+
+    st.subheader("🧪 NC Externas (%)")
+    st.caption("Meta: ≤ 2%")
+
+    META_NC_EXT = 0.02
+
+    indicador_nc_externa = {
+        "Jan": 0.00,
+        "Fev": 0.00,
+        "Mar": 0.00,
+    }
+
+    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    valores_nc = [indicador_nc_externa.get(m, None) for m in meses_ordem]
+
+    valores_validos_nc = [v for v in valores_nc if v is not None]
+
+    media_nc = sum(valores_validos_nc)/len(valores_validos_nc) if valores_validos_nc else None
+
+    df_nc = pd.DataFrame({"Mês": meses_ordem, "Valor": valores_nc})
+
+    df_nc = pd.concat([
+        df_nc,
+        pd.DataFrame([{"Mês": "ACM", "Valor": media_nc}])
+    ], ignore_index=True)
+
+    df_plot_nc = df_nc.copy()
+    df_plot_nc["Valor"] = df_plot_nc["Valor"] * 100
+
+    df_meses_nc = df_plot_nc[df_plot_nc["Mês"] != "ACM"].copy()
+    df_acm_nc = df_plot_nc[df_plot_nc["Mês"] == "ACM"].copy()
+
+    df_meses_nc["Mês"] = pd.Categorical(df_meses_nc["Mês"], categories=meses_ordem, ordered=True)
+    df_meses_nc = df_meses_nc.sort_values("Mês")
+
+    df_plot_nc = pd.concat([df_meses_nc, df_acm_nc])
+
+    def formatar_nc(row):
+        if pd.isna(row["Valor"]):
+            return ""
+        if row["Mês"] == "ACM":
+            return f"{row['Valor']:.1f}%"
+        return f"{row['Valor']:.0f}%"
+
+    df_plot_nc["Label"] = df_plot_nc.apply(formatar_nc, axis=1)
+
+    fig_nc = px.bar(df_plot_nc, x="Mês", y="Valor", text="Label")
+
+    fig_nc.update_traces(textposition="outside")
+
+    fig_nc.update_layout(
+        title=f"📊 NC Externas (%) - {ANO}",
+        yaxis_title="% NC",
+        showlegend=False,
+        height=450
+    )
+
+    fig_nc.update_yaxes(tickformat=".0f")
+
+    st.plotly_chart(fig_nc, use_container_width=True)
+
+    # KPI
+    if valores_validos_nc:
+        ultimo = valores_validos_nc[-1]
+        gap = ultimo - META_NC_EXT
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Resultado", f"{ultimo*100:.0f}%")
+        c2.metric("Meta", f"{META_NC_EXT*100:.0f}%")
+        c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
+
+        if ultimo <= META_NC_EXT:
+            st.success("🟢 Dentro da meta")
+        else:
+            st.error("🔴 Fora da meta")
+
+    # Regra ISO
+    if len(valores_validos_nc) >= 3:
+        if all(v > META_NC_EXT for v in valores_validos_nc[-3:]):
+            st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
+        else:
+            st.success("Indicador sob controle recente")
+
+    st.divider()
+
+    # ============================================================
+    # 🔹 2) CUSTO TOTAL DE NC (R$)
+    # ============================================================
+
+    st.subheader("💰 Custo Total de NC (R$)")
+    st.caption("Meta: ≤ R$ 15.000")
+
+    META_CUSTO = 15000
+
+    indicador_custo = {
+        "Jan": 0,
+        "Fev": 0,
+        "Mar": 0,
+    }
+
+    valores_custo = [indicador_custo.get(m, None) for m in meses_ordem]
+
+    valores_validos_custo = [v for v in valores_custo if v is not None]
+
+    media_custo = sum(valores_validos_custo)/len(valores_validos_custo) if valores_validos_custo else None
+
+    df_custo = pd.DataFrame({"Mês": meses_ordem, "Valor": valores_custo})
+
+    df_custo = pd.concat([
+        df_custo,
+        pd.DataFrame([{"Mês": "ACM", "Valor": media_custo}])
+    ], ignore_index=True)
+
+    df_plot_custo = df_custo.copy()
+
+    df_meses_custo = df_plot_custo[df_plot_custo["Mês"] != "ACM"].copy()
+    df_acm_custo = df_plot_custo[df_plot_custo["Mês"] == "ACM"].copy()
+
+    df_meses_custo["Mês"] = pd.Categorical(df_meses_custo["Mês"], categories=meses_ordem, ordered=True)
+    df_meses_custo = df_meses_custo.sort_values("Mês")
+
+    df_plot_custo = pd.concat([df_meses_custo, df_acm_custo])
+
+    def formatar_custo(row):
+        if pd.isna(row["Valor"]):
+            return ""
+        if row["Mês"] == "ACM":
+            return f"R$ {row['Valor']:.1f}"
+        return f"R$ {row['Valor']:.0f}"
+
+    df_plot_custo["Label"] = df_plot_custo.apply(formatar_custo, axis=1)
+
+    fig_custo = px.bar(df_plot_custo, x="Mês", y="Valor", text="Label")
+
+    fig_custo.update_traces(textposition="outside")
+
+    fig_custo.update_layout(
+        title=f"📊 Custo Total de NC - {ANO}",
+        yaxis_title="R$",
+        showlegend=False,
+        height=450
+    )
+
+    fig_custo.update_yaxes(tickformat=".0f")
+
+    st.plotly_chart(fig_custo, use_container_width=True)
+
+    # KPI
+    if valores_validos_custo:
+        ultimo = valores_validos_custo[-1]
+        gap = ultimo - META_CUSTO
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Resultado", f"R$ {ultimo:,.0f}")
+        c2.metric("Meta", f"R$ {META_CUSTO:,.0f}")
+        c3.metric("Desvio", f"R$ {gap:,.0f}", delta_color="inverse")
+
+        if ultimo <= META_CUSTO:
+            st.success("🟢 Dentro da meta")
+        else:
+            st.error("🔴 Fora da meta")
+
+    # Regra ISO
+    if len(valores_validos_custo) >= 3:
+        if all(v > META_CUSTO for v in valores_validos_custo[-3:]):
+            st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
+        else:
+            st.success("Indicador sob controle recente")
+
+
+
+
 
 # ============================================================
 # 🏭 PRODUÇÃO (SÓ ATRASO)
