@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL DEFINITIVO (SEM ERRO)
+# 🔧 MANUTENÇÃO — BLOCO FINAL DIRETO (SEM MAPEAMENTO)
 # ============================================================
 
 with tab4:
@@ -564,74 +564,54 @@ with tab4:
         st.stop()
 
     # ========================================================
-    # 📊 LEITURA
+    # 📊 LEITURA DIRETA
     # ========================================================
     df = pd.read_excel(caminho)
 
-    # ========================================================
-    # 🔥 NORMALIZAÇÃO DE COLUNAS
-    # ========================================================
-    df.columns = (
-        df.columns
-        .astype(str)
-        .str.strip()
-        .str.lower()
-        .str.replace("ç", "c")
-        .str.replace("ã", "a")
-        .str.replace("á", "a")
-        .str.replace("é", "e")
-        .str.replace("í", "i")
-        .str.replace("ó", "o")
-        .str.replace("ú", "u")
-    )
+    df.columns = [str(c).strip() for c in df.columns]
 
     # ========================================================
-    # 🔍 MAPEAMENTO PRECISO (SEM CONFLITO)
+    # 🔥 NOMES EXATOS (BASEADO NO SEU EXCEL)
     # ========================================================
-    def find_col(exact):
-        return next((c for c in df.columns if exact in c), None)
-
-    col_mes  = find_col("mes")
-    col_np   = find_col("nao programada")
-    col_cp   = next((c for c in df.columns if "corretiva programada" in c), None)
-    col_prev = find_col("preventiva")
-    col_pred = find_col("preditiva")
-    col_melh = find_col("melhoria")
-    col_meta = find_col("0,5")
-
-    if not col_mes or not col_np or not col_cp:
+    try:
+        col_mes  = "Mês"
+        col_np   = "Corretiva não programada"
+        col_cp   = "Corretiva programada"
+        col_prev = "Preventiva"
+        col_pred = "Preditiva"
+        col_melh = "Melhoria de Máquinas"
+        col_meta = "0,5% do Faturamento Bruto Mensal"
+    except:
         st.error("Erro ao identificar colunas do Excel")
         st.stop()
 
     # ========================================================
-    # 🧹 LIMPEZA DE VALORES
+    # 🧹 LIMPEZA
     # ========================================================
     def limpar(v):
         if pd.isna(v):
             return 0
-        v = str(v)
-        v = v.replace("R$", "").replace(".", "").replace(",", ".").strip()
+        v = str(v).replace("R$", "").replace(".", "").replace(",", ".")
         try:
             return float(v)
         except:
             return 0
 
-    for c in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
-        if c:
-            df[c] = df[c].apply(limpar)
+    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
+        df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL E META
+    # 📊 TOTAL
     # ========================================================
-    df["total"] = (
+    df["Total"] = (
         df[col_np] +
         df[col_cp] +
-        (df[col_prev] if col_prev else 0) +
-        (df[col_pred] if col_pred else 0) +
-        (df[col_melh] if col_melh else 0)
+        df[col_prev] +
+        df[col_pred] +
+        df[col_melh]
     )
 
-    df["meta"] = df[col_meta] if col_meta else 0
+    df["Meta"] = df[col_meta]
 
     # ========================================================
     # 📊 GRÁFICO
@@ -640,20 +620,14 @@ with tab4:
 
     fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
     fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-
-    if col_prev:
-        fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-
-    if col_pred:
-        fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-
-    if col_melh:
-        fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
 
     fig.add_scatter(
         name="Meta (0,5%)",
         x=df[col_mes],
-        y=df["meta"],
+        y=df["Meta"],
         mode="lines+markers",
         line=dict(color="red", dash="dash")
     )
@@ -668,10 +642,10 @@ with tab4:
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI FINAL
+    # 📊 KPI
     # ========================================================
-    ultimo = df["total"].iloc[-1]
-    meta_atual = df["meta"].iloc[-1]
+    ultimo = df["Total"].iloc[-1]
+    meta_atual = df["Meta"].iloc[-1]
 
     def formatar(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -679,6 +653,4 @@ with tab4:
     c1, c2 = st.columns(2)
 
     c1.metric("💸 Custo Atual", formatar(ultimo))
-
-    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
-    c2.metric("Status", status)
+    c2.metric("Status", "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta")
