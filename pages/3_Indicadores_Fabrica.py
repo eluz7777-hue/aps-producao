@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL EXECUTIVO
+# 🔧 MANUTENÇÃO — BLOCO FINAL DEFINITIVO (ESCALA CORRIGIDA)
 # ============================================================
 
 with tab4:
@@ -570,15 +570,15 @@ with tab4:
     df.columns = [str(c).strip() for c in df.columns]
 
     # ========================================================
-    # 🔍 COLUNAS FIXAS (SEU EXCEL PADRÃO)
+    # 🔍 COLUNAS (PADRÃO DO SEU EXCEL)
     # ========================================================
-    col_mes  = "Mês"
-    col_np   = "Corretiva não programada"
-    col_cp   = "Corretiva programada"
-    col_prev = "Preventiva"
-    col_pred = "Preditiva"
-    col_melh = "Melhoria de Máquinas"
-    col_meta = "0,5% do Faturamento Bruto Mensal"
+    col_mes   = "Mês"
+    col_fat   = "Faturamento Mensal"
+    col_np    = "Corretiva não programada"
+    col_cp    = "Corretiva programada"
+    col_prev  = "Preventiva"
+    col_pred  = "Preditiva"
+    col_melh  = "Melhoria de Máquinas"
 
     # ========================================================
     # 🧹 LIMPEZA
@@ -592,11 +592,11 @@ with tab4:
         except:
             return 0
 
-    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
+    for col in [col_fat, col_np, col_cp, col_prev, col_pred, col_melh]:
         df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL
+    # 📊 TOTAL E META (CALCULADA NO SISTEMA)
     # ========================================================
     df["Total"] = (
         df[col_np] +
@@ -606,15 +606,14 @@ with tab4:
         df[col_melh]
     )
 
-    df["Meta"] = df[col_meta]
+    # 🔥 META CORRETA (0,5% do faturamento)
+    df["Meta"] = df[col_fat] * 0.005
 
     # ========================================================
-    # 📊 ESCALA INTELIGENTE (AQUI ESTÁ A CORREÇÃO)
+    # 📊 ESCALA CORRETA (BASEADA NO CUSTO)
     # ========================================================
     max_custo = df["Total"].max()
-    max_meta = df["Meta"].max()
-
-    limite_y = max(max_custo, max_meta) * 1.15  # margem visual
+    limite_y = max_custo * 1.25 if max_custo > 0 else 1
 
     # ========================================================
     # 📊 GRÁFICO
@@ -632,7 +631,8 @@ with tab4:
         x=df[col_mes],
         y=df["Meta"],
         mode="lines+markers",
-        line=dict(color="red", dash="dash", width=3)
+        line=dict(color="red", dash="dash", width=3),
+        opacity=0.7
     )
 
     fig.update_layout(
