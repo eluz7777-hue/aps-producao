@@ -1,110 +1,105 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
 
 st.title("📊 Indicadores da Fábrica")
-st.caption("Visão estratégica consolidada da operação industrial.")
+st.caption("Painel estratégico da operação industrial")
 
 # ============================================================
-# 🔒 CARREGAMENTO BASE (REAPROVEITA APS)
+# 🔒 CARREGAR DADOS DO APS (BASE)
 # ============================================================
-try:
-    df = st.session_state.get("df", pd.DataFrame())
-    df_operacional = st.session_state.get("df_operacional", pd.DataFrame())
-except:
-    df = pd.DataFrame()
-    df_operacional = pd.DataFrame()
+
+df = st.session_state.get("df", pd.DataFrame())
 
 if df.empty:
     st.warning("Base do APS não carregada.")
     st.stop()
 
 # ============================================================
-# 📌 KPI PRINCIPAIS (CORRIGIDO)
+# 🚦 VISÃO GERAL (TOP LEVEL)
 # ============================================================
 
-st.subheader("📌 Indicadores Principais")
+st.subheader("🚦 Saúde da Fábrica")
 
+# --- Segurança de colunas ---
 df["Horas"] = pd.to_numeric(df.get("Horas", 0), errors="coerce").fillna(0)
 
-carga_total = df["Horas"].sum()
 total_pvs = df["PV"].nunique() if "PV" in df.columns else 0
 
-# 🔒 GARGALO
-if "Processo" in df.columns:
-    processos = df.groupby("Processo")["Horas"].sum()
-    gargalo = processos.idxmax() if not processos.empty else "N/D"
-else:
-    processos = pd.Series()
-    gargalo = "N/D"
-
-# 🔒 ATRASO (CORREÇÃO AQUI)
+# --- Atraso ---
 if "Dias para Entrega" in df.columns:
     atrasos = df[df["Dias para Entrega"] < 0]
     pct_atraso = (len(atrasos) / total_pvs * 100) if total_pvs > 0 else 0
 else:
-    atrasos = pd.DataFrame()
     pct_atraso = 0
 
-k1, k2, k3, k4 = st.columns(4)
-
-k1.metric("🏭 Carga Total (h)", f"{carga_total:,.1f}")
-k2.metric("📦 PVs", total_pvs)
-k3.metric("🚨 % em Atraso", f"{pct_atraso:.1f}%")
-k4.metric("🔥 Gargalo Atual", gargalo)
-
-
-# ============================================================
-# 🧠 STATUS EXECUTIVO
-# ============================================================
-st.subheader("🚦 Status Executivo")
-
-if "Dias para Entrega" in df.columns:
-    atraso = (df["Dias para Entrega"] < 0).sum()
-    risco = df["Dias para Entrega"].between(0, 3).sum()
-    ok = (df["Dias para Entrega"] > 3).sum()
+# --- Gargalo ---
+if "Processo" in df.columns:
+    proc = df.groupby("Processo")["Horas"].sum()
+    gargalo = proc.idxmax() if not proc.empty else "N/D"
 else:
-    atraso = risco = ok = 0
+    gargalo = "N/D"
 
-s1, s2, s3 = st.columns(3)
+# --- KPI CARDS ---
+c1, c2, c3 = st.columns(3)
 
-s1.metric("🔴 Atrasados", int(atraso))
-s2.metric("🟡 Risco", int(risco))
-s3.metric("🟢 OK", int(ok))
-
-# ============================================================
-# 📊 BACKLOG POR PROCESSO
-# ============================================================
-st.subheader("📊 Backlog por Processo")
-
-backlog = df.groupby("Processo", as_index=False)["Horas"].sum()
-backlog = backlog.sort_values("Horas", ascending=False)
-
-st.bar_chart(backlog.set_index("Processo"))
+c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
+c2.metric("🔥 Gargalo", gargalo)
+c3.metric("📦 PVs", total_pvs)
 
 # ============================================================
-# 📈 TENDÊNCIA (SIMPLES)
+# 📊 ABAS ESTRATÉGICAS
 # ============================================================
-st.subheader("📈 Tendência de Carga")
 
-if "Data" in df.columns:
-    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-    tendencia = df.groupby("Data")["Horas"].sum()
-
-    st.line_chart(tendencia)
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "💰 Comercial",
+    "🏭 Produção",
+    "🧪 Qualidade",
+    "🔧 Manutenção",
+    "👷 RH"
+])
 
 # ============================================================
-# ⚠️ ALERTAS INTELIGENTES
+# 🏭 PRODUÇÃO (BASEADO NO APS)
 # ============================================================
-st.subheader("⚠️ Alertas Inteligentes")
 
-if pct_atraso > 20:
-    st.error("🚨 Alto volume de atrasos detectado.")
+with tab2:
 
-if not processos.empty and processos.max() > processos.mean() * 2:
-    st.warning(f"⚠️ Gargalo forte detectado em {gargalo}")
+    st.subheader("🏭 Visão de Produção")
 
-if carga_total == 0:
-    st.info("Nenhuma carga registrada.")
+    carga_total = df["Horas"].sum()
+
+    st.metric("Carga Total (h)", f"{carga_total:,.1f}")
+
+    if "Processo" in df.columns:
+        backlog = df.groupby("Processo")["Horas"].sum().sort_values(ascending=False)
+        st.bar_chart(backlog)
+
+# ============================================================
+# 💰 COMERCIAL (VAMOS PLUGAR DEPOIS)
+# ============================================================
+
+with tab1:
+    st.info("Indicadores comerciais serão conectados aqui")
+
+# ============================================================
+# 🧪 QUALIDADE
+# ============================================================
+
+with tab3:
+    st.info("Indicadores de qualidade serão conectados aqui")
+
+# ============================================================
+# 🔧 MANUTENÇÃO
+# ============================================================
+
+with tab4:
+    st.info("Indicadores de manutenção serão conectados aqui")
+
+# ============================================================
+# 👷 RH
+# ============================================================
+
+with tab5:
+    st.info("Indicadores de RH serão conectados aqui")
