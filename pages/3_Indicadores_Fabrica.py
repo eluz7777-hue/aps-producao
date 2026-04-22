@@ -405,62 +405,108 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO (FINAL CORRETO)
+# 🏭 PRODUÇÃO — TEMPO REAL (ATRASO DE ENTREGAS)
 # ============================================================
 
 with tab3:
 
-    st.header("🏭 Indicadores de Produção")
+    st.header("🏭 Atraso de Entregas (Tempo Real)")
+    st.caption("PVs com data de entrega vencida e ainda em aberto")
 
-    if df_aps.empty or not all(c in df_aps.columns for c in ["PV","Data","DATA_ENTREGA_APS"]):
-        st.error("Base APS não carregada corretamente")
+    if df_aps.empty:
+        st.warning("Abra o APS para visualizar os indicadores de produção.")
         st.stop()
 
+    # ========================================================
+    # 🔒 BASE SEGURA
+    # ========================================================
     base = df_aps.copy()
 
-    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    required_cols = ["PV", "DATA_ENTREGA_APS"]
+
+    if not all(col in base.columns for col in required_cols):
+        st.error("Colunas obrigatórias não encontradas na base do APS")
+        st.write("Colunas disponíveis:", base.columns.tolist())
+        st.stop()
+
+    # ========================================================
+    # 📅 TRATAMENTO DE DATA
+    # ========================================================
     base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
-    base = base.dropna(subset=["Data","DATA_ENTREGA_APS"])
+    hoje = pd.Timestamp.today().normalize()
 
+    # ========================================================
+    # 📦 AGRUPAMENTO POR PV
+    # ========================================================
     pv = base.groupby("PV", as_index=False).agg(
-        Data_real=("Data","max"),
-        Data_planejada=("DATA_ENTREGA_APS","min")
+        data_entrega=("DATA_ENTREGA_APS", "min")
     )
 
-    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days.fillna(0)
+    pv = pv.dropna(subset=["data_entrega"])
 
+    # ========================================================
+    # 🚨 REGRA DE ATRASO (TEMPO REAL)
+    # ========================================================
+    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
+    pv["Atrasada"] = pv["Atraso_dias"] > 0
+
+    # ========================================================
+    # 📊 KPIs
+    # ========================================================
     total = len(pv)
-    atrasadas = pv[pv["Atraso_dias"] > 0]
-    pct = (len(atrasadas)/total*100) if total else 0
+    atrasadas = pv[pv["Atrasada"]]
 
-    c1,c2,c3 = st.columns(3)
+    qtd_atrasadas = len(atrasadas)
+    pct = (qtd_atrasadas / total * 100) if total > 0 else 0
+
+    c1, c2, c3 = st.columns(3)
+
     c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
-    c2.metric("📦 PVs Atrasadas", len(atrasadas))
+    c2.metric("📦 PVs Atrasadas", qtd_atrasadas)
     c3.metric("📦 Total PVs", total)
 
     st.divider()
 
-    pv["Mes"] = pv["Data_planejada"].dt.month
+    # ========================================================
+    # 🔥 TOP ATRASOS (AÇÃO GERENCIAL)
+    # ========================================================
+    st.subheader("📊 PVs mais atrasadas")
 
-    resumo = pv.groupby("Mes").agg(
-        Total=("PV","count"),
-        Atrasadas=("Atraso_dias", lambda x:(x>0).sum())
-    ).reset_index()
+    if qtd_atrasadas > 0:
 
-    resumo["Pct"] = (resumo["Atrasadas"]/resumo["Total"]*100)
+        top = atrasadas.sort_values("Atraso_dias", ascending=False).copy()
 
-    meses_df = pd.DataFrame({"Mes":list(range(1,13))})
-    resumo = meses_df.merge(resumo,on="Mes",how="left")
-    resumo["Pct"] = resumo["Pct"].fillna(0)
+        top["Atraso_dias"] = top["Atraso_dias"].astype(int)
 
-    nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x:nomes[x-1])
+        st.dataframe(
+            top[["PV", "data_entrega", "Atraso_dias"]],
+            use_container_width=True
+        )
 
-    resumo["Label"] = resumo["Pct"].apply(lambda x:f"{x:.1f}%")
+    else:
+        st.success("Nenhuma PV em atraso no momento")
 
-    fig = px.bar(resumo, x="Mes_nome", y="Pct", text="Label")
-    fig.add_hline(y=5, line_dash="dash", line_color="red")
-    fig.update_traces(textposition="outside")
+    # ========================================================
+    # 📌 DISTRIBUIÇÃO DE ATRASO (OPCIONAL, MAS MUITO ÚTIL)
+    # ========================================================
+    st.subheader("📈 Distribuição do atraso (dias)")
 
-    st.plotly_chart(fig, use_container_width=True)
+    if qtd_atrasadas > 0:
+
+        fig = px.histogram(
+            atrasadas,
+            x="Atraso_dias",
+            nbins=20
+        )
+
+        fig.update_layout(
+            xaxis_title="Dias de atraso",
+            yaxis_title="Quantidade de PVs",
+            height=400
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("Sem dados de atraso para distribuição")
