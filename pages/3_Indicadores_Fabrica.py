@@ -614,38 +614,66 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO (APS REAL — NÃO BLOQUEIA A TELA)
+# 🏭 PRODUÇÃO — ROBUSTO (SEM ERRO DE COLUNA)
 # ============================================================
 
 with tab3:
 
     st.header("🏭 Indicadores de Produção")
 
-    # ✅ só valida aqui
     if df.empty:
-        st.warning("Abra o módulo APS primeiro para carregar os dados.")
-        st.stop()
-
-    colunas_criticas = ["PV", "ENTREGA", "Dias para Entrega"]
-
-    faltando = [c for c in colunas_criticas if c not in df.columns]
-
-    if faltando:
-        st.error("Base APS inválida.")
-        st.write("Colunas atuais:", list(df.columns))
+        st.warning("Abra o APS primeiro para carregar os dados.")
         st.stop()
 
     base = df.copy()
+    base.columns = base.columns.str.strip()
 
-    base["Dias para Entrega"] = pd.to_numeric(base["Dias para Entrega"], errors="coerce")
-    base["ENTREGA"] = pd.to_datetime(base["ENTREGA"], errors="coerce")
+    # ========================================================
+    # 🔍 DETECÇÃO INTELIGENTE DE COLUNAS
+    # ========================================================
 
-    pv_base = base.groupby("PV", as_index=False).agg(
-        ENTREGA=("ENTREGA", "max"),
-        DIAS=("Dias para Entrega", "min")
+    def encontrar_coluna(lista_nomes):
+        for nome in base.columns:
+            nome_lower = nome.lower()
+            for ref in lista_nomes:
+                if ref in nome_lower:
+                    return nome
+        return None
+
+    col_pv = encontrar_coluna(["pv", "pedido", "ordem"])
+    col_entrega = encontrar_coluna(["entrega"])
+    col_dias = encontrar_coluna(["dias", "atraso"])
+
+    # debug amigável
+    if col_pv is None or col_entrega is None or col_dias is None:
+        st.error("Não foi possível identificar as colunas necessárias.")
+        st.write("Colunas disponíveis:", list(base.columns))
+        st.stop()
+
+    # ========================================================
+    # 🔧 TRATAMENTO
+    # ========================================================
+
+    base[col_dias] = pd.to_numeric(base[col_dias], errors="coerce")
+    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
+
+    base = base.dropna(subset=[col_entrega])
+
+    # ========================================================
+    # 🔥 AGRUPAMENTO POR PV
+    # ========================================================
+
+    pv_base = base.groupby(col_pv, as_index=False).agg(
+        ENTREGA=(col_entrega, "max"),
+        DIAS=(col_dias, "min")
     )
 
     pv_base["Atrasado"] = pv_base["DIAS"] < 0
+
+    # ========================================================
+    # 📅 MÊS
+    # ========================================================
+
     pv_base["Mes"] = pv_base["ENTREGA"].dt.month
 
     mapa = {
@@ -655,12 +683,29 @@ with tab3:
 
     pv_base["Mes"] = pv_base["Mes"].map(mapa)
 
+    # ========================================================
+    # 📊 RESUMO
+    # ========================================================
+
     resumo = pv_base.groupby("Mes").agg(
-        Total=("PV","count"),
+        Total=("Mes","count"),
         Atrasados=("Atrasado","sum")
     ).reset_index()
 
-    resumo["Atraso_%"] = (resumo["Atrasados"]/resumo["Total"])*100
+    resumo["Atraso_%"] = (resumo["Atrasados"] / resumo["Total"]) * 100
+    resumo["No_Prazo_%"] = 100 - resumo["Atraso_%"]
+
+    # ordenar meses
+    ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    resumo["Mes"] = pd.Categorical(resumo["Mes"], categories=ordem, ordered=True)
+    resumo = resumo.sort_values("Mes")
+
+    # ========================================================
+    # 🚨 ATRASO
+    # ========================================================
+
+    st.subheader("🚨 Atraso (%)")
+
     resumo["Label"] = resumo["Atraso_%"].apply(lambda x: f"{x:.1f}%")
 
     fig = px.bar(resumo, x="Mes", y="Atraso_%", text="Label")
@@ -671,6 +716,21 @@ with tab3:
 
     st.plotly_chart(fig, use_container_width=True)
 
+    # ========================================================
+    # ✅ NO PRAZO
+    # ========================================================
+
+    st.subheader("✅ PVs no Prazo (%)")
+
+    resumo["Label"] = resumo["No_Prazo_%"].apply(lambda x: f"{x:.1f}%")
+
+    fig2 = px.bar(resumo, x="Mes", y="No_Prazo_%", text="Label")
+
+    fig2.add_hline(y=95, line_dash="dash", line_color="red")
+
+    fig2.update_traces(textposition="outside")
+
+    st.plotly_chart(fig2, use_container_width=True)
 
 
 # ============================================================
