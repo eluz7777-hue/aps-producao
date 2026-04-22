@@ -546,12 +546,14 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — CUSTO DE MANUTENÇÃO (REAL)
+# 🔧 MANUTENÇÃO — LENDO DOCX (SEM CONVERSÃO)
 # ============================================================
 
 with tab4:
 
     import os
+    from docx import Document
+    import re
 
     st.header("🔧 Custo de Manutenção")
 
@@ -562,60 +564,83 @@ with tab4:
         "..",
         "data",
         "Indicadores_manutencao",
-        "manutencao.xlsx"
+        "manutencao.docx"
     ))
 
     if not os.path.exists(caminho):
-        st.error("Arquivo não encontrado")
+        st.error("Arquivo .docx não encontrado")
         st.stop()
 
-    df = pd.read_excel(caminho, header=None)
+    # ========================================================
+    # 📄 LEITURA DO WORD
+    # ========================================================
+    doc = Document(caminho)
+
+    linhas = [p.text for p in doc.paragraphs if p.text.strip() != ""]
+
+    # DEBUG (pode remover depois)
+    # st.write(linhas)
 
     meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     # ========================================================
-    # 🔍 EXTRAÇÃO (BASEADO NO SEU FORMATO)
+    # 🔍 FUNÇÃO PARA EXTRAIR VALORES NUMÉRICOS
     # ========================================================
+    def extrair_valores(texto):
+        nums = re.findall(r"\d+[\.,]?\d*", texto)
+        return [float(n.replace(",", ".")) for n in nums]
 
-    linhas = df.values.tolist()
+    # ========================================================
+    # 🔍 BUSCA LINHAS IMPORTANTES
+    # ========================================================
+    def buscar_linha(palavra):
+        for linha in linhas:
+            if palavra.lower() in linha.lower():
+                return extrair_valores(linha)
+        return []
 
-    def extrair_linha(nome):
-        for i, linha in enumerate(linhas):
-            if isinstance(linha[0], str) and nome.lower() in linha[0].lower():
-                return linhas[i+1][-12:]
-        return [0]*12
+    corretiva_np = buscar_linha("corretiva não programada")
+    corretiva_p  = buscar_linha("corretiva programada")
+    preventiva   = buscar_linha("preventiva")
+    preditiva    = buscar_linha("preditiva")
+    melhoria     = buscar_linha("melhoria")
 
-    corretiva_np = extrair_linha("corretiva não programada")
-    corretiva_p  = extrair_linha("corretiva programada")
-    preventiva   = extrair_linha("preventiva")
-    preditiva    = extrair_linha("preditiva")
-    melhoria     = extrair_linha("melhoria")
+    meta = buscar_linha("0,5")
 
-    meta_valores = extrair_linha("0,5")
+    # ========================================================
+    # 🧠 GARANTIA DE TAMANHO
+    # ========================================================
+    def pad(v):
+        return (v + [0]*12)[:12]
+
+    corretiva_np = pad(corretiva_np)
+    corretiva_p  = pad(corretiva_p)
+    preventiva   = pad(preventiva)
+    preditiva    = pad(preditiva)
+    melhoria     = pad(melhoria)
+    meta         = pad(meta)
 
     # ========================================================
     # 📊 CONSOLIDAÇÃO
     # ========================================================
-
     total = [
-        (corretiva_np[i] or 0) +
-        (corretiva_p[i] or 0) +
-        (preventiva[i] or 0) +
-        (preditiva[i] or 0) +
-        (melhoria[i] or 0)
+        corretiva_np[i] +
+        corretiva_p[i] +
+        preventiva[i] +
+        preditiva[i] +
+        melhoria[i]
         for i in range(12)
     ]
 
     df_plot = pd.DataFrame({
         "Mês": meses,
         "Custo": total,
-        "Meta": meta_valores
+        "Meta": meta
     })
 
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
-
     fig = px.bar(
         df_plot,
         x="Mês",
@@ -625,7 +650,6 @@ with tab4:
 
     fig.update_traces(textposition="outside")
 
-    # linha de meta
     fig.add_scatter(
         x=df_plot["Mês"],
         y=df_plot["Meta"],
@@ -641,15 +665,14 @@ with tab4:
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI DO MÊS
+    # 📊 KPI ATUAL
     # ========================================================
-
-    ultimo_valor = next((v for v in reversed(total) if v > 0), 0)
-    ultima_meta = next((v for v in reversed(meta_valores) if v > 0), 0)
+    ultimo = next((v for v in reversed(total) if v > 0), 0)
+    meta_atual = next((v for v in reversed(meta) if v > 0), 0)
 
     c1, c2 = st.columns(2)
 
-    c1.metric("💸 Custo Atual", f"R$ {ultimo_valor:,.0f}")
+    c1.metric("💸 Custo Atual", f"R$ {ultimo:,.0f}")
 
-    status = "🟢 OK" if ultimo_valor <= ultima_meta else "🔴 Acima da Meta"
+    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
     c2.metric("Status", status)
