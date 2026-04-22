@@ -546,18 +546,15 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — INDICADORES (AJUSTADO AO EXCEL REAL)
+# 🔧 MANUTENÇÃO — CUSTO DE MANUTENÇÃO (REAL)
 # ============================================================
 
 with tab4:
 
     import os
 
-    st.header("🔧 Indicadores de Manutenção")
+    st.header("🔧 Custo de Manutenção")
 
-    # ========================================================
-    # 📂 CAMINHO
-    # ========================================================
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
     caminho = os.path.abspath(os.path.join(
@@ -570,121 +567,89 @@ with tab4:
 
     if not os.path.exists(caminho):
         st.error("Arquivo não encontrado")
-        st.write(caminho)
         st.stop()
 
-    # ========================================================
-    # 📊 LEITURA
-    # ========================================================
-    df = pd.read_excel(caminho)
-
-    # 🔍 DEBUG (REMOVE DEPOIS)
-    st.write("Colunas do Excel:", df.columns.tolist())
-
-    # ========================================================
-    # 🔒 NORMALIZAÇÃO
-    # ========================================================
-    df.columns = [c.strip().lower() for c in df.columns]
-
-    # ========================================================
-    # 🎯 DETECÇÃO REAL DAS COLUNAS
-    # ========================================================
-    col_mes = next((c for c in df.columns if "mes" in c), None)
-
-    # tenta várias possibilidades reais
-    col_disp = next((c for c in df.columns if "disp" in c), None)
-    col_paradas = next((c for c in df.columns if "parad" in c or "quebra" in c), None)
-
-    if col_mes is None:
-        st.error("Coluna de mês não encontrada")
-        st.stop()
-
-    if col_disp is None:
-        st.error("Coluna de disponibilidade não encontrada")
-        st.stop()
-
-    if col_paradas is None:
-        st.error("Coluna de paradas não encontrada")
-        st.stop()
-
-    # ========================================================
-    # 🧠 PADRONIZAÇÃO
-    # ========================================================
-    df = df.rename(columns={
-        col_mes: "Mes",
-        col_disp: "Disponibilidade",
-        col_paradas: "Paradas"
-    })
-
-    df["Mes"] = df["Mes"].astype(str).str[:3].str.title()
+    df = pd.read_excel(caminho, header=None)
 
     meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     # ========================================================
-    # 🔧 FUNÇÃO PADRÃO
-    # ========================================================
-    def plotar(coluna, titulo, meta, menor_melhor):
-
-        st.subheader(titulo)
-
-        dados = dict(zip(df["Mes"], df[coluna]))
-
-        valores = [dados.get(m, None) for m in meses]
-        validos = [v for v in valores if pd.notna(v)]
-
-        media = sum(validos)/len(validos) if validos else None
-
-        df_plot = pd.DataFrame({
-            "Mês": meses,
-            "Valor": valores
-        })
-
-        df_plot = pd.concat([
-            df_plot,
-            pd.DataFrame([{"Mês": "ACM", "Valor": media}])
-        ])
-
-        df_plot["Label"] = df_plot["Valor"].apply(
-            lambda x: "" if pd.isna(x) else f"{x:.1f}%"
-        )
-
-        fig = px.bar(
-            df_plot,
-            x="Mês",
-            y="Valor",
-            text="Label"
-        )
-
-        fig.update_traces(textposition="outside")
-
-        fig.add_hline(
-            y=meta,
-            line_dash="dash",
-            line_color="red",
-            annotation_text=f"Meta {meta}%"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        # ISO
-        if len(validos) >= 3:
-            ultimos = validos[-3:]
-
-            if menor_melhor:
-                fora = all(v > meta for v in ultimos)
-            else:
-                fora = all(v < meta for v in ultimos)
-
-            if fora:
-                st.error("🚨 Fora da meta (3 meses)")
-            else:
-                st.success("Sob controle")
-
-        st.divider()
-
-    # ========================================================
-    # 📊 INDICADORES
+    # 🔍 EXTRAÇÃO (BASEADO NO SEU FORMATO)
     # ========================================================
 
-    plotar("Disponibilidade", "⚙️ Disponibilidade (%)", 90, False)
-    plotar("Paradas", "🚨 Paradas Não Planejadas (%)", 5, True)
+    linhas = df.values.tolist()
+
+    def extrair_linha(nome):
+        for i, linha in enumerate(linhas):
+            if isinstance(linha[0], str) and nome.lower() in linha[0].lower():
+                return linhas[i+1][-12:]
+        return [0]*12
+
+    corretiva_np = extrair_linha("corretiva não programada")
+    corretiva_p  = extrair_linha("corretiva programada")
+    preventiva   = extrair_linha("preventiva")
+    preditiva    = extrair_linha("preditiva")
+    melhoria     = extrair_linha("melhoria")
+
+    meta_valores = extrair_linha("0,5")
+
+    # ========================================================
+    # 📊 CONSOLIDAÇÃO
+    # ========================================================
+
+    total = [
+        (corretiva_np[i] or 0) +
+        (corretiva_p[i] or 0) +
+        (preventiva[i] or 0) +
+        (preditiva[i] or 0) +
+        (melhoria[i] or 0)
+        for i in range(12)
+    ]
+
+    df_plot = pd.DataFrame({
+        "Mês": meses,
+        "Custo": total,
+        "Meta": meta_valores
+    })
+
+    # ========================================================
+    # 📊 GRÁFICO
+    # ========================================================
+
+    fig = px.bar(
+        df_plot,
+        x="Mês",
+        y="Custo",
+        text=df_plot["Custo"].apply(lambda x: f"R$ {x:,.0f}")
+    )
+
+    fig.update_traces(textposition="outside")
+
+    # linha de meta
+    fig.add_scatter(
+        x=df_plot["Mês"],
+        y=df_plot["Meta"],
+        mode="lines+markers",
+        name="Meta"
+    )
+
+    fig.update_layout(
+        yaxis_title="R$",
+        height=500
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ========================================================
+    # 📊 KPI DO MÊS
+    # ========================================================
+
+    ultimo_valor = next((v for v in reversed(total) if v > 0), 0)
+    ultima_meta = next((v for v in reversed(meta_valores) if v > 0), 0)
+
+    c1, c2 = st.columns(2)
+
+    c1.metric("💸 Custo Atual", f"R$ {ultimo_valor:,.0f}")
+
+    status = "🟢 OK" if ultimo_valor <= ultima_meta else "🔴 Acima da Meta"
+    c2.metric("Status", status)
