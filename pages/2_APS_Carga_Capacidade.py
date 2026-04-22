@@ -784,23 +784,6 @@ if "df" not in locals() or df is None:
 df_operacional = df_original.copy()
 
 
-# ============================================================
-# 🔒 COMPARTILHAMENTO DE DADOS ENTRE MÓDULOS (APS → INDICADORES)
-# ============================================================
-
-try:
-    # 🔹 df principal (APS)
-    if isinstance(df, pd.DataFrame) and not df.empty:
-        st.session_state["df"] = df.copy()
-
-    # 🔹 df operacional
-    if isinstance(df_operacional, pd.DataFrame) and not df_operacional.empty:
-        st.session_state["df_operacional"] = df_operacional.copy()
-
-except Exception as e:
-    st.warning(f"Erro ao compartilhar dados com outros módulos: {e}")
-
-
 
 # --------------------------------------------
 # FUNÇÃO DE NORMALIZAÇÃO (CORRIGIDA)
@@ -4747,15 +4730,11 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
 
 # ============================================================
-# 🔒 COMPARTILHAR BASE FINAL REAL DO APS
+# 🔒 ENVIO OFICIAL DO APS (ÚNICO PONTO)
 # ============================================================
 
-try:
-    st.session_state["df"] = df.copy()
+st.session_state["df"] = df.copy()
 
-    # DEBUG (TEMPORÁRIO)
-    st.write("DEBUG APS → df enviado:")
-    st.write(df.columns.tolist())
-
-except Exception as e:
-    st.error(f"Erro ao compartilhar base: {e}")
+# DEBUG (pode remover depois)
+st.write("DEBUG APS → df enviado:")
+st.write(df.columns.tolist())
