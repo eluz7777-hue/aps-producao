@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
 
 # ============================================================
-# 🔒 BASE APS (PROTEGIDA E ÚNICA)
+# 🔒 BASE APS (ÚNICA E PROTEGIDA)
 # ============================================================
 
 df_raw = st.session_state.get("df", pd.DataFrame())
@@ -14,18 +13,10 @@ df_raw = st.session_state.get("df", pd.DataFrame())
 if df_raw is None or not isinstance(df_raw, pd.DataFrame):
     df_raw = pd.DataFrame()
 
-# 🔒 BASE OFICIAL
 df_aps = df_raw.copy()
 
 # ============================================================
-# 🔍 DEBUG
-# ============================================================
-
-st.write("DEBUG INDICADORES → df recebido:")
-st.write(df_aps.columns.tolist())
-
-# ============================================================
-# 🚦 VISÃO GERAL (CORRETA)
+# 🚦 VISÃO GERAL
 # ============================================================
 
 st.subheader("🚦 Saúde da Fábrica")
@@ -33,9 +24,8 @@ st.subheader("🚦 Saúde da Fábrica")
 pct_atraso = 0
 
 required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
-missing = [c for c in required_cols if c not in df_aps.columns]
 
-if not df_aps.empty and not missing:
+if not df_aps.empty and all(c in df_aps.columns for c in required_cols):
 
     base = df_aps.copy()
 
@@ -65,12 +55,8 @@ def classificar(valor):
         return "🟢 Controlado"
 
 c1, c2 = st.columns(2)
-
 c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
 c2.metric("Status Produção", classificar(pct_atraso))
-
-if df_aps.empty:
-    st.info("Abra o APS para habilitar indicadores de produção.")
 
 st.divider()
 
@@ -90,277 +76,12 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 # ============================================================
-# 💰 COMERCIAL
-# ============================================================
-
-with tab1:
-
-    st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
-    META = 0.25
-
-    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    dados = {"Jan":0.1463,"Fev":0.1282,"Mar":0.1875}
-
-    vals = [dados.get(m,None) for m in meses]
-    validos = [v for v in vals if v is not None]
-    media = sum(validos)/len(validos) if validos else None
-
-    df_plot = pd.DataFrame({"Mês":meses,"Valor":vals})
-    df_plot = pd.concat([df_plot, pd.DataFrame([{"Mês":"ACM","Valor":media}])])
-
-    df_plot["Valor"] *= 100
-    df_plot["Label"] = df_plot["Valor"].apply(lambda x: "" if pd.isna(x) else f"{x:.1f}%")
-
-    fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
-    fig.add_hline(y=META*100, line_dash="dash", line_color="red")
-    fig.update_traces(textposition="outside")
-
-    st.plotly_chart(fig, use_container_width=True)
-
-# ============================================================
-# 🧪 QUALIDADE
-# ============================================================
-
-with tab2:
-
-    st.header("🧪 Indicadores de Qualidade")
-
-    def indicador(nome, meta, dados):
-
-        meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-        vals = [dados.get(m,None) for m in meses]
-        validos = [v for v in vals if v is not None]
-        media = sum(validos)/len(validos) if validos else None
-
-        df_plot = pd.DataFrame({"Mês":meses,"Valor":vals})
-        df_plot = pd.concat([df_plot, pd.DataFrame([{"Mês":"ACM","Valor":media}])])
-
-        df_plot["Valor"] *= 100
-        df_plot["Label"] = df_plot["Valor"].apply(lambda x: "" if pd.isna(x) else f"{x:.1f}%")
-
-        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
-        fig.add_hline(y=meta*100, line_dash="dash", line_color="red")
-        fig.update_traces(textposition="outside")
-
-        st.subheader(nome)
-        st.plotly_chart(fig, use_container_width=True)
-        st.divider()
-
-    indicador("NC Externas (%)",0.02,{"Jan":0.012,"Fev":0.018,"Mar":0.015})
-    indicador("Refugo (%)",0.03,{"Jan":0.025,"Fev":0.028,"Mar":0.031})
-    indicador("Retrabalho (%)",0.05,{"Jan":0.04,"Fev":0.045,"Mar":0.052})
-
-
-# ============================================================
-# 🏭 PRODUÇÃO (DEFINITIVO — SEM SOBRESCRITA)
-# ============================================================
-
-with tab3:
-
-    st.header("🏭 Indicadores de Produção")
-
-    # 🔒 validação REAL
-    required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
-
-    missing = [c for c in required_cols if c not in df_aps.columns]
-
-    if df_aps.empty or missing:
-        st.error("Base APS corrompida (foi sobrescrita em algum ponto).")
-        st.write("Colunas atuais:", df_aps.columns.tolist())
-        st.stop()
-
-    base = df_aps.copy()
-
-    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
-    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
-
-    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
-
-    pv = base.groupby("PV", as_index=False).agg(
-        Data_real=("Data", "max"),
-        Data_planejada=("DATA_ENTREGA_APS", "min")
-    )
-
-    pv["Atraso_dias"] = (
-        pv["Data_real"] - pv["Data_planejada"]
-    ).dt.days.fillna(0)
-
-    total = len(pv)
-    atrasadas = pv[pv["Atraso_dias"] > 0]
-    pct = (len(atrasadas) / total * 100) if total > 0 else 0
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
-    c2.metric("📦 PVs Atrasadas", len(atrasadas))
-    c3.metric("📦 Total PVs", total)
-
-    st.divider()
-
-    pv["Mes"] = pv["Data_planejada"].dt.month
-
-    resumo = pv.groupby("Mes").agg(
-        Total=("PV","count"),
-        Atrasadas=("Atraso_dias", lambda x: (x > 0).sum())
-    ).reset_index()
-
-    resumo["Pct"] = (resumo["Atrasadas"]/resumo["Total"]*100)
-
-    meses = pd.DataFrame({"Mes": list(range(1,13))})
-    resumo = meses.merge(resumo, on="Mes", how="left")
-    resumo["Pct"] = resumo["Pct"].fillna(0)
-
-    nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x: nomes[x-1])
-
-    resumo["Label"] = resumo["Pct"].apply(lambda x: f"{x:.1f}%")
-
-    fig = px.bar(resumo, x="Mes_nome", y="Pct", text="Label")
-
-    fig.update_traces(textposition="outside")
-
-    fig.update_layout(
-        title="Atraso por Mês (%)",
-        yaxis_title="% Atraso"
-    )
-
-    fig.add_hline(y=5, line_dash="dash", line_color="red")
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-
-# ============================================================
-# 💰 COMERCIAL
-# ============================================================
-
-with tab1:
-
-    st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
-    st.caption("Meta: ≥ 25%")
-
-    ANO = "2026"
-    META = 0.25
-
-    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    indicador = {
-        "Jan": 0.1463,
-        "Fev": 0.1282,
-        "Mar": 0.1875,
-    }
-
-    valores = [indicador.get(m, None) for m in meses_ordem]
-    valores_validos = [v for v in valores if v is not None]
-
-    media = sum(valores_validos)/len(valores_validos) if valores_validos else None
-
-    df_plot = pd.DataFrame({"Mês": meses_ordem, "Valor": valores})
-    df_plot = pd.concat([df_plot, pd.DataFrame([{"Mês":"ACM","Valor":media}])])
-
-    df_plot["Valor"] = df_plot["Valor"] * 100
-
-    def label(row):
-        if pd.isna(row["Valor"]):
-            return ""
-        return f"{row['Valor']:.1f}%" if row["Mês"]=="ACM" else f"{row['Valor']:.0f}%"
-
-    df_plot["Label"] = df_plot.apply(label, axis=1)
-
-    fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
-
-    fig.add_hline(
-        y=META*100,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Meta"
-    )
-
-    max_val = df_plot["Valor"].max()
-
-    fig.update_yaxes(range=[0, max(max_val*1.2, META*100*1.2)], tickformat=".0f")
-
-    fig.update_traces(textposition="outside")
-
-    st.plotly_chart(fig, use_container_width=True)
-
-# ============================================================
-# 🧪 QUALIDADE
-# ============================================================
-
-with tab2:
-
-    st.header("🧪 Indicadores de Qualidade")
-
-    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    def indicador_padrao(titulo, meta, dados, percentual=True):
-
-        st.subheader(titulo)
-
-        valores = [dados.get(m, None) for m in meses_ordem]
-        valores_validos = [v for v in valores if v is not None]
-
-        media = sum(valores_validos)/len(valores_validos) if valores_validos else None
-
-        df_plot = pd.DataFrame({"Mês": meses_ordem, "Valor": valores})
-        df_plot = pd.concat([df_plot, pd.DataFrame([{"Mês":"ACM","Valor":media}])])
-
-        if percentual:
-            df_plot["Valor"] = df_plot["Valor"] * 100
-            meta_plot = meta * 100
-        else:
-            meta_plot = meta
-
-        def label(row):
-            if pd.isna(row["Valor"]):
-                return ""
-            return f"{row['Valor']:.1f}%"
-
-        df_plot["Label"] = df_plot.apply(label, axis=1)
-
-        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
-
-        fig.add_hline(
-            y=meta_plot,
-            line_dash="dash",
-            line_color="red",
-            annotation_text="Meta"
-        )
-
-        max_val = df_plot["Valor"].max()
-
-        fig.update_yaxes(range=[0, max(max_val*1.2, meta_plot*1.2)], tickformat=".1f")
-
-        fig.update_traces(textposition="outside")
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.divider()
-
-    indicador_padrao("🧪 NC Externas (%)", 0.02,
-                    {"Jan":0.012,"Fev":0.018,"Mar":0.015})
-
-    indicador_padrao("♻️ Refugo (%)", 0.03,
-                    {"Jan":0.025,"Fev":0.028,"Mar":0.031})
-
-    indicador_padrao("🔧 Retrabalho (%)", 0.05,
-                    {"Jan":0.04,"Fev":0.045,"Mar":0.052})
-
-
-
-
-# ============================================================
-# 💰 COMERCIAL (INDICADOR ESTRATÉGICO COMPLETO - PADRÃO FINAL)
+# 💰 COMERCIAL — COMPLETO (ISO + EVIDÊNCIA + KPI + REGRA)
 # ============================================================
 
 with tab1:
 
     import os
-    import pandas as pd
-    import streamlit as st
-    import plotly.express as px
 
     st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
     st.caption("Meta: ≥ 25%")
@@ -377,9 +98,6 @@ with tab1:
         "Mar": {"valor": 0.1875, "arquivo": "INDC. COMERCIAL - MARÇO.docx"},
     }
 
-    # ========================================================
-    # 📅 ORDEM FIXA DOS MESES
-    # ========================================================
     meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     valores = []
@@ -397,35 +115,19 @@ with tab1:
     # 📊 MÉDIA ACUMULADA (ACM)
     # ========================================================
     valores_validos = [v for v in valores if v is not None]
-
     media_acm = sum(valores_validos) / len(valores_validos) if valores_validos else None
 
-    # ========================================================
-    # 📊 DATAFRAME BASE
-    # ========================================================
-    df = pd.DataFrame({
+    df_plot = pd.DataFrame({
         "Mês": meses_ordem,
         "Valor": valores
     })
 
-    df = pd.concat([
-        df,
+    df_plot = pd.concat([
+        df_plot,
         pd.DataFrame([{"Mês": "ACM", "Valor": media_acm}])
     ], ignore_index=True)
 
-    # ========================================================
-    # 📊 PREPARAÇÃO PARA GRÁFICO
-    # ========================================================
-    df_plot = df.copy()
     df_plot["Valor"] = df_plot["Valor"] * 100
-
-    df_meses = df_plot[df_plot["Mês"] != "ACM"].copy()
-    df_acm = df_plot[df_plot["Mês"] == "ACM"].copy()
-
-    df_meses["Mês"] = pd.Categorical(df_meses["Mês"], categories=meses_ordem, ordered=True)
-    df_meses = df_meses.sort_values("Mês")
-
-    df_plot = pd.concat([df_meses, df_acm])
 
     # ========================================================
     # 🏷️ RÓTULOS
@@ -451,7 +153,6 @@ with tab1:
 
     fig.update_traces(textposition="outside")
 
-    # 🔥 LINHA DE META
     fig.add_hline(
         y=META * 100,
         line_dash="dash",
@@ -460,7 +161,6 @@ with tab1:
         annotation_position="top left"
     )
 
-    # 🔥 ESCALA CORRIGIDA (SEM NEGATIVO)
     max_val = df_plot["Valor"].max()
 
     fig.update_yaxes(
@@ -471,7 +171,6 @@ with tab1:
     fig.update_layout(
         title=f"📊 Desempenho Comercial - {ANO}",
         yaxis_title="% Conversão",
-        xaxis_title="",
         showlegend=False,
         height=500
     )
@@ -538,26 +237,21 @@ with tab1:
 
 
 
-
 # ============================================================
-# 🧪 QUALIDADE — PAINEL COMPLETO COM LINHA DE META
+# 🧪 QUALIDADE — COMPLETO (ISO + % + R$ + META + ACM)
 # ============================================================
 
 with tab2:
 
-    import pandas as pd
-    import plotly.express as px
-    import streamlit as st
-
     st.header("🧪 Indicadores de Qualidade")
 
     ANO = "2026"
+
     meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
-    # ============================================================
-    # 🔧 FUNÇÃO PADRÃO COM LINHA DE META
-    # ============================================================
-
+    # ========================================================
+    # 🔧 FUNÇÃO PADRÃO (ROBUSTA E SEGURA)
+    # ========================================================
     def montar_indicador(titulo, meta, dados, tipo="percentual", menor_melhor=True):
 
         st.subheader(titulo)
@@ -567,38 +261,67 @@ with tab2:
 
         media = sum(valores_validos)/len(valores_validos) if valores_validos else None
 
-        df = pd.DataFrame({"Mês": meses_ordem, "Valor": valores})
-        df = pd.concat([df, pd.DataFrame([{"Mês": "ACM", "Valor": media}])])
+        df_plot = pd.DataFrame({
+            "Mês": meses_ordem,
+            "Valor": valores
+        })
 
-        df_plot = df.copy()
+        df_plot = pd.concat([
+            df_plot,
+            pd.DataFrame([{"Mês": "ACM", "Valor": media}])
+        ], ignore_index=True)
 
+        # ====================================================
+        # 📊 TRATAMENTO POR TIPO
+        # ====================================================
         if tipo == "percentual":
             df_plot["Valor"] = df_plot["Valor"] * 100
             meta_plot = meta * 100
         else:
             meta_plot = meta
 
+        # ====================================================
+        # 📊 ORDENAÇÃO (ACM SEMPRE NO FINAL)
+        # ====================================================
         df_meses = df_plot[df_plot["Mês"] != "ACM"].copy()
         df_acm = df_plot[df_plot["Mês"] == "ACM"].copy()
 
-        df_meses["Mês"] = pd.Categorical(df_meses["Mês"], categories=meses_ordem, ordered=True)
-        df_meses = df_meses.sort_values("Mês")
+        df_meses["Mês"] = pd.Categorical(
+            df_meses["Mês"],
+            categories=meses_ordem,
+            ordered=True
+        )
 
+        df_meses = df_meses.sort_values("Mês")
         df_plot = pd.concat([df_meses, df_acm])
 
+        # ====================================================
+        # 🏷️ RÓTULOS
+        # ====================================================
         def label(row):
             if pd.isna(row["Valor"]):
                 return ""
+
             if tipo == "percentual":
-                return f"{row['Valor']:.1f}%" if row["Mês"] == "ACM" else f"{row['Valor']:.0f}%"
+                return f"{row['Valor']:.1f}%"
             elif tipo == "valor":
                 return f"R$ {row['Valor']:.1f}" if row["Mês"] == "ACM" else f"R$ {row['Valor']:.0f}"
             else:
-                return f"{row['Valor']:.0f}"
+                return f"{row['Valor']:.1f}"
 
         df_plot["Label"] = df_plot.apply(label, axis=1)
 
-        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
+        # ====================================================
+        # 📊 GRÁFICO
+        # ====================================================
+        fig = px.bar(
+            df_plot,
+            x="Mês",
+            y="Valor",
+            text="Label"
+        )
+
+        fig.update_traces(textposition="outside")
 
         # 🔥 LINHA DE META
         fig.add_hline(
@@ -609,14 +332,13 @@ with tab2:
             annotation_position="top left"
         )
 
+        # 🔥 ESCALA CORRETA (SEM NEGATIVO)
         max_val = df_plot["Valor"].max()
 
         fig.update_yaxes(
-            tickformat=".0f",
-            range=[0, max(max_val * 1.2, meta_plot * 1.2)]
+            range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, meta_plot * 1.2)],
+            tickformat=".1f"
         )
-
-        fig.update_traces(textposition="outside")
 
         fig.update_layout(
             title=f"{titulo} - {ANO}",
@@ -626,172 +348,119 @@ with tab2:
 
         st.plotly_chart(fig, use_container_width=True)
 
+        # ====================================================
+        # 🚨 REGRA ISO (3 MESES FORA DA META)
+        # ====================================================
+        if len(valores_validos) >= 3:
+            ultimos_3 = valores_validos[-3:]
+
+            if menor_melhor:
+                fora_meta = all(v > meta for v in ultimos_3)
+            else:
+                fora_meta = all(v < meta for v in ultimos_3)
+
+            if fora_meta:
+                st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
+            else:
+                st.success("Indicador sob controle recente")
+
         st.divider()
 
-    # ============================================================
+    # ========================================================
     # 📊 INDICADORES
-    # ============================================================
+    # ========================================================
 
-    montar_indicador("🧪 NC Externas (%)", 0.02,
-                     {"Jan": 0.012, "Fev": 0.018, "Mar": 0.015})
+    montar_indicador(
+        "🧪 NC Externas (%)",
+        0.02,
+        {"Jan":0.012,"Fev":0.018,"Mar":0.015},
+        tipo="percentual",
+        menor_melhor=True
+    )
 
-    montar_indicador("💰 Custo Total de NC (R$)", 15000,
-                     {"Jan": 12000, "Fev": 18000, "Mar": 14000},
-                     tipo="valor")
+    montar_indicador(
+        "💰 Custo Total de NC (R$)",
+        15000,
+        {"Jan":12000,"Fev":18000,"Mar":14000},
+        tipo="valor",
+        menor_melhor=True
+    )
 
-    montar_indicador("♻️ Refugo (%)", 0.03,
-                     {"Jan": 0.025, "Fev": 0.028, "Mar": 0.031})
+    montar_indicador(
+        "♻️ Refugo (%)",
+        0.03,
+        {"Jan":0.025,"Fev":0.028,"Mar":0.031},
+        tipo="percentual",
+        menor_melhor=True
+    )
 
-    montar_indicador("🔧 Retrabalho (%)", 0.05,
-                     {"Jan": 0.04, "Fev": 0.045, "Mar": 0.052})
-
+    montar_indicador(
+        "🔧 Retrabalho (%)",
+        0.05,
+        {"Jan":0.04,"Fev":0.045,"Mar":0.052},
+        tipo="percentual",
+        menor_melhor=True
+    )
 
 
 
 # ============================================================
-# 🏭 PRODUÇÃO — DEFINITIVO E ROBUSTO (SEM ERRO)
+# 🏭 PRODUÇÃO (FINAL CORRETO)
 # ============================================================
 
 with tab3:
 
-    st.subheader("🏭 Produção (Indicadores Estratégicos)")
+    st.header("🏭 Indicadores de Produção")
 
-    base = df.copy()
-
-    # ========================================================
-    # 🔒 VALIDAÇÃO REAL
-    # ========================================================
-    required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
-
-    missing = [c for c in required_cols if c not in base.columns]
-
-    if missing:
-        st.error(f"Colunas faltando: {missing}")
-        st.write("Colunas atuais:", list(base.columns))
+    if df_aps.empty or not all(c in df_aps.columns for c in ["PV","Data","DATA_ENTREGA_APS"]):
+        st.error("Base APS não carregada corretamente")
         st.stop()
 
-    # ========================================================
-    # 🔧 LIMPEZA DE DADOS
-    # ========================================================
+    base = df_aps.copy()
+
     base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
     base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
-    # remove linhas inválidas
-    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+    base = base.dropna(subset=["Data","DATA_ENTREGA_APS"])
 
-    if base.empty:
-        st.warning("Sem dados válidos após tratamento.")
-        st.stop()
-
-    # ========================================================
-    # 📦 CONSOLIDAÇÃO POR PV
-    # ========================================================
     pv = base.groupby("PV", as_index=False).agg(
-        Data_real=("Data", "max"),
-        Data_planejada=("DATA_ENTREGA_APS", "min")
+        Data_real=("Data","max"),
+        Data_planejada=("DATA_ENTREGA_APS","min")
     )
 
-    # ========================================================
-    # ⏱️ CÁLCULO DE ATRASO
-    # ========================================================
-    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days
+    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days.fillna(0)
 
-    pv["Atraso_dias"] = pv["Atraso_dias"].fillna(0)
-
-    # ========================================================
-    # 📊 KPIs
-    # ========================================================
     total = len(pv)
     atrasadas = pv[pv["Atraso_dias"] > 0]
+    pct = (len(atrasadas)/total*100) if total else 0
 
-    pct = (len(atrasadas) / total * 100) if total > 0 else 0
-
-    c1, c2, c3 = st.columns(3)
-
+    c1,c2,c3 = st.columns(3)
     c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
     c2.metric("📦 PVs Atrasadas", len(atrasadas))
     c3.metric("📦 Total PVs", total)
 
     st.divider()
 
-    # ========================================================
-    # 📅 AGRUPAMENTO POR MÊS
-    # ========================================================
     pv["Mes"] = pv["Data_planejada"].dt.month
 
     resumo = pv.groupby("Mes").agg(
-        Total=("PV", "count"),
-        Atrasadas=("Atraso_dias", lambda x: (x > 0).sum())
+        Total=("PV","count"),
+        Atrasadas=("Atraso_dias", lambda x:(x>0).sum())
     ).reset_index()
 
-    resumo["Pct"] = (resumo["Atrasadas"] / resumo["Total"] * 100).round(1)
+    resumo["Pct"] = (resumo["Atrasadas"]/resumo["Total"]*100)
 
-    # garante meses 1–12
-    meses = pd.DataFrame({"Mes": list(range(1, 13))})
-    resumo = meses.merge(resumo, on="Mes", how="left")
-
+    meses_df = pd.DataFrame({"Mes":list(range(1,13))})
+    resumo = meses_df.merge(resumo,on="Mes",how="left")
     resumo["Pct"] = resumo["Pct"].fillna(0)
 
     nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x: nomes[x-1])
+    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x:nomes[x-1])
 
-    # ========================================================
-    # 📊 GRÁFICO
-    # ========================================================
-    import plotly.graph_objects as go
+    resumo["Label"] = resumo["Pct"].apply(lambda x:f"{x:.1f}%")
 
-    META = 5
-
-    fig = go.Figure()
-
-    fig.add_bar(
-        x=resumo["Mes_nome"],
-        y=resumo["Pct"],
-        text=resumo["Pct"].astype(str) + "%",
-        textposition="outside"
-    )
-
-    fig.add_hline(y=META, line_dash="dash", annotation_text=f"Meta {META}%")
-
-    fig.update_layout(
-        title="Atraso por Mês (%)",
-        yaxis_title="% Atraso"
-    )
+    fig = px.bar(resumo, x="Mes_nome", y="Pct", text="Label")
+    fig.add_hline(y=5, line_dash="dash", line_color="red")
+    fig.update_traces(textposition="outside")
 
     st.plotly_chart(fig, use_container_width=True)
-
-    # ========================================================
-    # 🚨 REGRA ISO
-    # ========================================================
-    ultimos = resumo["Pct"].tail(3)
-
-    if len(ultimos) == 3 and all(v > META for v in ultimos):
-        st.error("🚨 3 meses consecutivos acima da meta — ação necessária")
-
-
-# ============================================================
-# 🔧 MANUTENÇÃO
-# ============================================================
-
-with tab4:
-    st.subheader("🔧 Indicadores de Manutenção")
-
-    st.info("➡️ Aqui entra: custo manutenção, preventiva vs corretiva")
-
-# ============================================================
-# 📦 FORNECEDORES
-# ============================================================
-
-with tab5:
-    st.subheader("📦 Compras / Fornecedores")
-
-    st.info("➡️ Aqui entra: atraso fornecedor, qualidade fornecedor")
-
-# ============================================================
-# 👷 RH
-# ============================================================
-
-with tab6:
-    st.subheader("👷 Indicadores de RH")
-
-    st.info("➡️ Aqui entra: absenteísmo, treinamento, horas extras")
