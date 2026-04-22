@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL DEFINITIVO (ESCALA CORRIGIDA)
+# 🔧 MANUTENÇÃO — BARRAS LADO A LADO + TOTAL + META
 # ============================================================
 
 with tab4:
@@ -570,7 +570,7 @@ with tab4:
     df.columns = [str(c).strip() for c in df.columns]
 
     # ========================================================
-    # 🔍 COLUNAS (PADRÃO DO SEU EXCEL)
+    # 🔍 COLUNAS
     # ========================================================
     col_mes   = "Mês"
     col_fat   = "Faturamento Mensal"
@@ -596,7 +596,7 @@ with tab4:
         df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL E META (CALCULADA NO SISTEMA)
+    # 📊 TOTAL E META
     # ========================================================
     df["Total"] = (
         df[col_np] +
@@ -606,38 +606,58 @@ with tab4:
         df[col_melh]
     )
 
-    # 🔥 META CORRETA (0,5% do faturamento)
     df["Meta"] = df[col_fat] * 0.005
 
     # ========================================================
-    # 📊 ESCALA CORRETA (BASEADA NO CUSTO)
+    # 📊 ESCALA
     # ========================================================
     max_custo = df["Total"].max()
     limite_y = max_custo * 1.25 if max_custo > 0 else 1
 
     # ========================================================
-    # 📊 GRÁFICO
+    # 📊 GRÁFICO (BARRAS LADO A LADO)
     # ========================================================
     fig = go.Figure()
 
-    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
-    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+    def moeda(v):
+        return f"R$ {v:,.0f}".replace(",", ".")
 
+    # BARRAS INDIVIDUAIS
+    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np],
+                text=[moeda(v) for v in df[col_np]], textposition="outside")
+
+    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp],
+                text=[moeda(v) for v in df[col_cp]], textposition="outside")
+
+    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev],
+                text=[moeda(v) for v in df[col_prev]], textposition="outside")
+
+    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred],
+                text=[moeda(v) for v in df[col_pred]], textposition="outside")
+
+    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh],
+                text=[moeda(v) for v in df[col_melh]], textposition="outside")
+
+    # TOTAL
+    fig.add_bar(name="Total", x=df[col_mes], y=df["Total"],
+                text=[moeda(v) for v in df["Total"]],
+                textposition="outside",
+                marker=dict(line=dict(width=2)))
+
+    # META (LINHA)
     fig.add_scatter(
         name="Meta (0,5%)",
         x=df[col_mes],
         y=df["Meta"],
-        mode="lines+markers",
-        line=dict(color="red", dash="dash", width=3),
-        opacity=0.7
+        mode="lines+markers+text",
+        text=[moeda(v) for v in df["Meta"]],
+        textposition="top center",
+        line=dict(color="red", dash="dash", width=3)
     )
 
     fig.update_layout(
-        barmode="stack",
-        height=520,
+        barmode="group",  # 🔥 LADO A LADO
+        height=550,
         yaxis=dict(range=[0, limite_y]),
         yaxis_title="R$",
         xaxis_title="Mês",
@@ -647,7 +667,7 @@ with tab4:
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI FINAL
+    # 📊 KPI
     # ========================================================
     ultimo = df["Total"].iloc[-1]
     meta_atual = df["Meta"].iloc[-1]
@@ -658,6 +678,5 @@ with tab4:
     status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
 
     c1, c2 = st.columns(2)
-
     c1.metric("💸 Custo Atual", formatar(ultimo))
     c2.metric("Status", status)
