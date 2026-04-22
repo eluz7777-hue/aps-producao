@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BASE LIMPA (VERSÃO FINAL)
+# 🔧 MANUTENÇÃO — BLOCO FINAL ROBUSTO (SEM ERRO DE COLUNA)
 # ============================================================
 
 with tab4:
@@ -557,6 +557,9 @@ with tab4:
 
     st.header("🔧 Custo de Manutenção")
 
+    # ========================================================
+    # 📂 CAMINHO
+    # ========================================================
     caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
 
     if not os.path.exists(caminho):
@@ -567,22 +570,43 @@ with tab4:
     # 📊 LEITURA
     # ========================================================
     df = pd.read_excel(caminho)
+    df.columns = [str(c).strip() for c in df.columns]
 
-    df.columns = [c.strip() for c in df.columns]
-
-    # ========================================================
-    # 🎯 COLUNAS (AGORA DIRETAS)
-    # ========================================================
-    col_mes = "Mes"
-    col_np = "Corretiva_NP"
-    col_cp = "Corretiva_P"
-    col_prev = "Preventiva"
-    col_pred = "Preditiva"
-    col_melh = "Melhoria"
-    col_fat = "Faturamento"
+    # DEBUG (deixe por enquanto)
+    st.write("Colunas encontradas:", df.columns.tolist())
 
     # ========================================================
-    # 🧹 LIMPEZA
+    # 🔍 MAPEAMENTO INTELIGENTE
+    # ========================================================
+    cols = {c.lower(): c for c in df.columns}
+
+    def encontrar(nome):
+        return next((cols[c] for c in cols if nome in c), None)
+
+    col_mes = encontrar("mes")
+    col_np = encontrar("nao program")
+    col_cp = encontrar("programada")
+    col_prev = encontrar("preventiva")
+    col_pred = encontrar("preditiva")
+    col_melh = encontrar("melhoria")
+    col_fat = encontrar("fatur")
+
+    st.write("Mapeamento:", {
+        "mes": col_mes,
+        "np": col_np,
+        "cp": col_cp,
+        "prev": col_prev,
+        "pred": col_pred,
+        "melh": col_melh,
+        "fat": col_fat
+    })
+
+    if not col_mes or not col_np or not col_cp:
+        st.error("Não consegui identificar as colunas obrigatórias")
+        st.stop()
+
+    # ========================================================
+    # 🧹 LIMPEZA NUMÉRICA (PADRÃO BR)
     # ========================================================
     def limpar(v):
         if pd.isna(v):
@@ -595,23 +619,27 @@ with tab4:
             return 0
 
     for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_fat]:
-        df[col] = df[col].apply(limpar)
+        if col:
+            df[col] = df[col].apply(limpar)
 
     # ========================================================
     # 📊 TOTAL + META
     # ========================================================
     df["Total"] = (
-        df[col_np] +
-        df[col_cp] +
-        df[col_prev] +
-        df[col_pred] +
-        df[col_melh]
+        (df[col_np] if col_np else 0) +
+        (df[col_cp] if col_cp else 0) +
+        (df[col_prev] if col_prev else 0) +
+        (df[col_pred] if col_pred else 0) +
+        (df[col_melh] if col_melh else 0)
     )
 
-    df["Meta"] = df[col_fat] * 0.005
+    if col_fat:
+        df["Meta"] = df[col_fat] * 0.005
+    else:
+        df["Meta"] = 0
 
     # ========================================================
-    # 📊 FORMATAÇÃO
+    # 📊 FORMATAÇÃO BR
     # ========================================================
     def formatar(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -621,11 +649,20 @@ with tab4:
     # ========================================================
     fig = go.Figure()
 
-    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
-    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+    if col_np:
+        fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
+
+    if col_cp:
+        fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
+
+    if col_prev:
+        fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+
+    if col_pred:
+        fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+
+    if col_melh:
+        fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
 
     fig.add_scatter(
         name="Meta (0,5%)",
@@ -638,13 +675,14 @@ with tab4:
     fig.update_layout(
         barmode="stack",
         yaxis_title="R$",
+        xaxis_title="Mês",
         height=500
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI FINAL
+    # 📊 KPI
     # ========================================================
     ultimo = df["Total"].iloc[-1]
     meta_atual = df["Meta"].iloc[-1]
@@ -653,5 +691,5 @@ with tab4:
 
     c1.metric("💸 Custo Atual", formatar(ultimo))
 
-    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
+    status = "🟢 OK" if meta_atual > 0 and ultimo <= meta_atual else "🔴 Acima da Meta"
     c2.metric("Status", status)
