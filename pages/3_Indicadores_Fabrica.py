@@ -417,9 +417,6 @@ with tab3:
         st.warning("Abra o APS para visualizar os indicadores de produção.")
         st.stop()
 
-    # ========================================================
-    # 🔒 BASE SEGURA
-    # ========================================================
     base = df_aps.copy()
 
     required_cols = ["PV", "DATA_ENTREGA_APS"]
@@ -436,9 +433,6 @@ with tab3:
 
     hoje = pd.Timestamp.today().normalize()
 
-    # ========================================================
-    # 📦 AGRUPAMENTO POR PV
-    # ========================================================
     pv = base.groupby("PV", as_index=False).agg(
         data_entrega=("DATA_ENTREGA_APS", "min")
     )
@@ -446,22 +440,18 @@ with tab3:
     pv = pv.dropna(subset=["data_entrega"])
 
     # ========================================================
-    # 🚨 REGRA DE ATRASO (TEMPO REAL)
+    # 🚨 ATRASO
     # ========================================================
     pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
     pv["Atrasada"] = pv["Atraso_dias"] > 0
 
-    # ========================================================
-    # 📊 KPIs
-    # ========================================================
-    total = len(pv)
-    atrasadas = pv[pv["Atrasada"]]
+    atrasadas = pv[pv["Atrasada"]].copy()
 
+    total = len(pv)
     qtd_atrasadas = len(atrasadas)
     pct = (qtd_atrasadas / total * 100) if total > 0 else 0
 
     c1, c2, c3 = st.columns(3)
-
     c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
     c2.metric("📦 PVs Atrasadas", qtd_atrasadas)
     c3.metric("📦 Total PVs", total)
@@ -469,44 +459,60 @@ with tab3:
     st.divider()
 
     # ========================================================
-    # 🔥 TOP ATRASOS (AÇÃO GERENCIAL)
+    # 📊 DISTRIBUIÇÃO POR FAIXAS (NOVO PADRÃO)
     # ========================================================
-    st.subheader("📊 PVs mais atrasadas")
+    st.subheader("📊 Distribuição do atraso por faixa (dias)")
 
     if qtd_atrasadas > 0:
 
-        top = atrasadas.sort_values("Atraso_dias", ascending=False).copy()
+        # 🔥 criação das faixas
+        bins = list(range(0, int(atrasadas["Atraso_dias"].max()) + 3, 2))
 
-        top["Atraso_dias"] = top["Atraso_dias"].astype(int)
+        labels = [
+            f"{bins[i]+1}-{bins[i+1]}"
+            for i in range(len(bins)-1)
+        ]
 
-        st.dataframe(
-            top[["PV", "data_entrega", "Atraso_dias"]],
-            use_container_width=True
+        atrasadas["Faixa"] = pd.cut(
+            atrasadas["Atraso_dias"],
+            bins=bins,
+            labels=labels,
+            right=True
         )
 
-    else:
-        st.success("Nenhuma PV em atraso no momento")
-
-    # ========================================================
-    # 📌 DISTRIBUIÇÃO DE ATRASO (OPCIONAL, MAS MUITO ÚTIL)
-    # ========================================================
-    st.subheader("📈 Distribuição do atraso (dias)")
-
-    if qtd_atrasadas > 0:
-
-        fig = px.histogram(
-            atrasadas,
-            x="Atraso_dias",
-            nbins=20
+        resumo = (
+            atrasadas.groupby("Faixa")
+            .size()
+            .reset_index(name="Quantidade")
         )
+
+        resumo = resumo.sort_values("Faixa")
+
+        # ====================================================
+        # 🎨 COR GRADIENTE (gravidade)
+        # ====================================================
+        resumo["Ordem"] = range(len(resumo))
+
+        fig = px.bar(
+            resumo,
+            x="Faixa",
+            y="Quantidade",
+            color="Ordem",
+            color_continuous_scale="Reds",
+            text="Quantidade"
+        )
+
+        fig.update_traces(textposition="outside")
 
         fig.update_layout(
-            xaxis_title="Dias de atraso",
+            title="Distribuição de Atraso (Dias)",
+            xaxis_title="Faixa de atraso (dias)",
             yaxis_title="Quantidade de PVs",
-            height=400
+            coloraxis_showscale=False,
+            height=500
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.info("Sem dados de atraso para distribuição")
+        st.success("Nenhuma PV em atraso no momento")        st.info("Sem dados de atraso para distribuição")
