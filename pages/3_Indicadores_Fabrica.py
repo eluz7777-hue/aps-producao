@@ -242,7 +242,7 @@ with tab1:
 
 
 # ============================================================
-# 🧪 QUALIDADE — PAINEL COMPLETO (PADRÃO GLOBAL)
+# 🧪 QUALIDADE — PAINEL COMPLETO FINAL (TODOS INDICADORES)
 # ============================================================
 
 with tab2:
@@ -257,13 +257,19 @@ with tab2:
     meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     # ============================================================
-    # 🔧 FUNÇÃO PADRÃO (REUTILIZÁVEL)
+    # 🔧 FUNÇÃO PADRÃO GLOBAL
     # ============================================================
 
-    def montar_indicador(titulo, meta, dados, tipo="percentual", menor_melhor=True, unidade=""):
+    def montar_indicador(titulo, meta, dados, tipo="percentual", menor_melhor=True):
 
         st.subheader(titulo)
-        st.caption(f"Meta: {unidade}{meta*100:.0f}%" if tipo=="percentual" else f"Meta: R$ {meta:,.0f}")
+
+        if tipo == "percentual":
+            st.caption(f"Meta: ≤ {meta*100:.0f}%")
+        elif tipo == "valor":
+            st.caption(f"Meta: ≤ R$ {meta:,.0f}")
+        else:
+            st.caption(f"Meta: ≤ {meta}")
 
         valores = [dados.get(m, None) for m in meses_ordem]
         valores_validos = [v for v in valores if v is not None]
@@ -290,8 +296,19 @@ with tab2:
             if pd.isna(row["Valor"]):
                 return ""
             if row["Mês"] == "ACM":
-                return f"{row['Valor']:.1f}%" if tipo=="percentual" else f"R$ {row['Valor']:.1f}"
-            return f"{row['Valor']:.0f}%" if tipo=="percentual" else f"R$ {row['Valor']:.0f}"
+                if tipo == "percentual":
+                    return f"{row['Valor']:.1f}%"
+                elif tipo == "valor":
+                    return f"R$ {row['Valor']:.1f}"
+                else:
+                    return f"{row['Valor']:.1f}"
+            else:
+                if tipo == "percentual":
+                    return f"{row['Valor']:.0f}%"
+                elif tipo == "valor":
+                    return f"R$ {row['Valor']:.0f}"
+                else:
+                    return f"{row['Valor']:.0f}"
 
         df_plot["Label"] = df_plot.apply(label, axis=1)
 
@@ -314,6 +331,7 @@ with tab2:
 
         st.plotly_chart(fig, use_container_width=True)
 
+        # KPI
         if valores_validos:
             ultimo = valores_validos[-1]
             gap = ultimo - meta
@@ -324,22 +342,26 @@ with tab2:
                 c1.metric("Resultado", f"{ultimo*100:.0f}%")
                 c2.metric("Meta", f"{meta*100:.0f}%")
                 c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
-            else:
+            elif tipo == "valor":
                 c1.metric("Resultado", f"R$ {ultimo:,.0f}")
                 c2.metric("Meta", f"R$ {meta:,.0f}")
                 c3.metric("Desvio", f"R$ {gap:,.0f}", delta_color="inverse")
+            else:
+                c1.metric("Resultado", f"{ultimo:.0f}")
+                c2.metric("Meta", f"{meta:.0f}")
+                c3.metric("Desvio", f"{gap:.0f}", delta_color="inverse")
 
             if menor_melhor:
-                if ultimo <= meta:
-                    st.success("🟢 Dentro da meta")
-                else:
-                    st.error("🔴 Fora da meta")
+                status = ultimo <= meta
             else:
-                if ultimo >= meta:
-                    st.success("🟢 Dentro da meta")
-                else:
-                    st.error("🔴 Fora da meta")
+                status = ultimo >= meta
 
+            if status:
+                st.success("🟢 Dentro da meta")
+            else:
+                st.error("🔴 Fora da meta")
+
+        # REGRA ISO
         if len(valores_validos) >= 3:
             ultimos_3 = valores_validos[-3:]
 
@@ -356,41 +378,37 @@ with tab2:
         st.divider()
 
     # ============================================================
-    # 📊 INDICADORES
+    # 📊 TODOS OS INDICADORES
     # ============================================================
 
-    montar_indicador(
-        "🧪 NC Externas (%)",
-        0.02,
-        {"Jan": 0.012, "Fev": 0.018, "Mar": 0.015},
-        tipo="percentual",
-        menor_melhor=True
-    )
+    montar_indicador("🧪 NC Externas (%)", 0.02,
+                     {"Jan": 0.012, "Fev": 0.018, "Mar": 0.015})
 
-    montar_indicador(
-        "💰 Custo Total de NC (R$)",
-        15000,
-        {"Jan": 12000, "Fev": 18000, "Mar": 14000},
-        tipo="valor",
-        menor_melhor=True
-    )
+    montar_indicador("💰 Custo Total de NC (R$)", 15000,
+                     {"Jan": 12000, "Fev": 18000, "Mar": 14000},
+                     tipo="valor")
 
-    montar_indicador(
-        "♻️ Refugo (%)",
-        0.03,
-        {"Jan": 0.025, "Fev": 0.028, "Mar": 0.031},
-        tipo="percentual",
-        menor_melhor=True
-    )
+    montar_indicador("♻️ Refugo (%)", 0.03,
+                     {"Jan": 0.025, "Fev": 0.028, "Mar": 0.031})
 
-    montar_indicador(
-        "🔧 Retrabalho (%)",
-        0.05,
-        {"Jan": 0.04, "Fev": 0.045, "Mar": 0.052},
-        tipo="percentual",
-        menor_melhor=True
-    )
+    montar_indicador("🔧 Retrabalho (%)", 0.05,
+                     {"Jan": 0.04, "Fev": 0.045, "Mar": 0.052})
 
+    montar_indicador("📦 NC Internas (nº)", 50,
+                     {"Jan": 40, "Fev": 55, "Mar": 48},
+                     tipo="numero")
+
+    montar_indicador("🚨 NC Externas (nº peças)", 20,
+                     {"Jan": 12, "Fev": 18, "Mar": 22},
+                     tipo="numero")
+
+    montar_indicador("💸 Refugo (R$)", 8000,
+                     {"Jan": 6000, "Fev": 7500, "Mar": 8200},
+                     tipo="valor")
+
+    montar_indicador("🔧 Retrabalho (R$)", 10000,
+                     {"Jan": 9000, "Fev": 11000, "Mar": 9500},
+                     tipo="valor")
 
 
 
