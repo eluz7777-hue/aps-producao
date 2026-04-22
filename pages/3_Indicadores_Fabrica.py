@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BARRAS LADO A LADO + TOTAL + META
+# 🔧 MANUTENÇÃO — BLOCO FINAL COM REGRA ISO (CORRETO)
 # ============================================================
 
 with tab4:
@@ -581,12 +581,14 @@ with tab4:
     col_melh  = "Melhoria de Máquinas"
 
     # ========================================================
-    # 🧹 LIMPEZA
+    # 🧹 LIMPEZA FORTE (GARANTE VALOR REAL)
     # ========================================================
     def limpar(v):
         if pd.isna(v):
             return 0
-        v = str(v).replace("R$", "").replace(".", "").replace(",", ".")
+        v = str(v)
+        v = v.replace("R$", "").replace(" ", "")
+        v = v.replace(".", "").replace(",", ".")
         try:
             return float(v)
         except:
@@ -596,7 +598,7 @@ with tab4:
         df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL E META
+    # 📊 TOTAL E META (REGRA ISO)
     # ========================================================
     df["Total"] = (
         df[col_np] +
@@ -606,23 +608,29 @@ with tab4:
         df[col_melh]
     )
 
+    # 🔥 META CORRETA ISO (0,5% DO FATURAMENTO)
     df["Meta"] = df[col_fat] * 0.005
 
     # ========================================================
-    # 📊 ESCALA
+    # 🚨 VALIDAÇÃO ISO
+    # ========================================================
+    df["Status_ISO"] = df["Total"] <= df["Meta"]
+
+    # ========================================================
+    # 📊 ESCALA (BASEADA NO TOTAL REAL)
     # ========================================================
     max_custo = df["Total"].max()
     limite_y = max_custo * 1.25 if max_custo > 0 else 1
 
     # ========================================================
-    # 📊 GRÁFICO (BARRAS LADO A LADO)
+    # 📊 GRÁFICO (LADO A LADO)
     # ========================================================
     fig = go.Figure()
 
     def moeda(v):
         return f"R$ {v:,.0f}".replace(",", ".")
 
-    # BARRAS INDIVIDUAIS
+    # BARRAS
     fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np],
                 text=[moeda(v) for v in df[col_np]], textposition="outside")
 
@@ -638,13 +646,19 @@ with tab4:
     fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh],
                 text=[moeda(v) for v in df[col_melh]], textposition="outside")
 
-    # TOTAL
-    fig.add_bar(name="Total", x=df[col_mes], y=df["Total"],
-                text=[moeda(v) for v in df["Total"]],
-                textposition="outside",
-                marker=dict(line=dict(width=2)))
+    # TOTAL (COM COR ISO)
+    cores_total = ["green" if ok else "red" for ok in df["Status_ISO"]]
 
-    # META (LINHA)
+    fig.add_bar(
+        name="Total",
+        x=df[col_mes],
+        y=df["Total"],
+        text=[moeda(v) for v in df["Total"]],
+        textposition="outside",
+        marker_color=cores_total
+    )
+
+    # META
     fig.add_scatter(
         name="Meta (0,5%)",
         x=df[col_mes],
@@ -656,7 +670,7 @@ with tab4:
     )
 
     fig.update_layout(
-        barmode="group",  # 🔥 LADO A LADO
+        barmode="group",
         height=550,
         yaxis=dict(range=[0, limite_y]),
         yaxis_title="R$",
@@ -667,16 +681,15 @@ with tab4:
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI
+    # 📊 KPI FINAL
     # ========================================================
-    ultimo = df["Total"].iloc[-1]
-    meta_atual = df["Meta"].iloc[-1]
+    ultimo = df.iloc[-1]
 
     def formatar(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
+    status = "🟢 OK" if ultimo["Total"] <= ultimo["Meta"] else "🔴 ACIMA DA META"
 
     c1, c2 = st.columns(2)
-    c1.metric("💸 Custo Atual", formatar(ultimo))
-    c2.metric("Status", status)
+    c1.metric("💸 Custo Atual", formatar(ultimo["Total"]))
+    c2.metric("Status ISO", status)
