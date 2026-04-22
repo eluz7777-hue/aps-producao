@@ -4743,3 +4743,19 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
     else:
         st.info("Não há carga para o processo selecionado.")
+
+
+
+# ============================================================
+# 🔒 COMPARTILHAR BASE FINAL REAL DO APS
+# ============================================================
+
+try:
+    st.session_state["df"] = df.copy()
+
+    # DEBUG (TEMPORÁRIO)
+    st.write("DEBUG APS → df enviado:")
+    st.write(df.columns.tolist())
+
+except Exception as e:
+    st.error(f"Erro ao compartilhar base: {e}")

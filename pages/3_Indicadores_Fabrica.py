@@ -1,3 +1,6 @@
+st.write("DEBUG INDICADORES → df recebido:")
+st.write(df.columns.tolist())
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
