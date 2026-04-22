@@ -472,7 +472,7 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO — INDICADORES APS (CORRIGIDO)
+# 🏭 PRODUÇÃO — INDICADORES APS (ROBUSTO)
 # ============================================================
 
 with tab3:
@@ -490,40 +490,71 @@ with tab3:
     base = df.copy()
 
     # ========================================================
-    # 🔧 CORREÇÕES DE BASE (CRÍTICO)
+    # 🔍 NORMALIZAÇÃO DE COLUNAS
     # ========================================================
 
-    # garantir numérico
-    base["Dias para Entrega"] = pd.to_numeric(
-        base.get("Dias para Entrega", 0),
-        errors="coerce"
-    )
+    base.columns = base.columns.str.strip()
 
-    # garantir data
-    base["ENTREGA"] = pd.to_datetime(
-        base.get("ENTREGA"),
-        errors="coerce"
-    )
+    # detectar coluna PV automaticamente
+    col_pv = None
+    for c in base.columns:
+        if c.lower() in ["pv", "num_pv", "ordem", "pedido"]:
+            col_pv = c
+            break
 
-    # remover linhas inválidas
-    base = base.dropna(subset=["ENTREGA"])
+    if col_pv is None:
+        st.error("Coluna de PV não encontrada na base.")
+        st.write("Colunas disponíveis:", list(base.columns))
+        st.stop()
+
+    # detectar coluna dias
+    col_dias = None
+    for c in base.columns:
+        if "dias" in c.lower():
+            col_dias = c
+            break
+
+    if col_dias is None:
+        st.error("Coluna 'Dias para Entrega' não encontrada.")
+        st.stop()
+
+    # detectar entrega
+    col_entrega = None
+    for c in base.columns:
+        if "entrega" in c.lower():
+            col_entrega = c
+            break
+
+    if col_entrega is None:
+        st.error("Coluna ENTREGA não encontrada.")
+        st.stop()
 
     # ========================================================
-    # 🔥 AGRUPAR POR PV (ESSENCIAL)
+    # 🔧 TRATAMENTO
     # ========================================================
 
-    pv_base = base.groupby("PV", as_index=False).agg(
-        ENTREGA=("ENTREGA", "max"),
-        Dias_para_Entrega=("Dias para Entrega", "min")  # pega pior cenário
+    base[col_dias] = pd.to_numeric(base[col_dias], errors="coerce")
+    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
+
+    base = base.dropna(subset=[col_entrega])
+
+    # ========================================================
+    # 🔥 AGRUPAMENTO POR PV (CORRETO)
+    # ========================================================
+
+    pv_base = base.groupby(col_pv, as_index=False).agg(
+        ENTREGA=(col_entrega, "max"),
+        DIAS=(col_dias, "min")
     )
 
-    # atraso real
-    pv_base["Atrasado"] = pv_base["Dias_para_Entrega"] < 0
+    pv_base["Atrasado"] = pv_base["DIAS"] < 0
 
-    # mês
+    # ========================================================
+    # 📅 MÊS
+    # ========================================================
+
     pv_base["Mes"] = pv_base["ENTREGA"].dt.month
 
-    # mapa mês
     mapa = {
         1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
         7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"
@@ -532,11 +563,11 @@ with tab3:
     pv_base["Mes"] = pv_base["Mes"].map(mapa)
 
     # ========================================================
-    # 📊 AGRUPAMENTO FINAL
+    # 📊 RESUMO
     # ========================================================
 
     resumo = pv_base.groupby("Mes").agg(
-        Total_PVs=("PV", "count"),
+        Total_PVs=(col_pv, "count"),
         Atrasados=("Atrasado", "sum")
     ).reset_index()
 
@@ -548,7 +579,7 @@ with tab3:
     resumo = resumo.sort_values("Mes")
 
     # ========================================================
-    # 🥇 ATRASO (%)
+    # 🚨 ATRASO
     # ========================================================
 
     st.subheader("🚨 Atraso (%)")
@@ -559,43 +590,16 @@ with tab3:
 
     fig = px.bar(resumo, x="Mes", y="Atraso_%", text="Label")
 
-    fig.add_hline(
-        y=META_ATRASO,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Meta"
-    )
-
-    max_val = resumo["Atraso_%"].max()
-
-    fig.update_yaxes(
-        range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, META_ATRASO * 1.2)],
-        tickformat=".1f"
-    )
+    fig.add_hline(y=META_ATRASO, line_dash="dash", line_color="red")
 
     fig.update_traces(textposition="outside")
 
+    fig.update_yaxes(range=[0, max(resumo["Atraso_%"].max()*1.2, META_ATRASO*1.2)])
+
     st.plotly_chart(fig, use_container_width=True)
 
-    # KPI
-    if not resumo.empty:
-        ultimo = resumo["Atraso_%"].dropna().iloc[-1]
-        gap = ultimo - META_ATRASO
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Atraso", f"{ultimo:.1f}%")
-        c2.metric("Meta", f"{META_ATRASO:.1f}%")
-        c3.metric("Desvio", f"{gap:.1f}%", delta_color="inverse")
-
-        if ultimo <= META_ATRASO:
-            st.success("🟢 Dentro da meta")
-        else:
-            st.error("🔴 Fora da meta")
-
-    st.divider()
-
     # ========================================================
-    # 🥈 NO PRAZO (%)
+    # ✅ NO PRAZO
     # ========================================================
 
     st.subheader("✅ PVs no Prazo (%)")
@@ -606,21 +610,11 @@ with tab3:
 
     fig2 = px.bar(resumo, x="Mes", y="No_Prazo_%", text="Label")
 
-    fig2.add_hline(
-        y=META_PRAZO,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Meta"
-    )
-
-    max_val = resumo["No_Prazo_%"].max()
-
-    fig2.update_yaxes(
-        range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, META_PRAZO * 1.2)],
-        tickformat=".1f"
-    )
+    fig2.add_hline(y=META_PRAZO, line_dash="dash", line_color="red")
 
     fig2.update_traces(textposition="outside")
+
+    fig2.update_yaxes(range=[0, max(resumo["No_Prazo_%"].max()*1.2, META_PRAZO*1.2)])
 
     st.plotly_chart(fig2, use_container_width=True)
 
