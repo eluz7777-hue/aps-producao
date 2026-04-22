@@ -82,7 +82,6 @@ with tab1:
         "Jan": {"valor": 0.1463, "arquivo": "INDC. COMERCIAL - JANEIRO.docx"},
         "Fev": {"valor": 0.1282, "arquivo": "INDI. COMERCIAL - FEVEREIRO.docx"},
         "Mar": {"valor": 0.1875, "arquivo": "INDC. COMERCIAL - MARÇO.docx"},
-        # "Abr": {"valor": 0.22, "arquivo": "INDC. COMERCIAL - ABRIL.docx"},
     }
 
     # ========================================================
@@ -106,10 +105,7 @@ with tab1:
     # ========================================================
     valores_validos = [v for v in valores if v is not None]
 
-    if valores_validos:
-        media_acm = sum(valores_validos) / len(valores_validos)
-    else:
-        media_acm = None
+    media_acm = sum(valores_validos) / len(valores_validos) if valores_validos else None
 
     # ========================================================
     # 📊 DATAFRAME BASE
@@ -119,7 +115,6 @@ with tab1:
         "Valor": valores
     })
 
-    # adiciona ACM
     df = pd.concat([
         df,
         pd.DataFrame([{"Mês": "ACM", "Valor": media_acm}])
@@ -129,21 +124,18 @@ with tab1:
     # 📊 PREPARAÇÃO PARA GRÁFICO
     # ========================================================
     df_plot = df.copy()
-    df_plot["Valor"] = df_plot["Valor"] * 100  # converte para %
+    df_plot["Valor"] = df_plot["Valor"] * 100
 
-    # separar meses e ACM
     df_meses = df_plot[df_plot["Mês"] != "ACM"].copy()
     df_acm = df_plot[df_plot["Mês"] == "ACM"].copy()
 
-    # ordenar meses corretamente
     df_meses["Mês"] = pd.Categorical(df_meses["Mês"], categories=meses_ordem, ordered=True)
     df_meses = df_meses.sort_values("Mês")
 
-    # juntar novamente
     df_plot = pd.concat([df_meses, df_acm])
 
     # ========================================================
-    # 🏷️ RÓTULOS (SEM DECIMAL / ACM COM 1 CASA)
+    # 🏷️ RÓTULOS
     # ========================================================
     def formatar(row):
         if pd.isna(row["Valor"]):
@@ -155,7 +147,7 @@ with tab1:
     df_plot["Label"] = df_plot.apply(formatar, axis=1)
 
     # ========================================================
-    # 📊 GRÁFICO DE COLUNAS PROFISSIONAL
+    # 📊 GRÁFICO
     # ========================================================
     fig = px.bar(
         df_plot,
@@ -164,8 +156,23 @@ with tab1:
         text="Label"
     )
 
-    fig.update_traces(
-        textposition="outside"
+    fig.update_traces(textposition="outside")
+
+    # 🔥 LINHA DE META
+    fig.add_hline(
+        y=META * 100,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Meta",
+        annotation_position="top left"
+    )
+
+    # 🔥 ESCALA CORRIGIDA (SEM NEGATIVO)
+    max_val = df_plot["Valor"].max()
+
+    fig.update_yaxes(
+        tickformat=".0f",
+        range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, META*100*1.2)]
     )
 
     fig.update_layout(
@@ -175,9 +182,6 @@ with tab1:
         showlegend=False,
         height=500
     )
-
-    # eixo Y sem casas decimais
-    fig.update_yaxes(tickformat=".0f")
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -241,15 +245,16 @@ with tab1:
 
 
 
+
 # ============================================================
-# 🧪 QUALIDADE — PAINEL COMPLETO FINAL (TODOS INDICADORES)
+# 🧪 QUALIDADE — PAINEL COMPLETO COM LINHA DE META
 # ============================================================
 
 with tab2:
 
     import pandas as pd
-    import streamlit as st
     import plotly.express as px
+    import streamlit as st
 
     st.header("🧪 Indicadores de Qualidade")
 
@@ -257,19 +262,12 @@ with tab2:
     meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     # ============================================================
-    # 🔧 FUNÇÃO PADRÃO GLOBAL
+    # 🔧 FUNÇÃO PADRÃO COM LINHA DE META
     # ============================================================
 
     def montar_indicador(titulo, meta, dados, tipo="percentual", menor_melhor=True):
 
         st.subheader(titulo)
-
-        if tipo == "percentual":
-            st.caption(f"Meta: ≤ {meta*100:.0f}%")
-        elif tipo == "valor":
-            st.caption(f"Meta: ≤ R$ {meta:,.0f}")
-        else:
-            st.caption(f"Meta: ≤ {meta}")
 
         valores = [dados.get(m, None) for m in meses_ordem]
         valores_validos = [v for v in valores if v is not None]
@@ -277,12 +275,15 @@ with tab2:
         media = sum(valores_validos)/len(valores_validos) if valores_validos else None
 
         df = pd.DataFrame({"Mês": meses_ordem, "Valor": valores})
-        df = pd.concat([df, pd.DataFrame([{"Mês": "ACM", "Valor": media}])], ignore_index=True)
+        df = pd.concat([df, pd.DataFrame([{"Mês": "ACM", "Valor": media}])])
 
         df_plot = df.copy()
 
         if tipo == "percentual":
             df_plot["Valor"] = df_plot["Valor"] * 100
+            meta_plot = meta * 100
+        else:
+            meta_plot = meta
 
         df_meses = df_plot[df_plot["Mês"] != "ACM"].copy()
         df_acm = df_plot[df_plot["Mês"] == "ACM"].copy()
@@ -295,33 +296,34 @@ with tab2:
         def label(row):
             if pd.isna(row["Valor"]):
                 return ""
-            if row["Mês"] == "ACM":
-                if tipo == "percentual":
-                    return f"{row['Valor']:.1f}%"
-                elif tipo == "valor":
-                    return f"R$ {row['Valor']:.1f}"
-                else:
-                    return f"{row['Valor']:.1f}"
+            if tipo == "percentual":
+                return f"{row['Valor']:.1f}%" if row["Mês"] == "ACM" else f"{row['Valor']:.0f}%"
+            elif tipo == "valor":
+                return f"R$ {row['Valor']:.1f}" if row["Mês"] == "ACM" else f"R$ {row['Valor']:.0f}"
             else:
-                if tipo == "percentual":
-                    return f"{row['Valor']:.0f}%"
-                elif tipo == "valor":
-                    return f"R$ {row['Valor']:.0f}"
-                else:
-                    return f"{row['Valor']:.0f}"
+                return f"{row['Valor']:.0f}"
 
         df_plot["Label"] = df_plot.apply(label, axis=1)
 
         fig = px.bar(df_plot, x="Mês", y="Valor", text="Label")
 
-        fig.update_traces(textposition="outside")
+        # 🔥 LINHA DE META
+        fig.add_hline(
+            y=meta_plot,
+            line_dash="dash",
+            line_color="red",
+            annotation_text="Meta",
+            annotation_position="top left"
+        )
 
         max_val = df_plot["Valor"].max()
 
         fig.update_yaxes(
             tickformat=".0f",
-            range=[0, max_val * 1.2 if max_val else 1]
+            range=[0, max(max_val * 1.2, meta_plot * 1.2)]
         )
+
+        fig.update_traces(textposition="outside")
 
         fig.update_layout(
             title=f"{titulo} - {ANO}",
@@ -331,54 +333,10 @@ with tab2:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # KPI
-        if valores_validos:
-            ultimo = valores_validos[-1]
-            gap = ultimo - meta
-
-            c1, c2, c3 = st.columns(3)
-
-            if tipo == "percentual":
-                c1.metric("Resultado", f"{ultimo*100:.0f}%")
-                c2.metric("Meta", f"{meta*100:.0f}%")
-                c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
-            elif tipo == "valor":
-                c1.metric("Resultado", f"R$ {ultimo:,.0f}")
-                c2.metric("Meta", f"R$ {meta:,.0f}")
-                c3.metric("Desvio", f"R$ {gap:,.0f}", delta_color="inverse")
-            else:
-                c1.metric("Resultado", f"{ultimo:.0f}")
-                c2.metric("Meta", f"{meta:.0f}")
-                c3.metric("Desvio", f"{gap:.0f}", delta_color="inverse")
-
-            if menor_melhor:
-                status = ultimo <= meta
-            else:
-                status = ultimo >= meta
-
-            if status:
-                st.success("🟢 Dentro da meta")
-            else:
-                st.error("🔴 Fora da meta")
-
-        # REGRA ISO
-        if len(valores_validos) >= 3:
-            ultimos_3 = valores_validos[-3:]
-
-            if menor_melhor:
-                cond = all(v > meta for v in ultimos_3)
-            else:
-                cond = all(v < meta for v in ultimos_3)
-
-            if cond:
-                st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
-            else:
-                st.success("Indicador sob controle recente")
-
         st.divider()
 
     # ============================================================
-    # 📊 TODOS OS INDICADORES
+    # 📊 INDICADORES
     # ============================================================
 
     montar_indicador("🧪 NC Externas (%)", 0.02,
@@ -393,23 +351,6 @@ with tab2:
 
     montar_indicador("🔧 Retrabalho (%)", 0.05,
                      {"Jan": 0.04, "Fev": 0.045, "Mar": 0.052})
-
-    montar_indicador("📦 NC Internas (nº)", 50,
-                     {"Jan": 40, "Fev": 55, "Mar": 48},
-                     tipo="numero")
-
-    montar_indicador("🚨 NC Externas (nº peças)", 20,
-                     {"Jan": 12, "Fev": 18, "Mar": 22},
-                     tipo="numero")
-
-    montar_indicador("💸 Refugo (R$)", 8000,
-                     {"Jan": 6000, "Fev": 7500, "Mar": 8200},
-                     tipo="valor")
-
-    montar_indicador("🔧 Retrabalho (R$)", 10000,
-                     {"Jan": 9000, "Fev": 11000, "Mar": 9500},
-                     tipo="valor")
-
 
 
 # ============================================================
