@@ -8,15 +8,19 @@ st.title("📊 Indicadores da Fábrica")
 st.caption("Painel estratégico alinhado à ISO 9001")
 
 # ============================================================
-# 🔒 BASE APS
+# 🔒 BASE APS (APENAS PARA INDICADORES) — CORRETO
 # ============================================================
 
 df = st.session_state.get("df", pd.DataFrame())
 
+if df is None or not isinstance(df, pd.DataFrame):
+    df = pd.DataFrame()
+
+df_base = df.copy()
+
 # ============================================================
 # 🚦 VISÃO GERAL
 # ============================================================
-
 st.subheader("🚦 Saúde da Fábrica")
 
 pct_atraso = 0
@@ -602,123 +606,171 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO — ROBUSTO (SEM ERRO DE COLUNA)
+# 🏭 PRODUÇÃO (INDICADORES ESTRATÉGICOS - APS REAL)
 # ============================================================
 
 with tab3:
 
-    st.header("🏭 Indicadores de Produção")
+    st.subheader("🏭 Produção (Indicadores Estratégicos)")
 
-    if df.empty:
-        st.warning("Abra o APS primeiro para carregar os dados.")
+    df_base = st.session_state.get("df", pd.DataFrame()).copy()
+
+    # ========================================================
+    # 🔒 VALIDAÇÃO FORTE DA BASE
+    # ========================================================
+    if df_base.empty:
+        st.error("Base APS não carregada.")
         st.stop()
 
-    base = df.copy()
-    base.columns = base.columns.str.strip()
+    colunas_necessarias = ["PV", "DATA_ENTREGA_APS", "Data"]
 
-    # ========================================================
-    # 🔍 DETECÇÃO INTELIGENTE DE COLUNAS
-    # ========================================================
+    faltantes = [c for c in colunas_necessarias if c not in df_base.columns]
 
-    def encontrar_coluna(lista_nomes):
-        for nome in base.columns:
-            nome_lower = nome.lower()
-            for ref in lista_nomes:
-                if ref in nome_lower:
-                    return nome
-        return None
-
-    col_pv = encontrar_coluna(["pv", "pedido", "ordem"])
-    col_entrega = encontrar_coluna(["entrega"])
-    col_dias = encontrar_coluna(["dias", "atraso"])
-
-    # debug amigável
-    if col_pv is None or col_entrega is None or col_dias is None:
-        st.error("Não foi possível identificar as colunas necessárias.")
-        st.write("Colunas disponíveis:", list(base.columns))
+    if faltantes:
+        st.error(f"Colunas obrigatórias não encontradas: {faltantes}")
+        st.write("Colunas disponíveis:", df_base.columns.tolist())
         st.stop()
 
     # ========================================================
-    # 🔧 TRATAMENTO
+    # 📅 TRATAMENTO DE DATAS
     # ========================================================
+    df_base["DATA_ENTREGA_APS"] = pd.to_datetime(df_base["DATA_ENTREGA_APS"], errors="coerce")
+    df_base["Data"] = pd.to_datetime(df_base["Data"], errors="coerce")
 
-    base[col_dias] = pd.to_numeric(base[col_dias], errors="coerce")
-    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
-
-    base = base.dropna(subset=[col_entrega])
+    # Remove lixo
+    df_base = df_base.dropna(subset=["DATA_ENTREGA_APS", "Data"])
 
     # ========================================================
-    # 🔥 AGRUPAMENTO POR PV
+    # 📦 CONSOLIDAÇÃO POR PV (CRÍTICO)
     # ========================================================
-
-    pv_base = base.groupby(col_pv, as_index=False).agg(
-        ENTREGA=(col_entrega, "max"),
-        DIAS=(col_dias, "min")
+    pv_base = (
+        df_base.groupby("PV", as_index=False)
+        .agg({
+            "DATA_ENTREGA_APS": "min",
+            "Data": "max"
+        })
     )
 
-    pv_base["Atrasado"] = pv_base["DIAS"] < 0
+    # ========================================================
+    # ⏱️ CÁLCULO DE ATRASO REAL
+    # ========================================================
+    pv_base["Atraso (dias)"] = (
+        pv_base["Data"] - pv_base["DATA_ENTREGA_APS"]
+    ).dt.days
+
+    pv_base["Atraso (dias)"] = pd.to_numeric(
+        pv_base["Atraso (dias)"], errors="coerce"
+    ).fillna(0)
 
     # ========================================================
-    # 📅 MÊS
+    # 🚨 INDICADOR PRINCIPAL
     # ========================================================
+    total_pvs = len(pv_base)
 
-    pv_base["Mes"] = pv_base["ENTREGA"].dt.month
+    atrasados = pv_base[pv_base["Atraso (dias)"] > 0]
 
-    mapa = {
-        1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
-        7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"
-    }
-
-    pv_base["Mes"] = pv_base["Mes"].map(mapa)
+    pct_atraso = (len(atrasados) / total_pvs * 100) if total_pvs > 0 else 0
 
     # ========================================================
-    # 📊 RESUMO
+    # 📊 MÉTRICAS
     # ========================================================
+    c1, c2, c3 = st.columns(3)
 
-    resumo = pv_base.groupby("Mes").agg(
-        Total=("Mes","count"),
-        Atrasados=("Atrasado","sum")
-    ).reset_index()
+    c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
+    c2.metric("📦 PVs Atrasadas", len(atrasados))
+    c3.metric("📦 Total de PVs", total_pvs)
 
-    resumo["Atraso_%"] = (resumo["Atrasados"] / resumo["Total"]) * 100
-    resumo["No_Prazo_%"] = 100 - resumo["Atraso_%"]
-
-    # ordenar meses
-    ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-    resumo["Mes"] = pd.Categorical(resumo["Mes"], categories=ordem, ordered=True)
-    resumo = resumo.sort_values("Mes")
+    st.divider()
 
     # ========================================================
-    # 🚨 ATRASO
+    # 📊 GRÁFICO (PADRÃO COLUNA + META)
     # ========================================================
+    df_plot = pv_base.copy()
 
-    st.subheader("🚨 Atraso (%)")
+    df_plot["Mês"] = df_plot["DATA_ENTREGA_APS"].dt.month
 
-    resumo["Label"] = resumo["Atraso_%"].apply(lambda x: f"{x:.1f}%")
+    resumo_mes = (
+        df_plot.groupby("Mês", as_index=False)
+        .agg({"Atraso (dias)": lambda x: (x > 0).sum()})
+    )
 
-    fig = px.bar(resumo, x="Mes", y="Atraso_%", text="Label")
+    total_mes = (
+        df_plot.groupby("Mês")["PV"]
+        .count()
+        .reset_index(name="Total")
+    )
 
-    fig.add_hline(y=5, line_dash="dash", line_color="red")
+    resumo_mes = resumo_mes.merge(total_mes, on="Mês")
 
-    fig.update_traces(textposition="outside")
+    resumo_mes["% Atraso"] = (
+        resumo_mes["Atraso (dias)"] / resumo_mes["Total"] * 100
+    )
+
+    resumo_mes["% Atraso"] = resumo_mes["% Atraso"].round(1)
+
+    # ========================================================
+    # 📅 ORDEM FIXA DOS MESES
+    # ========================================================
+    meses_ordem = list(range(1, 13))
+
+    df_full = pd.DataFrame({"Mês": meses_ordem})
+
+    resumo_mes = df_full.merge(resumo_mes, on="Mês", how="left")
+
+    resumo_mes["% Atraso"] = resumo_mes["% Atraso"].fillna(0)
+
+    # ========================================================
+    # 🎯 META
+    # ========================================================
+    META = 5  # exemplo (5%)
+
+    # ========================================================
+    # 📈 GRÁFICO
+    # ========================================================
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+
+    fig.add_bar(
+        x=resumo_mes["Mês"],
+        y=resumo_mes["% Atraso"],
+        text=resumo_mes["% Atraso"].astype(str) + "%",
+        textposition="outside",
+        name="Atraso"
+    )
+
+    fig.add_hline(
+        y=META,
+        line_dash="dash",
+        annotation_text=f"Meta ({META}%)"
+    )
+
+    fig.update_layout(
+        title="Atraso por Mês (%)",
+        xaxis=dict(
+            tickmode="array",
+            tickvals=meses_ordem,
+            ticktext=[
+                "Jan","Fev","Mar","Abr","Mai","Jun",
+                "Jul","Ago","Set","Out","Nov","Dez"
+            ]
+        ),
+        yaxis_title="% Atraso"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # ✅ NO PRAZO
+    # 🚨 REGRA ISO (3 MESES FORA)
     # ========================================================
+    valores = resumo_mes["% Atraso"].tolist()
 
-    st.subheader("✅ PVs no Prazo (%)")
+    if len(valores) >= 3:
+        ultimos = valores[-3:]
 
-    resumo["Label"] = resumo["No_Prazo_%"].apply(lambda x: f"{x:.1f}%")
+        if all(v > META for v in ultimos):
+            st.error("🚨 3 meses consecutivos acima da meta — abrir plano de ação")
 
-    fig2 = px.bar(resumo, x="Mes", y="No_Prazo_%", text="Label")
-
-    fig2.add_hline(y=95, line_dash="dash", line_color="red")
-
-    fig2.update_traces(textposition="outside")
-
-    st.plotly_chart(fig2, use_container_width=True)
 
 
 # ============================================================
