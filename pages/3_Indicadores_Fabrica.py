@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO LIMPO FINAL (SEM DEBUG)
+# 🔧 MANUTENÇÃO — VERSÃO FINAL À PROVA DE ERRO
 # ============================================================
 
 with tab4:
@@ -560,27 +560,47 @@ with tab4:
     caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
 
     if not os.path.exists(caminho):
-        st.error("Arquivo de manutenção não encontrado")
+        st.error("Arquivo não encontrado")
         st.stop()
 
-    # 🔥 leitura direta (excel já está correto)
     df = pd.read_excel(caminho)
 
-    df.columns = [str(c).strip() for c in df.columns]
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO DE COLUNAS (ACABA COM O PROBLEMA)
+    # ========================================================
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace("ç", "c")
+        .str.replace("ã", "a")
+        .str.replace("á", "a")
+        .str.replace("é", "e")
+        .str.replace("í", "i")
+        .str.replace("ó", "o")
+        .str.replace("ú", "u")
+    )
+
+    # DEBUG CONTROLADO (só 1 linha útil)
+    st.write("Colunas normalizadas:", df.columns.tolist())
 
     # ========================================================
-    # 🔍 COLUNAS FIXAS (BASE NOVA)
+    # 🔍 MAPEAMENTO FLEXÍVEL
     # ========================================================
-    try:
-        col_mes = "Mês"
-        col_np = "Corretiva não programada"
-        col_cp = "Corretiva programada"
-        col_prev = "Preventiva"
-        col_pred = "Preditiva"
-        col_melh = "Melhoria de Máquinas"
-        col_meta = "0,5% do Faturamento Bruto Mensal"
-    except:
-        st.error("Estrutura do Excel inválida")
+    def col(nome):
+        return next((c for c in df.columns if nome in c), None)
+
+    col_mes  = col("mes")
+    col_np   = col("nao programada")
+    col_cp   = col("programada")
+    col_prev = col("preventiva")
+    col_pred = col("preditiva")
+    col_melh = col("melhoria")
+    col_meta = col("0,5") or col("faturamento")
+
+    if not col_mes or not col_np or not col_cp:
+        st.error("Não consegui mapear as colunas automaticamente")
         st.stop()
 
     # ========================================================
@@ -595,22 +615,22 @@ with tab4:
         except:
             return 0
 
-    for col in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
-        if col in df.columns:
-            df[col] = df[col].apply(limpar)
+    for c in [col_np, col_cp, col_prev, col_pred, col_melh, col_meta]:
+        if c:
+            df[c] = df[c].apply(limpar)
 
     # ========================================================
     # 📊 TOTAL
     # ========================================================
-    df["Total"] = (
+    df["total"] = (
         df[col_np] +
         df[col_cp] +
-        df[col_prev] +
-        df[col_pred] +
-        df[col_melh]
+        (df[col_prev] if col_prev else 0) +
+        (df[col_pred] if col_pred else 0) +
+        (df[col_melh] if col_melh else 0)
     )
 
-    df["Meta"] = df[col_meta]
+    df["meta"] = df[col_meta] if col_meta else 0
 
     # ========================================================
     # 📊 GRÁFICO
@@ -619,32 +639,33 @@ with tab4:
 
     fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
     fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+
+    if col_prev:
+        fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+
+    if col_pred:
+        fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+
+    if col_melh:
+        fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
 
     fig.add_scatter(
-        name="Meta (0,5%)",
+        name="Meta",
         x=df[col_mes],
-        y=df["Meta"],
+        y=df["meta"],
         mode="lines+markers",
         line=dict(color="red", dash="dash")
     )
 
-    fig.update_layout(
-        barmode="stack",
-        height=500,
-        yaxis_title="R$",
-        xaxis_title="Mês"
-    )
+    fig.update_layout(barmode="stack", height=500)
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
     # 📊 KPI
     # ========================================================
-    ultimo = df["Total"].iloc[-1]
-    meta_atual = df["Meta"].iloc[-1]
+    ultimo = df["total"].iloc[-1]
+    meta_atual = df["meta"].iloc[-1]
 
     def formatar(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -652,6 +673,4 @@ with tab4:
     c1, c2 = st.columns(2)
 
     c1.metric("💸 Custo Atual", formatar(ultimo))
-
-    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
-    c2.metric("Status", status)
+    c2.metric("Status", "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta")
