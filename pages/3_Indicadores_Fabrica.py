@@ -613,33 +613,42 @@ with tab4:
 
     df["Meta"] = df[col_meta]
 
-    # ========================================================
-    # 📊 GRÁFICO
-    # ========================================================
-    fig = go.Figure()
+   
 
-    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
-    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+# ========================================================
+# 📊 GRÁFICO COM ESCALA CORRETA
+# ========================================================
 
-    fig.add_scatter(
-        name="Meta (0,5%)",
-        x=df[col_mes],
-        y=df["Meta"],
-        mode="lines+markers",
-        line=dict(color="red", dash="dash")
-    )
+max_custo = df["Total"].max()
+max_meta = df["Meta"].max()
 
-    fig.update_layout(
-        barmode="stack",
-        height=500,
-        yaxis_title="R$",
-        xaxis_title="Mês"
-    )
+limite_y = max(max_custo, max_meta) * 1.15  # margem de 15%
 
-    st.plotly_chart(fig, use_container_width=True)
+fig = go.Figure()
+
+fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
+fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
+fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+
+fig.add_scatter(
+    name="Meta (0,5%)",
+    x=df[col_mes],
+    y=df["Meta"],
+    mode="lines+markers",
+    line=dict(color="red", dash="dash")
+)
+
+fig.update_layout(
+    barmode="stack",
+    height=500,
+    yaxis=dict(range=[0, limite_y]),
+    yaxis_title="R$",
+    xaxis_title="Mês"
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
     # 📊 KPI
