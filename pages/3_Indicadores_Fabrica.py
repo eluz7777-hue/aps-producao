@@ -152,37 +152,68 @@ with tab2:
     indicador_q("Retrabalho (%)", 0.05, {"Jan":0.04,"Fev":0.045,"Mar":0.052})
 
 # ============================================================
-# 🏭 PRODUÇÃO (APS REAL)
+# 🏭 PRODUÇÃO (CORRIGIDO — SEM ERRO DE COLUNA)
 # ============================================================
 
 with tab3:
 
     st.header("🏭 Indicadores de Produção")
 
+    if df.empty:
+        st.warning("Abra o APS primeiro para carregar os dados.")
+        st.stop()
+
     base = df.copy()
+    base.columns = base.columns.str.strip()
 
-    base["Dias para Entrega"] = pd.to_numeric(base["Dias para Entrega"], errors="coerce")
-    base["ENTREGA"] = pd.to_datetime(base["ENTREGA"], errors="coerce")
+    # 🔍 detectar colunas automaticamente
+    def find_col(possiveis):
+        for col in base.columns:
+            col_l = col.lower()
+            for p in possiveis:
+                if p in col_l:
+                    return col
+        return None
 
-    pv_base = base.groupby("PV", as_index=False).agg(
-        ENTREGA=("ENTREGA", "max"),
-        DIAS=("Dias para Entrega", "min")
+    col_pv = find_col(["pv"])
+    col_entrega = find_col(["entrega"])
+    col_dias = find_col(["dias", "atraso"])
+
+    # 🚨 validação
+    if not col_pv or not col_entrega or not col_dias:
+        st.error("Não foi possível identificar as colunas necessárias.")
+        st.write("Colunas disponíveis:", list(base.columns))
+        st.stop()
+
+    # 🔧 tratamento seguro
+    base[col_dias] = pd.to_numeric(base[col_dias], errors="coerce")
+    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
+
+    base = base.dropna(subset=[col_entrega])
+
+    # 🔥 agrupamento correto por PV
+    pv_base = base.groupby(col_pv, as_index=False).agg(
+        ENTREGA=(col_entrega, "max"),
+        DIAS=(col_dias, "min")
     )
 
     pv_base["Atrasado"] = pv_base["DIAS"] < 0
+
     pv_base["Mes"] = pv_base["ENTREGA"].dt.month
 
-    mapa = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
-            7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
+    mapa = {
+        1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
+        7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"
+    }
 
     pv_base["Mes"] = pv_base["Mes"].map(mapa)
 
     resumo = pv_base.groupby("Mes").agg(
-        Total=("PV","count"),
+        Total=("Mes","count"),
         Atrasados=("Atrasado","sum")
     ).reset_index()
 
-    resumo["Atraso_%"] = (resumo["Atrasados"]/resumo["Total"])*100
+    resumo["Atraso_%"] = (resumo["Atrasados"] / resumo["Total"]) * 100
 
     resumo["Label"] = resumo["Atraso_%"].apply(lambda x: f"{x:.1f}%")
 
@@ -193,6 +224,7 @@ with tab3:
     fig.update_traces(textposition="outside")
 
     st.plotly_chart(fig, use_container_width=True)
+
 
 
 
