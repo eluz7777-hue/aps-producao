@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL DIRETO (SEM MAPEAMENTO)
+# 🔧 MANUTENÇÃO — BLOCO FINAL EXECUTIVO
 # ============================================================
 
 with tab4:
@@ -564,26 +564,21 @@ with tab4:
         st.stop()
 
     # ========================================================
-    # 📊 LEITURA DIRETA
+    # 📊 LEITURA
     # ========================================================
     df = pd.read_excel(caminho)
-
     df.columns = [str(c).strip() for c in df.columns]
 
     # ========================================================
-    # 🔥 NOMES EXATOS (BASEADO NO SEU EXCEL)
+    # 🔍 COLUNAS FIXAS (SEU EXCEL PADRÃO)
     # ========================================================
-    try:
-        col_mes  = "Mês"
-        col_np   = "Corretiva não programada"
-        col_cp   = "Corretiva programada"
-        col_prev = "Preventiva"
-        col_pred = "Preditiva"
-        col_melh = "Melhoria de Máquinas"
-        col_meta = "0,5% do Faturamento Bruto Mensal"
-    except:
-        st.error("Erro ao identificar colunas do Excel")
-        st.stop()
+    col_mes  = "Mês"
+    col_np   = "Corretiva não programada"
+    col_cp   = "Corretiva programada"
+    col_prev = "Preventiva"
+    col_pred = "Preditiva"
+    col_melh = "Melhoria de Máquinas"
+    col_meta = "0,5% do Faturamento Bruto Mensal"
 
     # ========================================================
     # 🧹 LIMPEZA
@@ -613,45 +608,46 @@ with tab4:
 
     df["Meta"] = df[col_meta]
 
-   
+    # ========================================================
+    # 📊 ESCALA INTELIGENTE (AQUI ESTÁ A CORREÇÃO)
+    # ========================================================
+    max_custo = df["Total"].max()
+    max_meta = df["Meta"].max()
 
-# ========================================================
-# 📊 GRÁFICO COM ESCALA CORRETA
-# ========================================================
-
-max_custo = df["Total"].max()
-max_meta = df["Meta"].max()
-
-limite_y = max(max_custo, max_meta) * 1.15  # margem de 15%
-
-fig = go.Figure()
-
-fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
-fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
-fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
-fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
-fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
-
-fig.add_scatter(
-    name="Meta (0,5%)",
-    x=df[col_mes],
-    y=df["Meta"],
-    mode="lines+markers",
-    line=dict(color="red", dash="dash")
-)
-
-fig.update_layout(
-    barmode="stack",
-    height=500,
-    yaxis=dict(range=[0, limite_y]),
-    yaxis_title="R$",
-    xaxis_title="Mês"
-)
-
-st.plotly_chart(fig, use_container_width=True)
+    limite_y = max(max_custo, max_meta) * 1.15  # margem visual
 
     # ========================================================
-    # 📊 KPI
+    # 📊 GRÁFICO
+    # ========================================================
+    fig = go.Figure()
+
+    fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np])
+    fig.add_bar(name="Corretiva P", x=df[col_mes], y=df[col_cp])
+    fig.add_bar(name="Preventiva", x=df[col_mes], y=df[col_prev])
+    fig.add_bar(name="Preditiva", x=df[col_mes], y=df[col_pred])
+    fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
+
+    fig.add_scatter(
+        name="Meta (0,5%)",
+        x=df[col_mes],
+        y=df["Meta"],
+        mode="lines+markers",
+        line=dict(color="red", dash="dash", width=3)
+    )
+
+    fig.update_layout(
+        barmode="stack",
+        height=520,
+        yaxis=dict(range=[0, limite_y]),
+        yaxis_title="R$",
+        xaxis_title="Mês",
+        legend_title="Tipo de Manutenção"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ========================================================
+    # 📊 KPI FINAL
     # ========================================================
     ultimo = df["Total"].iloc[-1]
     meta_atual = df["Meta"].iloc[-1]
@@ -659,7 +655,9 @@ st.plotly_chart(fig, use_container_width=True)
     def formatar(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
+
     c1, c2 = st.columns(2)
 
     c1.metric("💸 Custo Atual", formatar(ultimo))
-    c2.metric("Status", "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta")
+    c2.metric("Status", status)
