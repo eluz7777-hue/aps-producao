@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — VERSÃO FINAL À PROVA DE ERRO
+# 🔧 MANUTENÇÃO — BLOCO FINAL DEFINITIVO (SEM ERRO)
 # ============================================================
 
 with tab4:
@@ -560,13 +560,16 @@ with tab4:
     caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
 
     if not os.path.exists(caminho):
-        st.error("Arquivo não encontrado")
+        st.error("Arquivo de manutenção não encontrado")
         st.stop()
 
+    # ========================================================
+    # 📊 LEITURA
+    # ========================================================
     df = pd.read_excel(caminho)
 
     # ========================================================
-    # 🔥 NORMALIZAÇÃO DE COLUNAS (ACABA COM O PROBLEMA)
+    # 🔥 NORMALIZAÇÃO DE COLUNAS
     # ========================================================
     df.columns = (
         df.columns
@@ -582,34 +585,32 @@ with tab4:
         .str.replace("ú", "u")
     )
 
-    # DEBUG CONTROLADO (só 1 linha útil)
-    st.write("Colunas normalizadas:", df.columns.tolist())
-
     # ========================================================
-    # 🔍 MAPEAMENTO FLEXÍVEL
+    # 🔍 MAPEAMENTO PRECISO (SEM CONFLITO)
     # ========================================================
-    def col(nome):
-        return next((c for c in df.columns if nome in c), None)
+    def find_col(exact):
+        return next((c for c in df.columns if exact in c), None)
 
-    col_mes  = col("mes")
-    col_np   = col("nao programada")
-    col_cp   = col("programada")
-    col_prev = col("preventiva")
-    col_pred = col("preditiva")
-    col_melh = col("melhoria")
-    col_meta = col("0,5") or col("faturamento")
+    col_mes  = find_col("mes")
+    col_np   = find_col("nao programada")
+    col_cp   = next((c for c in df.columns if "corretiva programada" in c), None)
+    col_prev = find_col("preventiva")
+    col_pred = find_col("preditiva")
+    col_melh = find_col("melhoria")
+    col_meta = find_col("0,5")
 
     if not col_mes or not col_np or not col_cp:
-        st.error("Não consegui mapear as colunas automaticamente")
+        st.error("Erro ao identificar colunas do Excel")
         st.stop()
 
     # ========================================================
-    # 🧹 LIMPEZA
+    # 🧹 LIMPEZA DE VALORES
     # ========================================================
     def limpar(v):
         if pd.isna(v):
             return 0
-        v = str(v).replace("R$", "").replace(".", "").replace(",", ".")
+        v = str(v)
+        v = v.replace("R$", "").replace(".", "").replace(",", ".").strip()
         try:
             return float(v)
         except:
@@ -620,7 +621,7 @@ with tab4:
             df[c] = df[c].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL
+    # 📊 TOTAL E META
     # ========================================================
     df["total"] = (
         df[col_np] +
@@ -650,19 +651,24 @@ with tab4:
         fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh])
 
     fig.add_scatter(
-        name="Meta",
+        name="Meta (0,5%)",
         x=df[col_mes],
         y=df["meta"],
         mode="lines+markers",
         line=dict(color="red", dash="dash")
     )
 
-    fig.update_layout(barmode="stack", height=500)
+    fig.update_layout(
+        barmode="stack",
+        height=500,
+        yaxis_title="R$",
+        xaxis_title="Mês"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI
+    # 📊 KPI FINAL
     # ========================================================
     ultimo = df["total"].iloc[-1]
     meta_atual = df["meta"].iloc[-1]
@@ -673,4 +679,6 @@ with tab4:
     c1, c2 = st.columns(2)
 
     c1.metric("💸 Custo Atual", formatar(ultimo))
-    c2.metric("Status", "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta")
+
+    status = "🟢 OK" if ultimo <= meta_atual else "🔴 Acima da Meta"
+    c2.metric("Status", status)
