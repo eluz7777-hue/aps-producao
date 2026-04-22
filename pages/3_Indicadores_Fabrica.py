@@ -16,47 +16,61 @@ if df_raw is None or not isinstance(df_raw, pd.DataFrame):
 df_aps = df_raw.copy()
 
 # ============================================================
-# 🚦 VISÃO GERAL
+# 🚦 VISÃO EXECUTIVA (ALINHADA COM PRODUÇÃO)
 # ============================================================
 
-st.subheader("🚦 Saúde da Fábrica")
+st.subheader("🚦 Visão Executiva")
+st.caption("Indicador consolidado baseado em entregas vencidas no APS (tempo real)")
 
 pct_atraso = 0
 
-required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
+required_cols = ["PV", "DATA_ENTREGA_APS"]
 
 if not df_aps.empty and all(c in df_aps.columns for c in required_cols):
 
     base = df_aps.copy()
 
-    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    # 🔒 garante formato correto
     base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
-    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+    hoje = pd.Timestamp.today().normalize()
 
+    # 📦 consolidação por PV
     pv = base.groupby("PV", as_index=False).agg(
-        Data_real=("Data", "max"),
-        Data_planejada=("DATA_ENTREGA_APS", "min")
+        data_entrega=("DATA_ENTREGA_APS", "min")
     )
 
-    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days.fillna(0)
+    pv = pv.dropna(subset=["data_entrega"])
+
+    # 🚨 atraso em tempo real
+    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
+    pv["Atrasada"] = pv["Atraso_dias"] > 0
 
     total = len(pv)
-    atrasados = pv[pv["Atraso_dias"] > 0]
+    atrasadas = pv["Atrasada"].sum()
 
-    pct_atraso = (len(atrasados) / total * 100) if total > 0 else 0
+    pct_atraso = (atrasadas / total * 100) if total > 0 else 0
+
+# ============================================================
+# 🔥 CLASSIFICAÇÃO EXECUTIVA
+# ============================================================
 
 def classificar(valor):
-    if valor > 20:
+    if valor > 15:
         return "🔴 Crítico"
     elif valor > 5:
         return "🟡 Atenção"
     else:
-        return "🟢 Controlado"
+        return "🟢 Saudável"
+
+# ============================================================
+# 📊 KPIs EXECUTIVOS
+# ============================================================
 
 c1, c2 = st.columns(2)
-c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
-c2.metric("Status Produção", classificar(pct_atraso))
+
+c1.metric("🚨 Entregas em Risco (%)", f"{pct_atraso:.1f}%")
+c2.metric("Status Geral", classificar(pct_atraso))
 
 st.divider()
 
@@ -72,6 +86,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📦 Fornecedores",
     "👷 RH"
 ])
+
 
 
 
