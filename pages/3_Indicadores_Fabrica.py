@@ -546,17 +546,21 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — LENDO DOCX (SEM CONVERSÃO)
+# 🔧 MANUTENÇÃO — CUSTO DE MANUTENÇÃO (DOCX COM TABELA)
 # ============================================================
 
 with tab4:
 
     import os
+    import pandas as pd
+    import plotly.express as px
     from docx import Document
-    import re
 
     st.header("🔧 Custo de Manutenção")
 
+    # ========================================================
+    # 📂 CAMINHO DO ARQUIVO
+    # ========================================================
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
     caminho = os.path.abspath(os.path.join(
@@ -568,61 +572,53 @@ with tab4:
     ))
 
     if not os.path.exists(caminho):
-        st.error("Arquivo .docx não encontrado")
+        st.error("Arquivo não encontrado")
         st.stop()
 
     # ========================================================
-    # 📄 LEITURA DO WORD
+    # 📄 LEITURA DO WORD (TABELA)
     # ========================================================
     doc = Document(caminho)
 
-    linhas = [p.text for p in doc.paragraphs if p.text.strip() != ""]
+    if not doc.tables:
+        st.error("Nenhuma tabela encontrada no arquivo Word")
+        st.stop()
 
-    # DEBUG (pode remover depois)
-    # st.write(linhas)
+    tabela = doc.tables[0]
 
-    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    # ========================================================
-    # 🔍 FUNÇÃO PARA EXTRAIR VALORES NUMÉRICOS
-    # ========================================================
-    def extrair_valores(texto):
-        nums = re.findall(r"\d+[\.,]?\d*", texto)
-        return [float(n.replace(",", ".")) for n in nums]
+    dados = []
+    for row in tabela.rows:
+        linha = [cell.text.strip() for cell in row.cells]
+        dados.append(linha)
 
     # ========================================================
-    # 🔍 BUSCA LINHAS IMPORTANTES
+    # 🔍 EXTRAÇÃO DOS DADOS
     # ========================================================
-    def buscar_linha(palavra):
-        for linha in linhas:
-            if palavra.lower() in linha.lower():
-                return extrair_valores(linha)
-        return []
+    def parse_valor(v):
+        try:
+            return float(v.replace(".", "").replace(",", "."))
+        except:
+            return 0.0
 
-    corretiva_np = buscar_linha("corretiva não programada")
-    corretiva_p  = buscar_linha("corretiva programada")
-    preventiva   = buscar_linha("preventiva")
-    preditiva    = buscar_linha("preditiva")
-    melhoria     = buscar_linha("melhoria")
+    def pegar_linha(nome):
+        for linha in dados:
+            if linha and nome.lower() in linha[0].lower():
+                valores = [parse_valor(v) for v in linha[1:13]]
+                return (valores + [0]*12)[:12]
+        return [0]*12
 
-    meta = buscar_linha("0,5")
-
-    # ========================================================
-    # 🧠 GARANTIA DE TAMANHO
-    # ========================================================
-    def pad(v):
-        return (v + [0]*12)[:12]
-
-    corretiva_np = pad(corretiva_np)
-    corretiva_p  = pad(corretiva_p)
-    preventiva   = pad(preventiva)
-    preditiva    = pad(preditiva)
-    melhoria     = pad(melhoria)
-    meta         = pad(meta)
+    corretiva_np = pegar_linha("corretiva não programada")
+    corretiva_p  = pegar_linha("corretiva programada")
+    preventiva   = pegar_linha("preventiva")
+    preditiva    = pegar_linha("preditiva")
+    melhoria     = pegar_linha("melhoria")
+    meta         = pegar_linha("0,5")
 
     # ========================================================
     # 📊 CONSOLIDAÇÃO
     # ========================================================
+    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
     total = [
         corretiva_np[i] +
         corretiva_p[i] +
