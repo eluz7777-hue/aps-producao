@@ -515,4 +515,4 @@ with tab3:
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.success("Nenhuma PV em atraso no momento")        st.info("Sem dados de atraso para distribuição")
+        st.success("Nenhuma PV em atraso no momento")
