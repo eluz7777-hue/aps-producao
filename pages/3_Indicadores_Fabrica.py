@@ -546,7 +546,7 @@ with tab3:
 
 
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL COM REGRA ISO (CORRETO)
+# 🔧 MANUTENÇÃO — BLOCO FINAL CORRIGIDO (SEM DISTORÇÃO NUMÉRICA)
 # ============================================================
 
 with tab4:
@@ -564,9 +564,10 @@ with tab4:
         st.stop()
 
     # ========================================================
-    # 📊 LEITURA
+    # 📊 LEITURA (JÁ FORÇANDO COMO TEXTO)
     # ========================================================
-    df = pd.read_excel(caminho)
+    df = pd.read_excel(caminho, dtype=str)
+
     df.columns = [str(c).strip() for c in df.columns]
 
     # ========================================================
@@ -581,24 +582,32 @@ with tab4:
     col_melh  = "Melhoria de Máquinas"
 
     # ========================================================
-    # 🧹 LIMPEZA FORTE (GARANTE VALOR REAL)
+    # 🧹 LIMPEZA ROBUSTA (AQUI ESTÁ A CORREÇÃO REAL)
     # ========================================================
     def limpar(v):
         if pd.isna(v):
-            return 0
-        v = str(v)
+            return 0.0
+
+        v = str(v).strip()
+
+        # remove moeda
         v = v.replace("R$", "").replace(" ", "")
-        v = v.replace(".", "").replace(",", ".")
+
+        # padrão brasileiro → converte corretamente
+        if "," in v:
+            v = v.replace(".", "")  # remove milhar
+            v = v.replace(",", ".")  # decimal
+
         try:
             return float(v)
         except:
-            return 0
+            return 0.0
 
     for col in [col_fat, col_np, col_cp, col_prev, col_pred, col_melh]:
         df[col] = df[col].apply(limpar)
 
     # ========================================================
-    # 📊 TOTAL E META (REGRA ISO)
+    # 📊 TOTAL E META (CORRETOS)
     # ========================================================
     df["Total"] = (
         df[col_np] +
@@ -608,29 +617,27 @@ with tab4:
         df[col_melh]
     )
 
-    # 🔥 META CORRETA ISO (0,5% DO FATURAMENTO)
     df["Meta"] = df[col_fat] * 0.005
 
     # ========================================================
-    # 🚨 VALIDAÇÃO ISO
+    # 🚨 STATUS ISO
     # ========================================================
     df["Status_ISO"] = df["Total"] <= df["Meta"]
 
     # ========================================================
-    # 📊 ESCALA (BASEADA NO TOTAL REAL)
+    # 📊 ESCALA CORRETA
     # ========================================================
     max_custo = df["Total"].max()
     limite_y = max_custo * 1.25 if max_custo > 0 else 1
 
     # ========================================================
-    # 📊 GRÁFICO (LADO A LADO)
+    # 📊 GRÁFICO
     # ========================================================
     fig = go.Figure()
 
     def moeda(v):
         return f"R$ {v:,.0f}".replace(",", ".")
 
-    # BARRAS
     fig.add_bar(name="Corretiva NP", x=df[col_mes], y=df[col_np],
                 text=[moeda(v) for v in df[col_np]], textposition="outside")
 
@@ -646,26 +653,20 @@ with tab4:
     fig.add_bar(name="Melhoria", x=df[col_mes], y=df[col_melh],
                 text=[moeda(v) for v in df[col_melh]], textposition="outside")
 
-    # TOTAL (COM COR ISO)
-    cores_total = ["green" if ok else "red" for ok in df["Status_ISO"]]
+    # TOTAL com cor ISO
+    cores = ["green" if ok else "red" for ok in df["Status_ISO"]]
 
-    fig.add_bar(
-        name="Total",
-        x=df[col_mes],
-        y=df["Total"],
-        text=[moeda(v) for v in df["Total"]],
-        textposition="outside",
-        marker_color=cores_total
-    )
+    fig.add_bar(name="Total", x=df[col_mes], y=df["Total"],
+                text=[moeda(v) for v in df["Total"]],
+                textposition="outside",
+                marker_color=cores)
 
     # META
     fig.add_scatter(
         name="Meta (0,5%)",
         x=df[col_mes],
         y=df["Meta"],
-        mode="lines+markers+text",
-        text=[moeda(v) for v in df["Meta"]],
-        textposition="top center",
+        mode="lines+markers",
         line=dict(color="red", dash="dash", width=3)
     )
 
@@ -674,14 +675,13 @@ with tab4:
         height=550,
         yaxis=dict(range=[0, limite_y]),
         yaxis_title="R$",
-        xaxis_title="Mês",
-        legend_title="Tipo de Manutenção"
+        xaxis_title="Mês"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
     # ========================================================
-    # 📊 KPI FINAL
+    # 📊 KPI
     # ========================================================
     ultimo = df.iloc[-1]
 
