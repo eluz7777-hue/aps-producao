@@ -469,14 +469,163 @@ with tab2:
                      {"Jan": 0.04, "Fev": 0.045, "Mar": 0.052})
 
 
+
+
 # ============================================================
-# 🏭 PRODUÇÃO (SÓ ATRASO)
+# 🏭 PRODUÇÃO — INDICADORES APS (CORRIGIDO)
 # ============================================================
 
 with tab3:
-    st.subheader("🏭 Produção (Indicadores Estratégicos)")
 
-    st.metric("Atraso (%)", f"{pct_atraso:.1f}%")
+    import pandas as pd
+    import plotly.express as px
+    import streamlit as st
+
+    st.header("🏭 Indicadores de Produção")
+
+    if df.empty:
+        st.warning("Base do APS não carregada.")
+        st.stop()
+
+    base = df.copy()
+
+    # ========================================================
+    # 🔧 CORREÇÕES DE BASE (CRÍTICO)
+    # ========================================================
+
+    # garantir numérico
+    base["Dias para Entrega"] = pd.to_numeric(
+        base.get("Dias para Entrega", 0),
+        errors="coerce"
+    )
+
+    # garantir data
+    base["ENTREGA"] = pd.to_datetime(
+        base.get("ENTREGA"),
+        errors="coerce"
+    )
+
+    # remover linhas inválidas
+    base = base.dropna(subset=["ENTREGA"])
+
+    # ========================================================
+    # 🔥 AGRUPAR POR PV (ESSENCIAL)
+    # ========================================================
+
+    pv_base = base.groupby("PV", as_index=False).agg(
+        ENTREGA=("ENTREGA", "max"),
+        Dias_para_Entrega=("Dias para Entrega", "min")  # pega pior cenário
+    )
+
+    # atraso real
+    pv_base["Atrasado"] = pv_base["Dias_para_Entrega"] < 0
+
+    # mês
+    pv_base["Mes"] = pv_base["ENTREGA"].dt.month
+
+    # mapa mês
+    mapa = {
+        1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
+        7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"
+    }
+
+    pv_base["Mes"] = pv_base["Mes"].map(mapa)
+
+    # ========================================================
+    # 📊 AGRUPAMENTO FINAL
+    # ========================================================
+
+    resumo = pv_base.groupby("Mes").agg(
+        Total_PVs=("PV", "count"),
+        Atrasados=("Atrasado", "sum")
+    ).reset_index()
+
+    resumo["Atraso_%"] = (resumo["Atrasados"] / resumo["Total_PVs"]) * 100
+    resumo["No_Prazo_%"] = 100 - resumo["Atraso_%"]
+
+    ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    resumo["Mes"] = pd.Categorical(resumo["Mes"], categories=ordem, ordered=True)
+    resumo = resumo.sort_values("Mes")
+
+    # ========================================================
+    # 🥇 ATRASO (%)
+    # ========================================================
+
+    st.subheader("🚨 Atraso (%)")
+
+    META_ATRASO = 5
+
+    resumo["Label"] = resumo["Atraso_%"].apply(lambda x: f"{x:.1f}%")
+
+    fig = px.bar(resumo, x="Mes", y="Atraso_%", text="Label")
+
+    fig.add_hline(
+        y=META_ATRASO,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Meta"
+    )
+
+    max_val = resumo["Atraso_%"].max()
+
+    fig.update_yaxes(
+        range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, META_ATRASO * 1.2)],
+        tickformat=".1f"
+    )
+
+    fig.update_traces(textposition="outside")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # KPI
+    if not resumo.empty:
+        ultimo = resumo["Atraso_%"].dropna().iloc[-1]
+        gap = ultimo - META_ATRASO
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Atraso", f"{ultimo:.1f}%")
+        c2.metric("Meta", f"{META_ATRASO:.1f}%")
+        c3.metric("Desvio", f"{gap:.1f}%", delta_color="inverse")
+
+        if ultimo <= META_ATRASO:
+            st.success("🟢 Dentro da meta")
+        else:
+            st.error("🔴 Fora da meta")
+
+    st.divider()
+
+    # ========================================================
+    # 🥈 NO PRAZO (%)
+    # ========================================================
+
+    st.subheader("✅ PVs no Prazo (%)")
+
+    META_PRAZO = 95
+
+    resumo["Label"] = resumo["No_Prazo_%"].apply(lambda x: f"{x:.1f}%")
+
+    fig2 = px.bar(resumo, x="Mes", y="No_Prazo_%", text="Label")
+
+    fig2.add_hline(
+        y=META_PRAZO,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Meta"
+    )
+
+    max_val = resumo["No_Prazo_%"].max()
+
+    fig2.update_yaxes(
+        range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, META_PRAZO * 1.2)],
+        tickformat=".1f"
+    )
+
+    fig2.update_traces(textposition="outside")
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+
+
 
 # ============================================================
 # 🔧 MANUTENÇÃO
