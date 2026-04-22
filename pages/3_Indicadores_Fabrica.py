@@ -1,17 +1,12 @@
-st.write("DEBUG INDICADORES → df recebido:")
-st.write(df.columns.tolist())
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
 
-st.title("📊 Indicadores da Fábrica")
-st.caption("Painel estratégico alinhado à ISO 9001")
-
 # ============================================================
-# 🔒 BASE APS (APENAS PARA INDICADORES) — CORRETO
+# 🔒 BASE APS (ÚNICA FONTE)
 # ============================================================
 
 df = st.session_state.get("df", pd.DataFrame())
@@ -22,23 +17,47 @@ if df is None or not isinstance(df, pd.DataFrame):
 df_base = df.copy()
 
 # ============================================================
-# 🚦 VISÃO GERAL
+# 🔍 DEBUG (TEMPORÁRIO)
 # ============================================================
+
+st.write("DEBUG INDICADORES → df recebido:")
+st.write(df_base.columns.tolist())
+
+# ============================================================
+# 🚦 VISÃO GERAL (CORRETO COM BASE APS REAL)
+# ============================================================
+
 st.subheader("🚦 Saúde da Fábrica")
 
 pct_atraso = 0
 
-if not df.empty:
-    try:
-        col_pv = [c for c in df.columns if "pv" in c.lower()][0]
-        col_dias = [c for c in df.columns if "dias" in c.lower() or "atraso" in c.lower()][0]
+required_cols = ["PV", "Data", "DATA_ENTREGA_APS"]
+missing = [c for c in required_cols if c not in df_base.columns]
 
-        total = df[col_pv].nunique()
-        atrasos = pd.to_numeric(df[col_dias], errors="coerce") < 0
+if missing:
+    st.error(f"Colunas obrigatórias não encontradas: {missing}")
+    st.stop()
 
-        pct_atraso = (atrasos.sum() / total * 100) if total > 0 else 0
-    except:
-        pct_atraso = 0
+if not df_base.empty:
+
+    base = df_base.copy()
+
+    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+
+    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+
+    pv = base.groupby("PV", as_index=False).agg(
+        Data_real=("Data", "max"),
+        Data_planejada=("DATA_ENTREGA_APS", "min")
+    )
+
+    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days.fillna(0)
+
+    total = len(pv)
+    atrasados = pv[pv["Atraso_dias"] > 0]
+
+    pct_atraso = (len(atrasados) / total * 100) if total > 0 else 0
 
 def classificar(valor):
     if valor > 20:
@@ -49,10 +68,11 @@ def classificar(valor):
         return "🟢 Controlado"
 
 c1, c2 = st.columns(2)
+
 c1.metric("🚨 Atraso (%)", f"{pct_atraso:.1f}%")
 c2.metric("Status Produção", classificar(pct_atraso))
 
-if df.empty:
+if df_base.empty:
     st.info("Abra o APS para habilitar indicadores de produção.")
 
 st.divider()
@@ -134,61 +154,66 @@ with tab2:
     indicador("Retrabalho (%)",0.05,{"Jan":0.04,"Fev":0.045,"Mar":0.052})
 
 # ============================================================
-# 🏭 PRODUÇÃO (ROBUSTO FINAL)
+# 🏭 PRODUÇÃO (AGORA CORRETO DE VERDADE)
 # ============================================================
 
 with tab3:
 
     st.header("🏭 Indicadores de Produção")
 
-    if df.empty:
+    if df_base.empty:
         st.warning("Abra o APS primeiro.")
         st.stop()
 
-    base = df.copy()
-    base.columns = base.columns.str.strip()
+    base = df_base.copy()
 
-    try:
-        col_pv = [c for c in base.columns if "pv" in c.lower()][0]
-        col_entrega = [c for c in base.columns if "entrega" in c.lower()][0]
-        col_dias = [c for c in base.columns if "dias" in c.lower() or "atraso" in c.lower()][0]
-    except:
-        st.error("Colunas não identificadas.")
-        st.write(base.columns)
-        st.stop()
+    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
 
-    base[col_dias] = pd.to_numeric(base[col_dias], errors="coerce")
-    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
+    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
 
-    base = base.dropna(subset=[col_entrega])
-
-    pv_base = base.groupby(col_pv, as_index=False).agg(
-        ENTREGA=(col_entrega,"max"),
-        DIAS=(col_dias,"min")
+    pv = base.groupby("PV", as_index=False).agg(
+        Data_real=("Data", "max"),
+        Data_planejada=("DATA_ENTREGA_APS", "min")
     )
 
-    pv_base["Atrasado"] = pv_base["DIAS"] < 0
-    pv_base["Mes"] = pv_base["ENTREGA"].dt.month
+    pv["Atraso_dias"] = (pv["Data_real"] - pv["Data_planejada"]).dt.days.fillna(0)
 
-    mapa = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
-            7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
+    pv["Mes"] = pv["Data_planejada"].dt.month
 
-    pv_base["Mes"] = pv_base["Mes"].map(mapa)
-
-    resumo = pv_base.groupby("Mes").agg(
-        Total=("Mes","count"),
-        Atrasados=("Atrasado","sum")
+    resumo = pv.groupby("Mes").agg(
+        Total=("PV","count"),
+        Atrasadas=("Atraso_dias", lambda x: (x > 0).sum())
     ).reset_index()
 
-    resumo["Atraso_%"] = (resumo["Atrasados"]/resumo["Total"])*100
-    resumo["Label"] = resumo["Atraso_%"].apply(lambda x: f"{x:.1f}%")
+    resumo["Pct"] = (resumo["Atrasadas"]/resumo["Total"]*100).round(1)
 
-    fig = px.bar(resumo, x="Mes", y="Atraso_%", text="Label")
-    fig.add_hline(y=5, line_dash="dash", line_color="red")
-    fig.update_traces(textposition="outside")
+    meses = pd.DataFrame({"Mes": list(range(1,13))})
+    resumo = meses.merge(resumo, on="Mes", how="left")
+    resumo["Pct"] = resumo["Pct"].fillna(0)
+
+    nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    resumo["Mes_nome"] = resumo["Mes"].apply(lambda x: nomes[x-1])
+
+    META = 5
+
+    fig = go.Figure()
+
+    fig.add_bar(
+        x=resumo["Mes_nome"],
+        y=resumo["Pct"],
+        text=resumo["Pct"].astype(str)+"%",
+        textposition="outside"
+    )
+
+    fig.add_hline(y=META, line_dash="dash", annotation_text=f"Meta {META}%")
+
+    fig.update_layout(
+        title="Atraso por Mês (%)",
+        yaxis_title="% Atraso"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
-
 
 
 # ============================================================
