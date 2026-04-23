@@ -886,3 +886,158 @@ with tab5:
     if os.path.exists(caminho):
         with open(caminho, "rb") as f:
             st.download_button("📎 Baixar evidência", f, file_name="COMPRAS_FORNECEDORES.docx")
+
+
+
+
+# ============================================================
+# 👥 INDICADORES DE RH (PADRÃO ISO COMPLETO)
+# ============================================================
+
+with tab6:
+
+    import os
+    import pandas as pd
+    import plotly.express as px
+
+    st.subheader("👥 Indicadores de RH")
+
+    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    # ========================================================
+    # BASE CONTROLADA
+    # ========================================================
+    dados = {
+        "Jan": {"abs": 2.19, "trein": 2.62, "faltas": 2.29, "extra": 3.76},
+        "Fev": {"abs": 3.16, "trein": 2.78, "faltas": 0.40, "extra": 5.45},
+        "Mar": {"abs": 2.85, "trein": 2.77, "faltas": 0.35, "extra": 2.33},
+    }
+
+    def get_lista(chave):
+        return [dados[m][chave] if m in dados else None for m in meses]
+
+    def media(vals):
+        v = [x for x in vals if x is not None]
+        return sum(v)/len(v) if v else None
+
+    def ultimo_valido(vals):
+        v = [x for x in vals if x is not None]
+        return v[-1] if v else None
+
+    # ========================================================
+    # FUNÇÃO PADRÃO ISO
+    # ========================================================
+    def grafico_iso(titulo, descricao, valores, meta, tipo_meta):
+
+        st.subheader(titulo)
+
+        acm = media(valores)
+
+        df = pd.DataFrame({
+            "Mês": meses,
+            "Valor": valores
+        })
+
+        df = pd.concat([
+            df,
+            pd.DataFrame([{"Mês": "ACM", "Valor": acm}])
+        ], ignore_index=True)
+
+        df["Label"] = df["Valor"].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "")
+
+        fig = px.bar(df, x="Mês", y="Valor", text="Label")
+
+        fig.add_hline(
+            y=meta,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Meta {'≤' if tipo_meta=='max' else '≥'} {meta}%"
+        )
+
+        max_val = df["Valor"].max()
+
+        fig.update_yaxes(
+            range=[0, max(max_val * 1.2 if pd.notna(max_val) else meta*1.2, meta*1.2)]
+        )
+
+        fig.update_traces(textposition="outside")
+        fig.update_layout(height=450, showlegend=False)
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ====================================================
+        # ANÁLISE ISO
+        # ====================================================
+        ultimo = ultimo_valido(valores)
+
+        if ultimo is not None:
+
+            if tipo_meta == "max":
+                if ultimo <= meta:
+                    st.success("🟢 Indicador sob controle, sem impacto relevante na operação")
+                else:
+                    st.error("🔴 Indicador fora da meta, com impacto potencial na operação e necessidade de ação corretiva")
+
+            else:
+                if ultimo >= meta:
+                    st.success("🟢 Indicador adequado para sustentação operacional")
+                else:
+                    st.error("🔴 Indicador abaixo do esperado, podendo comprometer desempenho e qualidade")
+
+        st.caption(descricao)
+
+        if acm:
+            st.info(f"ACM: {acm:.2f}%")
+
+    # ========================================================
+    # 1️⃣ ABSENTEÍSMO
+    # ========================================================
+    grafico_iso(
+        "📊 Índice de Absenteísmo (HHT)",
+        "Mede a ausência de colaboradores em relação às horas trabalhadas.",
+        get_lista("abs"),
+        2.0,
+        "max"
+    )
+
+    # ========================================================
+    # 2️⃣ TREINAMENTO
+    # ========================================================
+    grafico_iso(
+        "📊 Índice de Treinamento (HHT)",
+        "Mede o volume de treinamento aplicado em relação às horas trabalhadas.",
+        get_lista("trein"),
+        1.5,
+        "min"
+    )
+
+    # ========================================================
+    # 3️⃣ FALTAS INJUSTIFICADAS
+    # ========================================================
+    grafico_iso(
+        "📊 Índice de Faltas Injustificadas (HHT)",
+        "Mede faltas sem justificativa em relação às horas trabalhadas.",
+        get_lista("faltas"),
+        1.5,
+        "max"
+    )
+
+    # ========================================================
+    # 4️⃣ HORAS EXTRAS
+    # ========================================================
+    grafico_iso(
+        "📊 Índice de Horas Extras (HHT)",
+        "Mede o uso de horas extras sobre o total de horas trabalhadas.",
+        get_lista("extra"),
+        10.0,
+        "max"
+    )
+
+    # ========================================================
+    # 📎 EVIDÊNCIA
+    # ========================================================
+    caminho = "data/Indicadores_RH/RH_MARÇO.docx"
+
+    if os.path.exists(caminho):
+        with open(caminho, "rb") as f:
+            st.download_button("📎 Baixar evidência", f, file_name="RH_MARÇO.docx")
