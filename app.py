@@ -1,12 +1,11 @@
 import streamlit as st
-import os
 import pandas as pd
-from datetime import datetime
+import os
 
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
-# LOGIN
+# LOGIN (MANTIDO)
 # ============================================================
 USUARIOS = {
     "admin": "1608",
@@ -41,121 +40,9 @@ if not st.session_state.logado:
     st.stop()
 
 # ============================================================
-# LEITOR ROBUSTO
-# ============================================================
-def ler_excel(path):
-
-    if not os.path.exists(path):
-        return None
-
-    for skip in range(6):
-        try:
-            df = pd.read_excel(path, skiprows=skip)
-            if len(df.columns) > 3:
-                return df
-        except:
-            pass
-
-    return None
-
-# ============================================================
-# LOCALIZADOR FLEXÍVEL DE COLUNAS
-# ============================================================
-def achar_coluna(df, palavras):
-    for c in df.columns:
-        nome = c.lower()
-        if all(p in nome for p in palavras):
-            return c
-    return None
-
-# ============================================================
-# APS
-# ============================================================
-def calcular_aps():
-
-    df = ler_excel("data/APS_base.xlsx")
-    if df is None:
-        return None
-
-    col_pv = achar_coluna(df, ["pv"])
-    col_data = achar_coluna(df, ["data"])
-    col_entrega = achar_coluna(df, ["entrega"])
-
-    if not col_pv or not col_data or not col_entrega:
-        return None
-
-    df[col_data] = pd.to_datetime(df[col_data], errors="coerce")
-    df[col_entrega] = pd.to_datetime(df[col_entrega], errors="coerce")
-
-    df = df.dropna(subset=[col_data, col_entrega])
-
-    pv = df.groupby(col_pv).agg(
-        real=(col_data,"max"),
-        plan=(col_entrega,"min")
-    )
-
-    pv["atraso"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
-
-    total = len(pv)
-    atrasadas = (pv["atraso"] > 0).sum()
-    pct = (atrasadas / total * 100) if total else 0
-
-    return pct, total, atrasadas
-
-# ============================================================
-# OEE
-# ============================================================
-def carregar_oee():
-
-    df = ler_excel("data/Indicadores de Qualidade/OEE - 2026.xlsx")
-    if df is None:
-        return None
-
-    col = achar_coluna(df, ["oee"])
-
-    if not col:
-        return None
-
-    serie = pd.to_numeric(df[col], errors="coerce").dropna()
-
-    return float(serie.iloc[-1]) if not serie.empty else None
-
-# ============================================================
-# NC
-# ============================================================
-def carregar_nc():
-
-    df = ler_excel("data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx")
-    if df is None:
-        return 0
-
-    col = achar_coluna(df, ["nc"])
-
-    if not col:
-        return 0
-
-    return int(pd.to_numeric(df[col], errors="coerce").fillna(0).sum())
-
-# ============================================================
-# STATUS LIMPO
-# ============================================================
-def status_fabrica(pct, oee):
-
-    if pct is None:
-        return "⚪ Sem dados", "status-gray"
-
-    if pct > 20 or (oee and oee < 60):
-        return "🔴 Crítico", "status-red"
-    elif pct > 5:
-        return "🟡 Atenção", "status-yellow"
-    else:
-        return "🟢 Operação Controlada", "status-green"
-
-# ============================================================
 # SIDEBAR
 # ============================================================
 with st.sidebar:
-
     st.markdown("## ELOHIM APS")
     st.info(f"👤 {st.session_state.usuario}")
 
@@ -171,23 +58,122 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
+# 🔥 APS DIRETO DO ARQUIVO (SEM SESSION_STATE)
+# ============================================================
+def calcular_aps_direto():
+
+    caminho = "PV.xlsx"
+
+    if not os.path.exists(caminho):
+        return None, 0, 0
+
+    try:
+        df = pd.read_excel(caminho)
+    except:
+        return None, 0, 0
+
+    df.columns = df.columns.astype(str).str.upper().str.strip()
+
+    if "PV" not in df.columns or "ENTREGA" not in df.columns:
+        return None, 0, 0
+
+    df["ENTREGA"] = pd.to_datetime(df["ENTREGA"], errors="coerce", dayfirst=True)
+
+    df = df.dropna(subset=["ENTREGA"])
+
+    hoje = pd.Timestamp.today().normalize()
+
+    pv = df.groupby("PV").agg(
+        entrega=("ENTREGA", "min")
+    )
+
+    pv["atraso"] = (hoje - pv["entrega"]).dt.days
+    pv["atrasado"] = pv["atraso"] > 0
+
+    total = len(pv)
+    atrasadas = pv["atrasado"].sum()
+
+    pct = (atrasadas / total * 100) if total else 0
+
+    return pct, total, atrasadas
+
+# ============================================================
+# OEE
+# ============================================================
+def carregar_oee():
+
+    caminho = "data/Indicadores de Qualidade/OEE - 2026.xlsx"
+
+    if not os.path.exists(caminho):
+        return None
+
+    try:
+        df = pd.read_excel(caminho)
+    except:
+        return None
+
+    df.columns = df.columns.astype(str).str.upper()
+
+    for col in df.columns:
+        if "OEE" in col:
+            serie = pd.to_numeric(df[col], errors="coerce").dropna()
+            if not serie.empty:
+                return float(serie.iloc[-1])
+
+    return None
+
+# ============================================================
+# NC
+# ============================================================
+def carregar_nc():
+
+    caminho = "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
+
+    if not os.path.exists(caminho):
+        return 0
+
+    try:
+        df = pd.read_excel(caminho)
+    except:
+        return 0
+
+    df.columns = df.columns.astype(str).str.upper()
+
+    for col in df.columns:
+        if "NC" in col:
+            return int(pd.to_numeric(df[col], errors="coerce").fillna(0).sum())
+
+    return 0
+
+# ============================================================
+# STATUS
+# ============================================================
+def status(pct):
+
+    if pct is None:
+        return "⚪ Sem dados"
+
+    if pct > 15:
+        return "🔴 Crítico"
+    elif pct > 5:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Controlado"
+
+# ============================================================
 # HOME
 # ============================================================
 if pagina == "Visão Geral":
 
     st.title("🚀 ELOHIM APS")
 
-    aps = calcular_aps()
-    pct, total, atrasadas = aps if aps else (None,0,0)
-
+    pct, total, atrasadas = calcular_aps_direto()
     oee = carregar_oee()
     nc = carregar_nc()
 
-    texto, classe = status_fabrica(pct, oee)
-
     st.markdown(f"""
     <div style="padding:15px;border-radius:12px;background:rgba(0,200,120,0.15);text-align:center;font-size:20px;">
-        {texto}
+        {status(pct)}
     </div>
     """, unsafe_allow_html=True)
 
