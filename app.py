@@ -1,6 +1,38 @@
 import streamlit as st
+import os
 
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
+
+# ============================================================
+# 🎨 ESTILO SIDEBAR (FUNCIONA NA NAV NATIVA)
+# ============================================================
+st.markdown("""
+<style>
+[data-testid="stSidebarNav"] ul li a {
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    text-transform: capitalize !important;
+    padding: 10px 8px !important;
+}
+
+[data-testid="stSidebarNav"] ul li a[aria-current="page"] {
+    background-color: rgba(0, 150, 255, 0.15);
+    border-radius: 8px;
+}
+
+[data-testid="stSidebarNav"] > ul > li:first-child {
+    display: none;
+}
+
+section[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+section[data-testid="stSidebar"] button {
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ============================================================
 # 🔐 LOGIN
@@ -49,21 +81,26 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# 🧱 ESPAÇO + LOGO (AQUI ESTÁ A SOLUÇÃO)
+# 🧱 LOGO (COM PROTEÇÃO DE ERRO)
 # ============================================================
 st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
-st.image("assets/logo.png", width=180)  # <-- coloque sua logo aqui
+caminho_logo = "logo.png"
+
+if os.path.exists(caminho_logo):
+    st.image(caminho_logo, width=180)
+else:
+    st.warning("⚠️ Logo não encontrada (adicione logo.png na raiz do projeto)")
 
 # ============================================================
 # 🏠 HOME
 # ============================================================
 st.title("Painel de Módulos")
-
 st.markdown("---")
 
 c1, c2, c3 = st.columns(3)
 
+# CARGA
 with c1:
     st.markdown("### 🏭 Carga & Capacidade")
     st.markdown("""
@@ -76,6 +113,7 @@ with c1:
     if st.button("Abrir", key="aps", use_container_width=True):
         st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
+# OEE
 with c2:
     st.markdown("### 📈 OEE & Qualidade")
     st.markdown("""
@@ -88,6 +126,7 @@ with c2:
     if st.button("Abrir", key="oee", use_container_width=True):
         st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
+# INDICADORES
 with c3:
     st.markdown("### 📊 Indicadores")
     st.markdown("""
