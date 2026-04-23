@@ -4,6 +4,15 @@ import plotly.express as px
 
 st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
 
+
+# ===============================
+# 🔐 BLOQUEIO DE ACESSO GLOBAL
+# ===============================
+if "logado" not in st.session_state or not st.session_state.logado:
+    st.warning("🔒 Acesso não autorizado. Redirecionando para login...")
+    st.switch_page("app.py")
+
+
 # ============================================================
 # 🔒 BASE APS (ÚNICA E PROTEGIDA)
 # ============================================================
