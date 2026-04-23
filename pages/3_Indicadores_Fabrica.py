@@ -729,169 +729,122 @@ with tab5:
 
     st.subheader("📦 Indicadores de Compras & Fornecedores")
 
-    ANO = "2026"
+    meses = ["Jan","Fev","Mar"]
+
+    # ========================================================
+    # 📊 1 - ÍNDICE DE ENTREGA DO PROVEDOR NO PRAZO
+    # ========================================================
+    prazo = [0.87, 1.00, 1.00]   # ajuste fino depois se quiser
     META_PRAZO = 0.90
-    META_ENTREGA = 0.98
 
-    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-
-    # ========================================================
-    # 📊 BASE CONTROLADA
-    # ========================================================
-    indicador_fornecedores = {
-        "Jan": {"prazo": 1.00, "entrega": 0.8695, "arquivo": "COMPRAS_FORNECEDORES.docx"},
-        "Fev": {"prazo": 1.00, "entrega": 1.00, "arquivo": "COMPRAS_FORNECEDORES.docx"},
-        "Mar": {"prazo": 0.9468, "entrega": 1.00, "arquivo": "COMPRAS_FORNECEDORES.docx"},
-    }
-
-    prazo_vals = []
-    entrega_vals = []
-
-    for mes in meses_ordem:
-        if mes in indicador_fornecedores:
-            prazo_vals.append(indicador_fornecedores[mes]["prazo"])
-            entrega_vals.append(indicador_fornecedores[mes]["entrega"])
-        else:
-            prazo_vals.append(None)
-            entrega_vals.append(None)
-
-    # ========================================================
-    # 📊 ACM
-    # ========================================================
-    def media(lista):
-        vals = [v for v in lista if v is not None]
-        return sum(vals)/len(vals) if vals else None
-
-    acm_prazo = media(prazo_vals)
-    acm_entrega = media(entrega_vals)
-
-    df_plot = pd.DataFrame({
-        "Mês": meses_ordem,
-        "Prazo": prazo_vals,
-        "Entrega": entrega_vals
+    df1 = pd.DataFrame({
+        "Mês": meses,
+        "Prazo": [v*100 for v in prazo]
     })
 
-    df_plot = pd.concat([
-        df_plot,
-        pd.DataFrame([{
-            "Mês": "ACM",
-            "Prazo": acm_prazo,
-            "Entrega": acm_entrega
-        }])
-    ], ignore_index=True)
+    st.subheader("📊 Índice de Entrega do Provedor no Prazo")
 
-    df_plot["Prazo"] = df_plot["Prazo"] * 100
-    df_plot["Entrega"] = df_plot["Entrega"] * 100
-
-    # ========================================================
-    # 🏷️ LABELS
-    # ========================================================
-    def formatar(row, col):
-        if pd.isna(row[col]):
-            return ""
-        if row["Mês"] == "ACM":
-            return f"{row[col]:.1f}%"
-        return f"{row[col]:.0f}%"
-
-    df_plot["Label_Prazo"] = df_plot.apply(lambda r: formatar(r, "Prazo"), axis=1)
-    df_plot["Label_Entrega"] = df_plot.apply(lambda r: formatar(r, "Entrega"), axis=1)
-
-    # ========================================================
-    # 📊 GRÁFICO 1 — PRAZO
-    # ========================================================
-    st.subheader("📊 Índice de Entrega do Fornecedor no Prazo")
-
-    fig1 = px.bar(df_plot, x="Mês", y="Prazo", text="Label_Prazo")
-    fig1.update_traces(textposition="outside")
+    fig1 = px.bar(df1, x="Mês", y="Prazo", text_auto=".0f")
 
     fig1.add_hline(
-        y=META_PRAZO * 100,
+        y=META_PRAZO*100,
         line_dash="dash",
         line_color="red",
         annotation_text="Meta ≥ 90%"
     )
 
-    fig1.update_yaxes(range=[0, max(df_plot["Prazo"].max()*1.2, META_PRAZO*100*1.2)])
-    fig1.update_layout(height=450, showlegend=False)
-
     st.plotly_chart(fig1, use_container_width=True)
 
-    # 🔍 ANÁLISE PRAZO
-    prazo_validos = [v for v in prazo_vals if v is not None]
-    if prazo_validos:
-        ultimo_prazo = prazo_validos[-1]
+    # análise
+    if prazo[-1] >= META_PRAZO:
+        st.success("🟢 Provedor atende prazos acordados")
+    else:
+        st.error("🔴 Atrasos no fornecimento")
 
-        if ultimo_prazo >= META_PRAZO:
-            st.success("🟢 Fornecedores entregando dentro do prazo acordado")
-        else:
-            st.error("🔴 Atrasos recorrentes nas entregas dos fornecedores")
-
-    st.caption("Mede a confiabilidade dos fornecedores no cumprimento dos prazos.")
+    st.caption("Avalia a confiabilidade do fornecedor quanto ao prazo.")
 
     # ========================================================
-    # 📊 GRÁFICO 2 — ENTREGA
+    # 📊 2 - DEVOLUÇÕES AO PROVEDOR EXTERNO
     # ========================================================
-    st.subheader("📊 Índice de Entregas no Prazo (Impacto na Produção)")
+    devolucao = [0.02, 0.00, 0.00]   # % devolução
+    META_DEV = 0.02
 
-    fig2 = px.bar(df_plot, x="Mês", y="Entrega", text="Label_Entrega")
-    fig2.update_traces(textposition="outside")
+    df2 = pd.DataFrame({
+        "Mês": meses,
+        "Devolução": [v*100 for v in devolucao]
+    })
+
+    st.subheader("📊 Índice de Devoluções ao Provedor Externo")
+
+    fig2 = px.bar(df2, x="Mês", y="Devolução", text_auto=".1f")
 
     fig2.add_hline(
-        y=META_ENTREGA * 100,
+        y=META_DEV*100,
         line_dash="dash",
         line_color="red",
-        annotation_text="Meta ≥ 98%"
+        annotation_text="Meta ≤ 2%"
     )
-
-    fig2.update_yaxes(range=[0, max(df_plot["Entrega"].max()*1.2, META_ENTREGA*100*1.2)])
-    fig2.update_layout(height=450, showlegend=False)
 
     st.plotly_chart(fig2, use_container_width=True)
 
-    # 🔍 ANÁLISE ENTREGA
-    entrega_validos = [v for v in entrega_vals if v is not None]
-    if entrega_validos:
-        ultimo_entrega = entrega_validos[-1]
+    # análise
+    if devolucao[-1] <= META_DEV:
+        st.success("🟢 Qualidade do fornecedor adequada")
+    else:
+        st.error("🔴 Alto índice de devolução")
 
-        if ultimo_entrega >= META_ENTREGA:
-            st.success("🟢 Abastecimento eficiente sem impacto produtivo")
-        else:
-            st.error("🔴 Risco de parada ou atraso produtivo por falha de fornecimento")
-
-    st.caption("Mede o impacto real do fornecedor no fluxo produtivo.")
+    st.caption("Mede qualidade do fornecimento.")
 
     # ========================================================
-    # 🎯 SELECT + KPI
+    # 📊 3 - ENTREGAS NO PRAZO (GRÁFICO COMPLETO)
     # ========================================================
-    meses_com_dado = list(indicador_fornecedores.keys())
 
-    mes_sel = st.selectbox("Selecionar mês", meses_com_dado, index=len(meses_com_dado)-1)
+    itens = [69, 76, 93]
+    no_prazo = [87, 100, 100]
+    atraso = [9, 0, 0]
 
-    dados = indicador_fornecedores[mes_sel]
-    gap = dados["prazo"] - META_PRAZO
+    META = 98
 
-    c1, c2, c3 = st.columns(3)
+    df3 = pd.DataFrame({
+        "Mês": meses,
+        "Itens": itens,
+        "No Prazo (%)": no_prazo,
+        "Atraso": atraso
+    })
 
-    c1.metric("Prazo", f"{dados['prazo']*100:.0f}%")
-    c2.metric("Meta", f"{META_PRAZO*100:.0f}%")
-    c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
+    st.subheader("📊 Entregas no Prazo (Visão Completa)")
+
+    fig3 = go.Figure()
+
+    fig3.add_bar(name="Itens Entregues", x=meses, y=itens)
+    fig3.add_bar(name="No Prazo (%)", x=meses, y=no_prazo)
+    fig3.add_bar(name="Em Atraso", x=meses, y=atraso)
+
+    fig3.add_trace(go.Scatter(
+        x=meses,
+        y=[META]*len(meses),
+        mode="lines+markers",
+        name="Meta 98%",
+        line=dict(dash="dash", color="red")
+    ))
+
+    fig3.update_layout(barmode="group", height=500)
+
+    st.plotly_chart(fig3, use_container_width=True)
+
+    # análise
+    if no_prazo[-1] >= META:
+        st.success("🟢 Entregas dentro do nível esperado")
+    else:
+        st.error("🔴 Performance abaixo da meta")
+
+    st.caption("Visão operacional consolidada das entregas.")
 
     # ========================================================
     # 📎 EVIDÊNCIA
     # ========================================================
-    caminho = f"data/Indicadores_Compras_Fornecedores/{dados['arquivo']}"
+    caminho = "data/Indicadores_Compras_Fornecedores/COMPRAS_FORNECEDORES.docx"
 
     if os.path.exists(caminho):
-        with open(caminho, "rb") as file:
-            st.download_button("📎 Baixar evidência", file, file_name=dados["arquivo"])
-    else:
-        st.warning("Arquivo não encontrado")
-
-    # ========================================================
-    # 🚨 REGRA ISO
-    # ========================================================
-    if len(prazo_validos) >= 3:
-        if all(v < META_PRAZO for v in prazo_validos[-3:]):
-            st.error("🚨 3 meses consecutivos fora da meta — ação obrigatória")
-        else:
-            st.success("Indicador sob controle recente")
+        with open(caminho, "rb") as f:
+            st.download_button("📎 Baixar evidência", f, file_name="COMPRAS_FORNECEDORES.docx")
