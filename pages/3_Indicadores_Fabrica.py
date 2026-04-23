@@ -1,21 +1,9 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-
-st.set_page_config(page_title="Indicadores da Fábrica", layout="wide")
-
-
-# ===============================
-# 🔐 BLOQUEIO DE ACESSO GLOBAL
-# ===============================
-if "logado" not in st.session_state or not st.session_state.logado:
-    st.warning("🔒 Acesso não autorizado. Redirecionando para login...")
-    st.switch_page("app.py")
-
-
 # ============================================================
 # 🔒 BASE APS (ÚNICA E PROTEGIDA)
 # ============================================================
+
+import pandas as pd
+import os
 
 df_raw = st.session_state.get("df", pd.DataFrame())
 
@@ -25,107 +13,171 @@ if df_raw is None or not isinstance(df_raw, pd.DataFrame):
 df_aps = df_raw.copy()
 
 
+# ============================================================
+# 📊 CÁLCULO DE ATRASOS (APS)
+# ============================================================
+
+pct_atraso = None
+
+if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.columns:
+
+    base = df_aps.copy()
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+
+    hoje = pd.Timestamp.today().normalize()
+
+    pv = base.groupby("PV", as_index=False).agg(
+        data_entrega=("DATA_ENTREGA_APS", "min")
+    )
+
+    pv = pv.dropna(subset=["data_entrega"])
+
+    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
+    pv["Atrasada"] = pv["Atraso_dias"] > 0
+
+    total = len(pv)
+    atrasadas = pv["Atrasada"].sum()
+
+    pct_atraso = (atrasadas / total * 100) if total > 0 else None
 
 
 # ============================================================
-# 🚦 PAINEL EXECUTIVO CONSOLIDADO (SEMAFORO GERAL)
+# 📊 RH (EXCEL)
+# ============================================================
+
+rh_abs = None
+
+try:
+    caminho_rh = "data/Indicadores_RH/Indicadores_RH_2026.xlsx"
+    if os.path.exists(caminho_rh):
+        df_rh = pd.read_excel(caminho_rh)
+
+        # pega último valor válido da coluna de absenteísmo
+        col = [c for c in df_rh.columns if "abs" in c.lower()][0]
+        rh_vals = df_rh[col].dropna()
+
+        if not rh_vals.empty:
+            rh_abs = rh_vals.iloc[-1]
+
+except:
+    pass
+
+
+# ============================================================
+# 📊 QUALIDADE (EXCEL)
+# ============================================================
+
+nc_externas = None
+
+try:
+    caminho_q = "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
+    if os.path.exists(caminho_q):
+        df_q = pd.read_excel(caminho_q)
+
+        col = [c for c in df_q.columns if "nc" in c.lower()][0]
+        vals = df_q[col].dropna()
+
+        if not vals.empty:
+            nc_externas = vals.iloc[-1]
+
+except:
+    pass
+
+
+# ============================================================
+# 📊 FORNECEDORES (EXCEL)
+# ============================================================
+
+forn_prazo = None
+
+try:
+    caminho_f = "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx"
+    if os.path.exists(caminho_f):
+        df_f = pd.read_excel(caminho_f)
+
+        col = [c for c in df_f.columns if "prazo" in c.lower()][0]
+        vals = df_f[col].dropna()
+
+        if not vals.empty:
+            forn_prazo = vals.iloc[-1]
+
+except:
+    pass
+
+
+# ============================================================
+# 🚦 PAINEL EXECUTIVO CONSOLIDADO
 # ============================================================
 
 st.subheader("🚦 Painel Executivo")
 st.caption("Status consolidado dos principais indicadores da fábrica")
 
-def status(valor, meta, tipo="max"):
+
+def classificar(valor, meta, tipo="max"):
+
     if valor is None:
         return "⚪ Sem dados"
-    if tipo == "max":
-        return "🟢 OK" if valor <= meta else "🔴 Crítico"
-    else:
-        return "🟢 OK" if valor >= meta else "🔴 Crítico"
 
-def status_texto(valor, meta, tipo):
-    if valor is None:
-        return "Sem dados"
     if tipo == "max":
         if valor <= meta:
-            return "Dentro da meta"
+            return "🟢 OK"
         elif valor <= meta * 1.2:
-            return "Atenção"
+            return "🟡 Atenção"
         else:
-            return "Crítico"
+            return "🔴 Crítico"
+
     else:
         if valor >= meta:
-            return "Dentro da meta"
+            return "🟢 OK"
         elif valor >= meta * 0.8:
-            return "Atenção"
+            return "🟡 Atenção"
         else:
-            return "Crítico"
+            return "🔴 Crítico"
 
-# ============================================================
-# 📊 VALORES ATUAIS (PEGANDO DO SISTEMA)
-# ============================================================
-
-# PRODUÇÃO (APS)
-pct_atraso_exec = pct_atraso
-
-# COMERCIAL
-valor_comercial = 0.1875  # último mês (Mar)
-
-# QUALIDADE
-nc_externas = 0.015
-
-# MANUTENÇÃO
-manut_status = ultimo["Total"] <= ultimo["Meta"] if 'ultimo' in locals() else None
-
-# FORNECEDORES
-forn_prazo = prazo[2] if 'prazo' in locals() else None
-
-# RH
-rh_abs = 2.85  # último mês
 
 # ============================================================
 # 📊 TABELA EXECUTIVA
 # ============================================================
 
 dados_exec = [
-    ["Produção (Atrasos)", pct_atraso_exec, 5, "max"],
-    ["Comercial", valor_comercial*100, 25, "min"],
-    ["Qualidade (NC)", nc_externas*100, 2, "max"],
-    ["Manutenção", 0 if manut_status else 1, 0, "max"],
-    ["Fornecedores", forn_prazo, 98, "min"],
+    ["Produção (Atrasos)", pct_atraso, 5, "max"],
+    ["Qualidade (NC)", nc_externas, 2, "max"],
+    ["Fornecedores (Prazo)", forn_prazo, 98, "min"],
     ["RH (Absenteísmo)", rh_abs, 2, "max"],
 ]
 
-df_exec = pd.DataFrame(dados_exec, columns=["Indicador","Valor","Meta","Tipo"])
+df_exec = pd.DataFrame(dados_exec, columns=["Indicador", "Valor", "Meta", "Tipo"])
+
 
 # ============================================================
 # 🎯 RENDER
 # ============================================================
 
-for i in range(len(df_exec)):
-
-    ind = df_exec.iloc[i]
+for _, row in df_exec.iterrows():
 
     c1, c2, c3 = st.columns([2,1,2])
 
-    c1.write(f"**{ind['Indicador']}**")
+    c1.write(f"**{row['Indicador']}**")
 
-    c2.write(f"{ind['Valor']:.1f}" if ind["Valor"] is not None else "-")
+    if row["Valor"] is not None:
+        c2.write(f"{row['Valor']:.2f}")
+    else:
+        c2.write("-")
 
-    status_icon = status(ind["Valor"], ind["Meta"], ind["Tipo"])
-    status_desc = status_texto(ind["Valor"], ind["Meta"], ind["Tipo"])
+    c3.write(classificar(row["Valor"], row["Meta"], row["Tipo"]))
 
-    c3.write(f"{status_icon} {status_desc}")
 
 st.divider()
+
 
 # ============================================================
 # 🔥 STATUS GERAL
 # ============================================================
 
-criticos = df_exec.apply(
-    lambda row: status_texto(row["Valor"], row["Meta"], row["Tipo"]) == "Crítico",
-    axis=1
-).sum()
+criticos = sum(
+    1 for _, r in df_exec.iterrows()
+    if classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico"
+)
 
 if criticos == 0:
     st.success("🟢 Operação Controlada")
@@ -133,7 +185,6 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
-
 
 
 # ============================================================
@@ -148,6 +199,8 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📦 Fornecedores",
     "👷 RH"
 ])
+
+
 
 
 
