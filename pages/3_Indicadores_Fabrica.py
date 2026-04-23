@@ -5,6 +5,59 @@ import plotly.express as px
 
 
 # ============================================================
+# 📊 BASE APS (OBRIGATÓRIA)
+# ============================================================
+
+df_raw = st.session_state.get("df", pd.DataFrame())
+
+if df_raw is None or not isinstance(df_raw, pd.DataFrame):
+    df_raw = pd.DataFrame()
+
+df_aps = df_raw.copy()
+
+
+# ============================================================
+# 🔧 FUNÇÃO SEGURA
+# ============================================================
+
+def safe_value(v):
+    try:
+        if v is None or pd.isna(v):
+            return None
+        return float(v)
+    except:
+        return None
+
+
+# ============================================================
+# 📉 APS - ATRASOS (%)
+# ============================================================
+
+pct_atraso = None
+
+if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.columns:
+
+    base = df_aps.copy()
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+
+    hoje = pd.Timestamp.today().normalize()
+
+    pv = base.groupby("PV", as_index=False).agg(
+        data_entrega=("DATA_ENTREGA_APS", "min")
+    )
+
+    pv = pv.dropna(subset=["data_entrega"])
+
+    pv["Atrasada"] = (hoje - pv["data_entrega"]).dt.days > 0
+
+    total = len(pv)
+    atrasadas = pv["Atrasada"].sum()
+
+    pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
+
+
+
+# ============================================================
 # 📊 ABAS
 # ============================================================
 
