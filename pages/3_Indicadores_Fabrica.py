@@ -1,9 +1,10 @@
-# ============================================================
-# 🔒 BASE APS (ÚNICA E PROTEGIDA)
-# ============================================================
-
+import streamlit as st
 import pandas as pd
 import os
+
+# ============================================================
+# BASE APS
+# ============================================================
 
 df_raw = st.session_state.get("df", pd.DataFrame())
 
@@ -12,9 +13,8 @@ if df_raw is None or not isinstance(df_raw, pd.DataFrame):
 
 df_aps = df_raw.copy()
 
-
 # ============================================================
-# 📊 CÁLCULO DE ATRASOS (APS)
+# CÁLCULO DE ATRASO
 # ============================================================
 
 pct_atraso = None
@@ -40,9 +40,8 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
 
     pct_atraso = (atrasadas / total * 100) if total > 0 else None
 
-
 # ============================================================
-# 📊 RH (EXCEL)
+# LEITURA RH (DINÂMICO)
 # ============================================================
 
 rh_abs = None
@@ -52,19 +51,16 @@ try:
     if os.path.exists(caminho_rh):
         df_rh = pd.read_excel(caminho_rh)
 
-        # pega último valor válido da coluna de absenteísmo
         col = [c for c in df_rh.columns if "abs" in c.lower()][0]
-        rh_vals = df_rh[col].dropna()
+        vals = df_rh[col].dropna()
 
-        if not rh_vals.empty:
-            rh_abs = rh_vals.iloc[-1]
-
+        if not vals.empty:
+            rh_abs = float(vals.iloc[-1])
 except:
     pass
 
-
 # ============================================================
-# 📊 QUALIDADE (EXCEL)
+# LEITURA QUALIDADE
 # ============================================================
 
 nc_externas = None
@@ -78,14 +74,12 @@ try:
         vals = df_q[col].dropna()
 
         if not vals.empty:
-            nc_externas = vals.iloc[-1]
-
+            nc_externas = float(vals.iloc[-1])
 except:
     pass
 
-
 # ============================================================
-# 📊 FORNECEDORES (EXCEL)
+# LEITURA FORNECEDORES
 # ============================================================
 
 forn_prazo = None
@@ -99,19 +93,16 @@ try:
         vals = df_f[col].dropna()
 
         if not vals.empty:
-            forn_prazo = vals.iloc[-1]
-
+            forn_prazo = float(vals.iloc[-1])
 except:
     pass
 
-
 # ============================================================
-# 🚦 PAINEL EXECUTIVO CONSOLIDADO
+# PAINEL EXECUTIVO
 # ============================================================
 
 st.subheader("🚦 Painel Executivo")
 st.caption("Status consolidado dos principais indicadores da fábrica")
-
 
 def classificar(valor, meta, tipo="max"):
 
@@ -125,7 +116,6 @@ def classificar(valor, meta, tipo="max"):
             return "🟡 Atenção"
         else:
             return "🔴 Crítico"
-
     else:
         if valor >= meta:
             return "🟢 OK"
@@ -134,24 +124,14 @@ def classificar(valor, meta, tipo="max"):
         else:
             return "🔴 Crítico"
 
-
-# ============================================================
-# 📊 TABELA EXECUTIVA
-# ============================================================
-
 dados_exec = [
-    ["Produção (Atrasos)", pct_atraso, 5, "max"],
-    ["Qualidade (NC)", nc_externas, 2, "max"],
-    ["Fornecedores (Prazo)", forn_prazo, 98, "min"],
-    ["RH (Absenteísmo)", rh_abs, 2, "max"],
+    ["Produção (Atrasos %)", pct_atraso, 5, "max"],
+    ["Qualidade (NC %)", nc_externas, 2, "max"],
+    ["Fornecedores (Prazo %)", forn_prazo, 98, "min"],
+    ["RH (Absenteísmo %)", rh_abs, 2, "max"],
 ]
 
 df_exec = pd.DataFrame(dados_exec, columns=["Indicador", "Valor", "Meta", "Tipo"])
-
-
-# ============================================================
-# 🎯 RENDER
-# ============================================================
 
 for _, row in df_exec.iterrows():
 
@@ -166,12 +146,10 @@ for _, row in df_exec.iterrows():
 
     c3.write(classificar(row["Valor"], row["Meta"], row["Tipo"]))
 
-
 st.divider()
 
-
 # ============================================================
-# 🔥 STATUS GERAL
+# STATUS GERAL
 # ============================================================
 
 criticos = sum(
@@ -186,9 +164,8 @@ elif criticos <= 2:
 else:
     st.error("🔴 Operação em risco")
 
-
 # ============================================================
-# 📊 ABAS
+# ABAS
 # ============================================================
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -199,7 +176,6 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📦 Fornecedores",
     "👷 RH"
 ])
-
 
 
 
