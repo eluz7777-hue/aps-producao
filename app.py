@@ -47,21 +47,23 @@ if not st.session_state.logado:
     st.stop()
 
 # ============================================================
-# FUNÇÃO: LER EXCEL (COM ABAS)
+# LEITOR INTELIGENTE DE EXCEL (RESOLVE SEU PROBLEMA)
 # ============================================================
-def ler_excel_seguro(path):
+def ler_excel(path):
 
     if not os.path.exists(path):
         return None
 
-    try:
-        xls = pd.ExcelFile(path)
-        for aba in xls.sheet_names:
-            df = xls.parse(aba)
-            if not df.empty:
+    for skip in range(5):  # tenta 0 até 4 linhas acima
+        try:
+            df = pd.read_excel(path, skiprows=skip)
+
+            if df.columns.str.contains("PV", case=False).any() or \
+               df.columns.str.contains("OEE", case=False).any() or \
+               df.columns.str.contains("NC", case=False).any():
                 return df
-    except:
-        return None
+        except:
+            continue
 
     return None
 
@@ -70,12 +72,9 @@ def ler_excel_seguro(path):
 # ============================================================
 def calcular_aps():
 
-    df = ler_excel_seguro("data/APS_base.xlsx")
+    df = ler_excel("data/APS_base.xlsx")
 
-    if df is None or df.empty:
-        return None
-
-    if "PV" not in df.columns:
+    if df is None or "PV" not in df.columns:
         return None
 
     col_data = next((c for c in df.columns if "data" in c.lower() and "entrega" not in c.lower()), None)
@@ -89,19 +88,13 @@ def calcular_aps():
 
     df = df.dropna(subset=[col_data, col_entrega])
 
-    if df.empty:
-        return None
-
-    pv = df.groupby("PV", as_index=False).agg(
-        real=(col_data, "max"),
-        plan=(col_entrega, "min")
-    )
+    pv = df.groupby("PV").agg(real=(col_data,"max"), plan=(col_entrega,"min"))
 
     pv["atraso"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
 
     total = len(pv)
     atrasadas = (pv["atraso"] > 0).sum()
-    pct = (atrasadas / total * 100) if total > 0 else 0
+    pct = (atrasadas / total * 100) if total else 0
 
     return pct, total, atrasadas
 
@@ -110,7 +103,7 @@ def calcular_aps():
 # ============================================================
 def carregar_oee():
 
-    df = ler_excel_seguro("data/Indicadores de Qualidade/OEE - 2026.xlsx")
+    df = ler_excel("data/Indicadores de Qualidade/OEE - 2026.xlsx")
 
     if df is None:
         return None
@@ -120,19 +113,14 @@ def carregar_oee():
     if not col:
         return None
 
-    serie = pd.to_numeric(df[col], errors="coerce").dropna()
-
-    if serie.empty:
-        return None
-
-    return float(serie.iloc[-1])
+    return float(pd.to_numeric(df[col], errors="coerce").dropna().iloc[-1])
 
 # ============================================================
 # NC
 # ============================================================
 def carregar_nc():
 
-    df = ler_excel_seguro("data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx")
+    df = ler_excel("data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx")
 
     if df is None:
         return 0
@@ -142,54 +130,83 @@ def carregar_nc():
     if not col:
         return 0
 
-    col_ano = next((c for c in df.columns if "ano" in c.lower()), None)
-
-    if col_ano:
-        ano = datetime.now().year
-        df = df[df[col_ano] == ano]
-
     return int(pd.to_numeric(df[col], errors="coerce").fillna(0).sum())
 
 # ============================================================
 # STATUS
 # ============================================================
-def status_fabrica(pct, oee):
+def status(pct, oee):
 
-    score = 0
+    if pct is None:
+        return "⚪ Sem dados"
 
-    if pct is not None:
-        if pct > 20: score += 2
-        elif pct > 5: score += 1
-
-    if oee is not None:
-        if oee < 60: score += 2
-        elif oee < 75: score += 1
-
-    if score >= 3:
-        return "🔴 Operação em Risco"
-    elif score >= 1:
+    if pct > 20 or (oee and oee < 60):
+        return "🔴 Crítico"
+    elif pct > 5:
         return "🟡 Atenção"
     else:
-        return "🟢 Operação Controlada"
+        return "🟢 Controlado"
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+with st.sidebar:
+    st.markdown("## ELOHIM APS")
+    st.info(f"👤 {st.session_state.usuario}")
+
+    pagina = st.radio(
+        "",
+        ["Visão Geral","Carga & Capacidade","OEE & Qualidade","Indicadores"]
+    )
+
+    if st.button("Sair"):
+        st.session_state.logado = False
+        st.rerun()
 
 # ============================================================
 # HOME
 # ============================================================
-st.title("🚀 ELOHIM APS")
+if pagina == "Visão Geral":
 
-aps = calcular_aps()
-pct, total, atrasadas = aps if aps else (None, 0, 0)
+    st.title("🚀 ELOHIM APS")
 
-oee = carregar_oee()
-nc = carregar_nc()
+    aps = calcular_aps()
+    pct, total, atrasadas = aps if aps else (None,0,0)
 
-st.success(status_fabrica(pct, oee))
+    oee = carregar_oee()
+    nc = carregar_nc()
 
-c1, c2, c3, c4, c5, c6 = st.columns(6)
+    st.success(status(pct, oee))
 
-c1.metric("APS (%)", f"{pct:.1f}%" if pct is not None else "—")
-c2.metric("PVs Totais", total)
-c3.metric("PVs Atrasadas", atrasadas)
-c4.metric("OEE", f"{oee:.1f}%" if oee else "—")
-c5.metric("NC Ext.", nc)
-c6.metric("Status", "Operação")
+    c1, c2, c3, c4, c5 = st.columns(5)
+
+    c1.metric("APS (%)", f"{pct:.1f}%" if pct else "—")
+    c2.metric("PVs", total)
+    c3.metric("Atrasadas", atrasadas)
+    c4.metric("OEE", f"{oee:.1f}%" if oee else "—")
+    c5.metric("NC", nc)
+
+    st.markdown("---")
+
+    c1, c2, c3 = st.columns(3)
+
+    if c1.button("🏭 Carga & Capacidade"):
+        st.switch_page("pages/2_APS_Carga_Capacidade.py")
+
+    if c2.button("📈 OEE & Qualidade"):
+        st.switch_page("pages/3_APS_OEE_Qualidade.py")
+
+    if c3.button("📊 Indicadores"):
+        st.switch_page("pages/3_Indicadores_Fabrica.py")
+
+# ============================================================
+# REDIRECIONAMENTO
+# ============================================================
+elif pagina == "Carga & Capacidade":
+    st.switch_page("pages/2_APS_Carga_Capacidade.py")
+
+elif pagina == "OEE & Qualidade":
+    st.switch_page("pages/3_APS_OEE_Qualidade.py")
+
+elif pagina == "Indicadores":
+    st.switch_page("pages/3_Indicadores_Fabrica.py")
