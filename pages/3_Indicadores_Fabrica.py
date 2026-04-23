@@ -60,24 +60,79 @@ rh_abs = None
 nc_externas = None
 forn_prazo = None
 
+
+
 # ============================================================
-# PAINEL EXECUTIVO
+# 📊 LEITURA REAL DOS DADOS (ROBUSTA)
+# ============================================================
+
+def ler_ultimo_valor(caminho, palavras_chave):
+
+    if not os.path.exists(caminho):
+        return None
+
+    try:
+        df = pd.read_excel(caminho)
+
+        if df.empty:
+            return None
+
+        df.columns = [str(c).lower().strip() for c in df.columns]
+
+        # tenta várias palavras chave
+        for palavra in palavras_chave:
+            col = [c for c in df.columns if palavra in c]
+
+            if col:
+                valores = pd.to_numeric(df[col[0]], errors="coerce").dropna()
+
+                if not valores.empty:
+                    return float(valores.iloc[-1])
+
+    except Exception as e:
+        st.warning(f"Erro ao ler {os.path.basename(caminho)}")
+
+    return None
+
+
+# ============================================================
+# 🔹 QUALIDADE
+# ============================================================
+
+nc_externas = ler_ultimo_valor(
+    "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx",
+    ["nc", "não conform", "externa"]
+)
+
+# ============================================================
+# 🔹 RH
+# ============================================================
+
+rh_abs = ler_ultimo_valor(
+    "data/Indicadores_RH/Indicadores_RH_2026.xlsx",
+    ["abs", "absente", "faltas"]
+)
+
+# ============================================================
+# 🔹 FORNECEDORES
+# ============================================================
+
+forn_prazo = ler_ultimo_valor(
+    "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx",
+    ["prazo", "entrega", "%"]
+)
+
+# ============================================================
+# 🚦 PAINEL EXECUTIVO
 # ============================================================
 
 st.subheader("🚦 Painel Executivo")
 st.caption("Status consolidado dos principais indicadores da fábrica")
 
-def safe_value(v):
-    try:
-        if v is None or pd.isna(v):
-            return None
-        return float(v)
-    except:
-        return None
 
 def classificar(valor, meta, tipo="max"):
 
-    if valor is None or pd.isna(valor):
+    if valor is None:
         return "⚪ Sem dados"
 
     if tipo == "max":
@@ -95,8 +150,9 @@ def classificar(valor, meta, tipo="max"):
         else:
             return "🔴 Crítico"
 
+
 # ============================================================
-# DADOS
+# 📊 BASE DO PAINEL
 # ============================================================
 
 dados = [
@@ -107,19 +163,23 @@ dados = [
 ]
 
 df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
-df_exec["Valor"] = df_exec["Valor"].apply(safe_value)
+
 
 # ============================================================
-# RENDER (SEM NAN)
+# 🧼 LIMPEZA FINAL
+# ============================================================
+
+df_exec["Valor"] = df_exec["Valor"].apply(
+    lambda v: None if v is None or pd.isna(v) else float(v)
+)
+
+# ============================================================
+# 🎯 RENDER
 # ============================================================
 
 for _, row in df_exec.iterrows():
 
     valor = row["Valor"]
-
-    # 🔥 remove NaN definitivamente
-    if pd.isna(valor):
-        valor = None
 
     c1, c2, c3 = st.columns([2,1,2])
 
@@ -135,7 +195,7 @@ for _, row in df_exec.iterrows():
 st.divider()
 
 # ============================================================
-# STATUS GERAL
+# 🔥 STATUS GERAL
 # ============================================================
 
 criticos = 0
@@ -143,12 +203,10 @@ validos = 0
 
 for _, r in df_exec.iterrows():
 
-    valor = r["Valor"]
-
-    if not pd.isna(valor) and valor is not None:
+    if r["Valor"] is not None:
         validos += 1
 
-        if classificar(valor, r["Meta"], r["Tipo"]) == "🔴 Crítico":
+        if classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico":
             criticos += 1
 
 if validos == 0:
@@ -159,6 +217,7 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
 
 
 # ============================================================
