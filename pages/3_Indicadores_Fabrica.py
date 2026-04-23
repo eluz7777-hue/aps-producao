@@ -52,11 +52,19 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
 
     pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
 
+
+
+
 # ============================================================
-# 📊 LEITOR UNIVERSAL (EXCEL + WORD)
+# 📊 LEITOR UNIVERSAL (EXCEL + WORD + OCR)
 # ============================================================
 
 from docx import Document
+import pytesseract
+import cv2
+import numpy as np
+from PIL import Image
+import io
 import re
 
 def ler_indicador(caminho):
@@ -73,14 +81,12 @@ def ler_indicador(caminho):
             df = pd.read_excel(caminho, header=None)
 
             df = df.apply(pd.to_numeric, errors="coerce")
-            df = df.dropna(how="all")
-            df = df.dropna(axis=1, how="all")
+            df = df.dropna(how="all").dropna(axis=1, how="all")
 
             if df.empty:
                 return None
 
-            col = df.columns[-1]
-            valores = df[col].dropna()
+            valores = df.iloc[:, -1].dropna()
 
             if valores.empty:
                 return None
@@ -96,9 +102,11 @@ def ler_indicador(caminho):
 
             textos = []
 
+            # textos normais
             for p in doc.paragraphs:
                 textos.append(p.text)
 
+            # tabelas
             for tabela in doc.tables:
                 for linha in tabela.rows:
                     for celula in linha.cells:
@@ -108,12 +116,27 @@ def ler_indicador(caminho):
 
             numeros = re.findall(r"\d+[.,]?\d*", texto)
 
-            if not numeros:
-                return None
+            if numeros:
+                return float(numeros[-1].replace(",", "."))
 
-            valor = numeros[-1].replace(",", ".")
+            # =========================
+            # OCR (IMAGENS)
+            # =========================
+            for rel in doc.part.rels.values():
+                if "image" in rel.target_ref:
 
-            return float(valor)
+                    img_bytes = rel.target_part.blob
+                    image = Image.open(io.BytesIO(img_bytes))
+
+                    img = np.array(image)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+                    texto_img = pytesseract.image_to_string(img)
+
+                    numeros = re.findall(r"\d+[.,]?\d*", texto_img)
+
+                    if numeros:
+                        return float(numeros[-1].replace(",", "."))
 
     except:
         return None
@@ -168,7 +191,7 @@ def classificar(valor, meta, tipo="max"):
 
 
 # ============================================================
-# 📊 BASE DO PAINEL
+# 📊 BASE
 # ============================================================
 
 dados = [
@@ -219,14 +242,13 @@ criticos = sum(
 validos = df_exec["Valor"].notna().sum()
 
 if validos == 0:
-    st.info("⚪ Sem dados suficientes para análise")
+    st.info("⚪ Sem dados suficientes")
 elif criticos == 0:
     st.success("🟢 Operação Controlada")
 elif criticos <= 2:
-    st.warning("🟡 Atenção em alguns indicadores")
+    st.warning("🟡 Atenção")
 else:
     st.error("🔴 Operação em risco")
-
 
 
 
