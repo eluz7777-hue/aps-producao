@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
-# USUÁRIOS
+# LOGIN
 # ============================================================
 USUARIOS = {
     "admin": "1608",
@@ -14,57 +14,58 @@ USUARIOS = {
     "gerente": "producao"
 }
 
-# ============================================================
-# SESSION
-# ============================================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
 if "usuario" not in st.session_state:
     st.session_state.usuario = ""
 
-# ============================================================
-# LOGIN
-# ============================================================
-def tela_login():
+def login():
     c1, c2, c3 = st.columns([1,2,1])
     with c2:
         st.title("🔐 ELOHIM APS")
 
-        user = st.text_input("Usuário")
-        senha = st.text_input("Senha", type="password")
+        u = st.text_input("Usuário")
+        s = st.text_input("Senha", type="password")
 
-        if st.button("Entrar", use_container_width=True):
-            if user in USUARIOS and USUARIOS[user] == senha:
+        if st.button("Entrar"):
+            if u in USUARIOS and USUARIOS[u] == s:
                 st.session_state.logado = True
-                st.session_state.usuario = user
+                st.session_state.usuario = u
                 st.rerun()
             else:
-                st.error("Usuário ou senha inválidos")
+                st.error("Usuário inválido")
 
 if not st.session_state.logado:
-    tela_login()
+    login()
     st.stop()
 
 # ============================================================
-# LEITOR INTELIGENTE DE EXCEL (RESOLVE SEU PROBLEMA)
+# LEITOR ROBUSTO
 # ============================================================
 def ler_excel(path):
 
     if not os.path.exists(path):
         return None
 
-    for skip in range(5):  # tenta 0 até 4 linhas acima
+    for skip in range(6):
         try:
             df = pd.read_excel(path, skiprows=skip)
-
-            if df.columns.str.contains("PV", case=False).any() or \
-               df.columns.str.contains("OEE", case=False).any() or \
-               df.columns.str.contains("NC", case=False).any():
+            if len(df.columns) > 3:
                 return df
         except:
-            continue
+            pass
 
+    return None
+
+# ============================================================
+# LOCALIZADOR FLEXÍVEL DE COLUNAS
+# ============================================================
+def achar_coluna(df, palavras):
+    for c in df.columns:
+        nome = c.lower()
+        if all(p in nome for p in palavras):
+            return c
     return None
 
 # ============================================================
@@ -73,14 +74,14 @@ def ler_excel(path):
 def calcular_aps():
 
     df = ler_excel("data/APS_base.xlsx")
-
-    if df is None or "PV" not in df.columns:
+    if df is None:
         return None
 
-    col_data = next((c for c in df.columns if "data" in c.lower() and "entrega" not in c.lower()), None)
-    col_entrega = next((c for c in df.columns if "entrega" in c.lower()), None)
+    col_pv = achar_coluna(df, ["pv"])
+    col_data = achar_coluna(df, ["data"])
+    col_entrega = achar_coluna(df, ["entrega"])
 
-    if not col_data or not col_entrega:
+    if not col_pv or not col_data or not col_entrega:
         return None
 
     df[col_data] = pd.to_datetime(df[col_data], errors="coerce")
@@ -88,7 +89,10 @@ def calcular_aps():
 
     df = df.dropna(subset=[col_data, col_entrega])
 
-    pv = df.groupby("PV").agg(real=(col_data,"max"), plan=(col_entrega,"min"))
+    pv = df.groupby(col_pv).agg(
+        real=(col_data,"max"),
+        plan=(col_entrega,"min")
+    )
 
     pv["atraso"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
 
@@ -104,16 +108,17 @@ def calcular_aps():
 def carregar_oee():
 
     df = ler_excel("data/Indicadores de Qualidade/OEE - 2026.xlsx")
-
     if df is None:
         return None
 
-    col = next((c for c in df.columns if "oee" in c.lower()), None)
+    col = achar_coluna(df, ["oee"])
 
     if not col:
         return None
 
-    return float(pd.to_numeric(df[col], errors="coerce").dropna().iloc[-1])
+    serie = pd.to_numeric(df[col], errors="coerce").dropna()
+
+    return float(serie.iloc[-1]) if not serie.empty else None
 
 # ============================================================
 # NC
@@ -121,11 +126,10 @@ def carregar_oee():
 def carregar_nc():
 
     df = ler_excel("data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx")
-
     if df is None:
         return 0
 
-    col = next((c for c in df.columns if "nc" in c.lower()), None)
+    col = achar_coluna(df, ["nc"])
 
     if not col:
         return 0
@@ -133,31 +137,34 @@ def carregar_nc():
     return int(pd.to_numeric(df[col], errors="coerce").fillna(0).sum())
 
 # ============================================================
-# STATUS
+# STATUS LIMPO
 # ============================================================
-def status(pct, oee):
+def status_fabrica(pct, oee):
 
     if pct is None:
-        return "⚪ Sem dados"
+        return "⚪ Sem dados", "status-gray"
 
     if pct > 20 or (oee and oee < 60):
-        return "🔴 Crítico"
+        return "🔴 Crítico", "status-red"
     elif pct > 5:
-        return "🟡 Atenção"
+        return "🟡 Atenção", "status-yellow"
     else:
-        return "🟢 Controlado"
+        return "🟢 Operação Controlada", "status-green"
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 with st.sidebar:
+
     st.markdown("## ELOHIM APS")
     st.info(f"👤 {st.session_state.usuario}")
 
-    pagina = st.radio(
-        "",
-        ["Visão Geral","Carga & Capacidade","OEE & Qualidade","Indicadores"]
-    )
+    pagina = st.radio("", [
+        "Visão Geral",
+        "Carga & Capacidade",
+        "OEE & Qualidade",
+        "Indicadores"
+    ])
 
     if st.button("Sair"):
         st.session_state.logado = False
@@ -176,15 +183,21 @@ if pagina == "Visão Geral":
     oee = carregar_oee()
     nc = carregar_nc()
 
-    st.success(status(pct, oee))
+    texto, classe = status_fabrica(pct, oee)
+
+    st.markdown(f"""
+    <div style="padding:15px;border-radius:12px;background:rgba(0,200,120,0.15);text-align:center;font-size:20px;">
+        {texto}
+    </div>
+    """, unsafe_allow_html=True)
 
     c1, c2, c3, c4, c5 = st.columns(5)
 
     c1.metric("APS (%)", f"{pct:.1f}%" if pct else "—")
-    c2.metric("PVs", total)
-    c3.metric("Atrasadas", atrasadas)
+    c2.metric("PVs Totais", total)
+    c3.metric("PVs Atrasadas", atrasadas)
     c4.metric("OEE", f"{oee:.1f}%" if oee else "—")
-    c5.metric("NC", nc)
+    c5.metric("NC Ext.", nc)
 
     st.markdown("---")
 
