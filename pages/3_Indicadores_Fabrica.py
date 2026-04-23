@@ -67,6 +67,14 @@ forn_prazo = None
 st.subheader("🚦 Painel Executivo")
 st.caption("Status consolidado dos principais indicadores da fábrica")
 
+def safe_value(v):
+    try:
+        if v is None or pd.isna(v):
+            return None
+        return float(v)
+    except:
+        return None
+
 def classificar(valor, meta, tipo="max"):
 
     if valor is None or pd.isna(valor):
@@ -87,6 +95,10 @@ def classificar(valor, meta, tipo="max"):
         else:
             return "🔴 Crítico"
 
+# ============================================================
+# DADOS
+# ============================================================
+
 dados = [
     ["Produção (Atrasos %)", pct_atraso, 5, "max"],
     ["Qualidade (NC %)", nc_externas, 2, "max"],
@@ -98,21 +110,27 @@ df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
 df_exec["Valor"] = df_exec["Valor"].apply(safe_value)
 
 # ============================================================
-# RENDER
+# RENDER (SEM NAN)
 # ============================================================
 
 for _, row in df_exec.iterrows():
+
+    valor = row["Valor"]
+
+    # 🔥 remove NaN definitivamente
+    if pd.isna(valor):
+        valor = None
 
     c1, c2, c3 = st.columns([2,1,2])
 
     c1.write(f"**{row['Indicador']}**")
 
-    if row["Valor"] is None:
+    if valor is None:
         c2.write("-")
     else:
-        c2.write(f"{row['Valor']:.2f}")
+        c2.write(f"{valor:.2f}")
 
-    c3.write(classificar(row["Valor"], row["Meta"], row["Tipo"]))
+    c3.write(classificar(valor, row["Meta"], row["Tipo"]))
 
 st.divider()
 
@@ -124,9 +142,13 @@ criticos = 0
 validos = 0
 
 for _, r in df_exec.iterrows():
-    if r["Valor"] is not None:
+
+    valor = r["Valor"]
+
+    if not pd.isna(valor) and valor is not None:
         validos += 1
-        if classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico":
+
+        if classificar(valor, r["Meta"], r["Tipo"]) == "🔴 Crítico":
             criticos += 1
 
 if validos == 0:
@@ -137,6 +159,7 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
 
 # ============================================================
 # 📊 ABAS
