@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import plotly.express as px
 
 # ============================================================
 # BASE APS
@@ -26,7 +27,7 @@ def safe_value(v):
         return None
 
 # ============================================================
-# APS
+# APS - ATRASOS
 # ============================================================
 
 pct_atraso = None
@@ -52,8 +53,7 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
     pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
 
 # ============================================================
-# RH / QUALIDADE / FORNECEDORES
-# (mantido simples até integração real)
+# DADOS (POR ENQUANTO SEM INTEGRAÇÃO COMPLETA)
 # ============================================================
 
 rh_abs = None
@@ -69,7 +69,7 @@ st.caption("Status consolidado dos principais indicadores da fábrica")
 
 def classificar(valor, meta, tipo="max"):
 
-    if valor is None:
+    if valor is None or pd.isna(valor):
         return "⚪ Sem dados"
 
     if tipo == "max":
@@ -117,7 +117,7 @@ for _, row in df_exec.iterrows():
 st.divider()
 
 # ============================================================
-# STATUS GERAL (CORRIGIDO)
+# STATUS GERAL
 # ============================================================
 
 criticos = 0
@@ -137,6 +137,70 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
+# ============================================================
+# 📊 ABAS
+# ============================================================
+
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "💰 Comercial",
+    "🧪 Qualidade",
+    "🏭 Produção",
+    "🔧 Manutenção",
+    "📦 Fornecedores",
+    "👷 RH"
+])
+
+# ============================================================
+# 💰 COMERCIAL (PROTEGIDO)
+# ============================================================
+
+with tab1:
+
+    st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
+    st.caption("Meta: ≥ 25%")
+
+    try:
+        caminho = "data/Indicadores_Comerciais/Indicadores_Comerciais_2026.xlsx"
+
+        if os.path.exists(caminho):
+
+            df = pd.read_excel(caminho)
+
+            if not df.empty and len(df.columns) >= 2:
+
+                df.columns = [str(c).strip() for c in df.columns]
+
+                x_col = df.columns[0]
+                y_col = df.columns[1]
+
+                df = df.dropna(subset=[y_col])
+
+                if not df.empty:
+
+                    fig = px.bar(
+                        df,
+                        x=x_col,
+                        y=y_col,
+                        title="Orçamentos → Pedidos (%)",
+                        text_auto=True
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                else:
+                    st.warning("⚠️ Sem dados válidos")
+
+            else:
+                st.warning("⚠️ Planilha inválida")
+
+        else:
+            st.warning("⚠️ Arquivo não encontrado")
+
+    except Exception as e:
+        st.error(f"Erro no módulo comercial: {e}")
+
+
 
 # ============================================================
 # ABAS
