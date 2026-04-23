@@ -32,7 +32,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# USERS
+# USUÁRIOS (MANTIDO)
 # ============================================================
 USUARIOS = {
     "admin": "1608",
@@ -50,7 +50,7 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = ""
 
 # ============================================================
-# LOGIN
+# LOGIN (MANTIDO)
 # ============================================================
 def tela_login():
     c1, c2, c3 = st.columns([1,2,1])
@@ -73,7 +73,7 @@ if not st.session_state.logado:
     st.stop()
 
 # ============================================================
-# AUTOLOAD APS
+# AUTOLOAD APS (MANTIDO)
 # ============================================================
 if "df" not in st.session_state:
     caminho = "data/APS_base.xlsx"
@@ -86,29 +86,32 @@ if "df" not in st.session_state:
 df = st.session_state.get("df", pd.DataFrame())
 
 # ============================================================
-# APS
+# APS (ROBUSTO)
 # ============================================================
 def calcular_aps():
 
     if df.empty:
         return None
 
-    if "Data" not in df.columns or "DATA_ENTREGA_APS" not in df.columns:
+    col_data = [c for c in df.columns if "data" in c.lower() and "entrega" not in c.lower()]
+    col_entrega = [c for c in df.columns if "entrega" in c.lower()]
+
+    if not col_data or not col_entrega:
         return None
+
+    col_data = col_data[0]
+    col_entrega = col_entrega[0]
 
     base = df.copy()
 
-    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
-    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+    base[col_data] = pd.to_datetime(base[col_data], errors="coerce")
+    base[col_entrega] = pd.to_datetime(base[col_entrega], errors="coerce")
 
-    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
-
-    if base.empty:
-        return None
+    base = base.dropna(subset=[col_data, col_entrega])
 
     pv = base.groupby("PV", as_index=False).agg(
-        real=("Data","max"),
-        plan=("DATA_ENTREGA_APS","min")
+        real=(col_data,"max"),
+        plan=(col_entrega,"min")
     )
 
     pv["atraso"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
@@ -131,11 +134,11 @@ def status_aps(pct):
         return "🟢", "Controlado", "status-green"
 
 # ============================================================
-# OEE
+# OEE (CORRIGIDO COM SEU ARQUIVO)
 # ============================================================
 def carregar_oee():
 
-    path = "data/Indicadores_oee/oee.xlsx"
+    path = "data/Indicadores de Qualidade/OEE - 2026.xlsx"
 
     if not os.path.exists(path):
         return None
@@ -161,19 +164,17 @@ def carregar_nc():
 
     df_nc = pd.read_excel(path)
 
-    # tenta encontrar coluna de NC automaticamente
-    col_nc = [c for c in df_nc.columns if "nc" in c.lower()]
+    col = [c for c in df_nc.columns if "nc" in c.lower()]
 
-    if not col_nc:
+    if not col:
         return 0
 
-    col = col_nc[0]
+    col = col[0]
 
-    # se tiver coluna de ano
-    if "ano" in [c.lower() for c in df_nc.columns]:
-        col_ano = [c for c in df_nc.columns if "ano" in c.lower()][0]
-        ano_atual = datetime.now().year
-        df_nc = df_nc[df_nc[col_ano] == ano_atual]
+    col_ano = [c for c in df_nc.columns if "ano" in c.lower()]
+    if col_ano:
+        ano = datetime.now().year
+        df_nc = df_nc[df_nc[col_ano[0]] == ano]
 
     return int(df_nc[col].sum())
 
@@ -204,7 +205,7 @@ def status_fabrica(pct_aps, oee):
         return "🟢", "Operação Controlada", "status-green"
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR (MANTIDO)
 # ============================================================
 with st.sidebar:
 
@@ -221,6 +222,7 @@ with st.sidebar:
 
     if st.button("Sair"):
         st.session_state.logado = False
+        st.session_state.usuario = ""
         st.rerun()
 
 # ============================================================
