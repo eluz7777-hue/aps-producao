@@ -24,64 +24,117 @@ if df_raw is None or not isinstance(df_raw, pd.DataFrame):
 
 df_aps = df_raw.copy()
 
-# ============================================================
-# 🚦 VISÃO EXECUTIVA (ALINHADA COM PRODUÇÃO)
-# ============================================================
 
-st.subheader("🚦 Visão Executiva")
-st.caption("Indicador consolidado baseado em entregas vencidas no APS (tempo real)")
 
-pct_atraso = 0
-
-required_cols = ["PV", "DATA_ENTREGA_APS"]
-
-if not df_aps.empty and all(c in df_aps.columns for c in required_cols):
-
-    base = df_aps.copy()
-
-    # 🔒 garante formato correto
-    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
-
-    hoje = pd.Timestamp.today().normalize()
-
-    # 📦 consolidação por PV
-    pv = base.groupby("PV", as_index=False).agg(
-        data_entrega=("DATA_ENTREGA_APS", "min")
-    )
-
-    pv = pv.dropna(subset=["data_entrega"])
-
-    # 🚨 atraso em tempo real
-    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
-    pv["Atrasada"] = pv["Atraso_dias"] > 0
-
-    total = len(pv)
-    atrasadas = pv["Atrasada"].sum()
-
-    pct_atraso = (atrasadas / total * 100) if total > 0 else 0
 
 # ============================================================
-# 🔥 CLASSIFICAÇÃO EXECUTIVA
+# 🚦 PAINEL EXECUTIVO CONSOLIDADO (SEMAFORO GERAL)
 # ============================================================
 
-def classificar(valor):
-    if valor > 15:
-        return "🔴 Crítico"
-    elif valor > 5:
-        return "🟡 Atenção"
+st.subheader("🚦 Painel Executivo")
+st.caption("Status consolidado dos principais indicadores da fábrica")
+
+def status(valor, meta, tipo="max"):
+    if valor is None:
+        return "⚪ Sem dados"
+    if tipo == "max":
+        return "🟢 OK" if valor <= meta else "🔴 Crítico"
     else:
-        return "🟢 Saudável"
+        return "🟢 OK" if valor >= meta else "🔴 Crítico"
+
+def status_texto(valor, meta, tipo):
+    if valor is None:
+        return "Sem dados"
+    if tipo == "max":
+        if valor <= meta:
+            return "Dentro da meta"
+        elif valor <= meta * 1.2:
+            return "Atenção"
+        else:
+            return "Crítico"
+    else:
+        if valor >= meta:
+            return "Dentro da meta"
+        elif valor >= meta * 0.8:
+            return "Atenção"
+        else:
+            return "Crítico"
 
 # ============================================================
-# 📊 KPIs EXECUTIVOS
+# 📊 VALORES ATUAIS (PEGANDO DO SISTEMA)
 # ============================================================
 
-c1, c2 = st.columns(2)
+# PRODUÇÃO (APS)
+pct_atraso_exec = pct_atraso
 
-c1.metric("🚨 Entregas em Risco (%)", f"{pct_atraso:.1f}%")
-c2.metric("Status Geral", classificar(pct_atraso))
+# COMERCIAL
+valor_comercial = 0.1875  # último mês (Mar)
+
+# QUALIDADE
+nc_externas = 0.015
+
+# MANUTENÇÃO
+manut_status = ultimo["Total"] <= ultimo["Meta"] if 'ultimo' in locals() else None
+
+# FORNECEDORES
+forn_prazo = prazo[2] if 'prazo' in locals() else None
+
+# RH
+rh_abs = 2.85  # último mês
+
+# ============================================================
+# 📊 TABELA EXECUTIVA
+# ============================================================
+
+dados_exec = [
+    ["Produção (Atrasos)", pct_atraso_exec, 5, "max"],
+    ["Comercial", valor_comercial*100, 25, "min"],
+    ["Qualidade (NC)", nc_externas*100, 2, "max"],
+    ["Manutenção", 0 if manut_status else 1, 0, "max"],
+    ["Fornecedores", forn_prazo, 98, "min"],
+    ["RH (Absenteísmo)", rh_abs, 2, "max"],
+]
+
+df_exec = pd.DataFrame(dados_exec, columns=["Indicador","Valor","Meta","Tipo"])
+
+# ============================================================
+# 🎯 RENDER
+# ============================================================
+
+for i in range(len(df_exec)):
+
+    ind = df_exec.iloc[i]
+
+    c1, c2, c3 = st.columns([2,1,2])
+
+    c1.write(f"**{ind['Indicador']}**")
+
+    c2.write(f"{ind['Valor']:.1f}" if ind["Valor"] is not None else "-")
+
+    status_icon = status(ind["Valor"], ind["Meta"], ind["Tipo"])
+    status_desc = status_texto(ind["Valor"], ind["Meta"], ind["Tipo"])
+
+    c3.write(f"{status_icon} {status_desc}")
 
 st.divider()
+
+# ============================================================
+# 🔥 STATUS GERAL
+# ============================================================
+
+criticos = df_exec.apply(
+    lambda row: status_texto(row["Valor"], row["Meta"], row["Tipo"]) == "Crítico",
+    axis=1
+).sum()
+
+if criticos == 0:
+    st.success("🟢 Operação Controlada")
+elif criticos <= 2:
+    st.warning("🟡 Atenção em alguns indicadores")
+else:
+    st.error("🔴 Operação em risco")
+
+
 
 # ============================================================
 # 📊 ABAS
