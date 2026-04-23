@@ -32,7 +32,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# USUÁRIOS (MANTIDO)
+# USUÁRIOS
 # ============================================================
 USUARIOS = {
     "admin": "1608",
@@ -50,7 +50,7 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = ""
 
 # ============================================================
-# LOGIN (MANTIDO)
+# LOGIN
 # ============================================================
 def tela_login():
     c1, c2, c3 = st.columns([1,2,1])
@@ -73,34 +73,28 @@ if not st.session_state.logado:
     st.stop()
 
 # ============================================================
-# AUTOLOAD APS (MANTIDO)
+# LOAD APS
 # ============================================================
-if "df" not in st.session_state:
-    caminho = "data/APS_base.xlsx"
-    if os.path.exists(caminho):
-        try:
-            st.session_state["df"] = pd.read_excel(caminho)
-        except:
-            st.session_state["df"] = pd.DataFrame()
-
-df = st.session_state.get("df", pd.DataFrame())
+def carregar_aps_df():
+    path = "data/APS_base.xlsx"
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    return pd.read_excel(path)
 
 # ============================================================
-# APS (ROBUSTO)
+# APS CALCULO (CORRETO)
 # ============================================================
-def calcular_aps():
+def calcular_aps(df):
 
-    if df.empty:
+    if df.empty or "PV" not in df.columns:
         return None
 
-    col_data = [c for c in df.columns if "data" in c.lower() and "entrega" not in c.lower()]
-    col_entrega = [c for c in df.columns if "entrega" in c.lower()]
+    # identifica colunas automaticamente
+    col_data = next((c for c in df.columns if "data" in c.lower() and "entrega" not in c.lower()), None)
+    col_entrega = next((c for c in df.columns if "entrega" in c.lower()), None)
 
     if not col_data or not col_entrega:
         return None
-
-    col_data = col_data[0]
-    col_entrega = col_entrega[0]
 
     base = df.copy()
 
@@ -109,32 +103,24 @@ def calcular_aps():
 
     base = base.dropna(subset=[col_data, col_entrega])
 
+    if base.empty:
+        return None
+
     pv = base.groupby("PV", as_index=False).agg(
-        real=(col_data,"max"),
-        plan=(col_entrega,"min")
+        real=(col_data, "max"),
+        plan=(col_entrega, "min")
     )
 
-    pv["atraso"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
+    pv["atraso_dias"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
 
-    pct = (pv["atraso"] > 0).mean()*100
-    total = len(pv)
+    total_pv = len(pv)
+    atrasadas = (pv["atraso_dias"] > 0).sum()
+    pct = (atrasadas / total_pv) * 100 if total_pv > 0 else 0
 
-    return pct, total
-
-def status_aps(pct):
-
-    if pct is None:
-        return "⚪", "Sem dados", "status-gray"
-
-    if pct > 20:
-        return "🔴", "Crítico", "status-red"
-    elif pct > 5:
-        return "🟡", "Atenção", "status-yellow"
-    else:
-        return "🟢", "Controlado", "status-green"
+    return pct, total_pv, atrasadas
 
 # ============================================================
-# OEE (CORRIGIDO COM SEU ARQUIVO)
+# OEE
 # ============================================================
 def carregar_oee():
 
@@ -143,17 +129,22 @@ def carregar_oee():
     if not os.path.exists(path):
         return None
 
-    df_oee = pd.read_excel(path)
+    df = pd.read_excel(path)
 
-    col = [c for c in df_oee.columns if "oee" in c.lower()]
+    col = next((c for c in df.columns if "oee" in c.lower()), None)
 
     if not col:
         return None
 
-    return float(df_oee[col[0]].dropna().iloc[-1])
+    serie = pd.to_numeric(df[col], errors="coerce").dropna()
+
+    if serie.empty:
+        return None
+
+    return float(serie.iloc[-1])
 
 # ============================================================
-# NC EXTERNAS (CORRIGIDO)
+# NC EXTERNAS
 # ============================================================
 def carregar_nc():
 
@@ -162,50 +153,46 @@ def carregar_nc():
     if not os.path.exists(path):
         return 0
 
-    df_nc = pd.read_excel(path)
+    df = pd.read_excel(path)
 
-    col = [c for c in df_nc.columns if "nc" in c.lower()]
+    col_nc = next((c for c in df.columns if "nc" in c.lower()), None)
 
-    if not col:
+    if not col_nc:
         return 0
 
-    col = col[0]
+    # filtra ano se existir
+    col_ano = next((c for c in df.columns if "ano" in c.lower()), None)
 
-    col_ano = [c for c in df_nc.columns if "ano" in c.lower()]
     if col_ano:
-        ano = datetime.now().year
-        df_nc = df_nc[df_nc[col_ano[0]] == ano]
+        ano_atual = datetime.now().year
+        df = df[df[col_ano] == ano_atual]
 
-    return int(df_nc[col].sum())
+    return int(pd.to_numeric(df[col_nc], errors="coerce").fillna(0).sum())
 
 # ============================================================
-# STATUS GERAL
+# STATUS
 # ============================================================
-def status_fabrica(pct_aps, oee):
+def status_fabrica(pct, oee):
 
     score = 0
 
-    if pct_aps is not None:
-        if pct_aps > 20:
-            score += 2
-        elif pct_aps > 5:
-            score += 1
+    if pct is not None:
+        if pct > 20: score += 2
+        elif pct > 5: score += 1
 
     if oee is not None:
-        if oee < 60:
-            score += 2
-        elif oee < 75:
-            score += 1
+        if oee < 60: score += 2
+        elif oee < 75: score += 1
 
     if score >= 3:
-        return "🔴", "Fábrica em Risco", "status-red"
+        return "🔴 Fábrica em Risco", "status-red"
     elif score >= 1:
-        return "🟡", "Atenção Operacional", "status-yellow"
+        return "🟡 Atenção", "status-yellow"
     else:
-        return "🟢", "Operação Controlada", "status-green"
+        return "🟢 Operação Controlada", "status-green"
 
 # ============================================================
-# SIDEBAR (MANTIDO)
+# SIDEBAR
 # ============================================================
 with st.sidebar:
 
@@ -232,29 +219,30 @@ if pagina == "Visão Geral":
 
     st.title("🚀 ELOHIM APS")
 
-    aps = calcular_aps()
-    pct, total_pv = aps if aps else (None, 0)
+    df_aps = carregar_aps_df()
+    aps = calcular_aps(df_aps)
+
+    pct, total_pv, atrasadas = aps if aps else (None, 0, 0)
 
     oee = carregar_oee()
     nc = carregar_nc()
 
-    icon, texto, classe = status_fabrica(pct, oee)
+    texto, classe = status_fabrica(pct, oee)
 
     st.markdown(f"""
     <div class="status-box {classe}">
-        {icon} {texto}
+        {texto}
     </div>
     """, unsafe_allow_html=True)
 
-    aps_icon, aps_txt, _ = status_aps(pct)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-
-    c1.metric("APS", f"{aps_icon} {aps_txt}")
-    c2.metric("OEE", f"{oee:.1f}%" if oee else "—")
-    c3.metric("Atrasos (%)", f"{pct:.1f}%" if pct else "—")
-    c4.metric("Total PVs", total_pv)
-    c5.metric("NC Ext. (Ano)", nc)
+    c1.metric("APS (%)", f"{pct:.1f}%" if pct else "—")
+    c2.metric("PVs Totais", total_pv)
+    c3.metric("PVs Atrasadas", atrasadas)
+    c4.metric("OEE", f"{oee:.1f}%" if oee else "—")
+    c5.metric("NC Ext.", nc)
+    c6.metric("Status", texto.split(" ")[1])
 
     st.markdown("---")
 
