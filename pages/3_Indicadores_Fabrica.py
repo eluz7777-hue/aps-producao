@@ -63,10 +63,10 @@ forn_prazo = None
 
 
 # ============================================================
-# 📊 LEITURA REAL DOS DADOS (ROBUSTA)
+# 📊 LEITURA REAL DOS DADOS (SEM DEPENDER DE NOME DE COLUNA)
 # ============================================================
 
-def ler_ultimo_valor(caminho, palavras_chave):
+def ler_ultimo_valor(caminho):
 
     if not os.path.exists(caminho):
         return None
@@ -77,22 +77,24 @@ def ler_ultimo_valor(caminho, palavras_chave):
         if df.empty:
             return None
 
-        df.columns = [str(c).lower().strip() for c in df.columns]
+        # pega apenas colunas numéricas
+        df_num = df.select_dtypes(include="number")
 
-        # tenta várias palavras chave
-        for palavra in palavras_chave:
-            col = [c for c in df.columns if palavra in c]
+        if df_num.empty:
+            return None
 
-            if col:
-                valores = pd.to_numeric(df[col[0]], errors="coerce").dropna()
+        # pega última coluna numérica
+        col = df_num.columns[-1]
 
-                if not valores.empty:
-                    return float(valores.iloc[-1])
+        valores = df_num[col].dropna()
 
-    except Exception as e:
-        st.warning(f"Erro ao ler {os.path.basename(caminho)}")
+        if valores.empty:
+            return None
 
-    return None
+        return float(valores.iloc[-1])
+
+    except:
+        return None
 
 
 # ============================================================
@@ -100,8 +102,7 @@ def ler_ultimo_valor(caminho, palavras_chave):
 # ============================================================
 
 nc_externas = ler_ultimo_valor(
-    "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx",
-    ["nc", "não conform", "externa"]
+    "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
 )
 
 # ============================================================
@@ -109,8 +110,7 @@ nc_externas = ler_ultimo_valor(
 # ============================================================
 
 rh_abs = ler_ultimo_valor(
-    "data/Indicadores_RH/Indicadores_RH_2026.xlsx",
-    ["abs", "absente", "faltas"]
+    "data/Indicadores_RH/Indicadores_RH_2026.xlsx"
 )
 
 # ============================================================
@@ -118,8 +118,7 @@ rh_abs = ler_ultimo_valor(
 # ============================================================
 
 forn_prazo = ler_ultimo_valor(
-    "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx",
-    ["prazo", "entrega", "%"]
+    "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx"
 )
 
 # ============================================================
@@ -152,7 +151,7 @@ def classificar(valor, meta, tipo="max"):
 
 
 # ============================================================
-# 📊 BASE DO PAINEL
+# 📊 BASE
 # ============================================================
 
 dados = [
@@ -164,11 +163,7 @@ dados = [
 
 df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
 
-
-# ============================================================
-# 🧼 LIMPEZA FINAL
-# ============================================================
-
+# limpeza final real
 df_exec["Valor"] = df_exec["Valor"].apply(
     lambda v: None if v is None or pd.isna(v) else float(v)
 )
@@ -217,6 +212,8 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
+
 
 
 
