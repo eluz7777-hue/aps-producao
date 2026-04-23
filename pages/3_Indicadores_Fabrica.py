@@ -2,39 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import plotly.express as px
-
-
-# ============================================================
-# 🚀 HEADER EXECUTIVO (SUBSTITUI O PAINEL ANTIGO)
-# ============================================================
-
-st.markdown("## 📊 ELOHIM APS — Visão Geral")
-
-c1, c2, c3 = st.columns(3)
-
-# Produção (APS)
-if pct_atraso is None:
-    c1.metric("🏭 Atrasos (%)", "-")
-else:
-    c1.metric("🏭 Atrasos (%)", f"{pct_atraso:.1f}%")
-
-# Status simples (sem depender de outros módulos)
-if pct_atraso is None:
-    status = "Sem dados"
-elif pct_atraso <= 5:
-    status = "🟢 Controlado"
-elif pct_atraso <= 10:
-    status = "🟡 Atenção"
-else:
-    status = "🔴 Crítico"
-
-c2.metric("Status Produção", status)
-
-# Data de atualização
 from datetime import datetime
-c3.metric("Atualizado em", datetime.now().strftime("%d/%m %H:%M"))
-
-st.divider()
 
 
 # ============================================================
@@ -89,6 +57,37 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
     pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
 
 
+# ============================================================
+# 🚀 HEADER EXECUTIVO (AGORA NA POSIÇÃO CORRETA)
+# ============================================================
+
+st.markdown("## 📊 ELOHIM APS — Visão Geral")
+
+c1, c2, c3 = st.columns(3)
+
+# Produção (APS)
+if pct_atraso is None:
+    c1.metric("🏭 Atrasos (%)", "-")
+else:
+    c1.metric("🏭 Atrasos (%)", f"{pct_atraso:.1f}%")
+
+# Status
+if pct_atraso is None:
+    status = "Sem dados"
+elif pct_atraso <= 5:
+    status = "🟢 Controlado"
+elif pct_atraso <= 10:
+    status = "🟡 Atenção"
+else:
+    status = "🔴 Crítico"
+
+c2.metric("Status Produção", status)
+
+# Data
+c3.metric("Atualizado em", datetime.now().strftime("%d/%m %H:%M"))
+
+st.divider()
+
 
 # ============================================================
 # 📊 ABAS
@@ -102,8 +101,6 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📦 Fornecedores",
     "👷 RH"
 ])
-
-
 
 
 
