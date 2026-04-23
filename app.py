@@ -5,36 +5,33 @@ import pandas as pd
 # ============================================================
 # ⚙️ CONFIG
 # ============================================================
-st.set_page_config(
-    page_title="ELOHIM APS",
-    layout="wide"
-)
+st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
-# 🎨 CSS
+# 🎨 CSS (clean e profissional)
 # ============================================================
 st.markdown("""
 <style>
-.block-container {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+.block-container {padding-top: 2rem;}
+
+.status-box {
+    padding: 20px;
+    border-radius: 16px;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 10px;
 }
 
-div[data-testid="metric-container"] {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    padding: 16px 18px;
-    border-radius: 14px;
-}
-
-section[data-testid="stSidebar"] {
-    border-right: 1px solid rgba(255,255,255,0.06);
-}
+.status-green {background: rgba(0,200,120,0.15);}
+.status-yellow {background: rgba(255,200,0,0.15);}
+.status-red {background: rgba(255,80,80,0.15);}
+.status-gray {background: rgba(200,200,200,0.1);}
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 🔐 USUÁRIOS
+# 🔐 USERS
 # ============================================================
 USUARIOS = {
     "admin": "1608",
@@ -55,14 +52,12 @@ if "usuario" not in st.session_state:
 # 🔐 LOGIN
 # ============================================================
 def tela_login():
-    col1, col2, col3 = st.columns([1, 2, 1])
-
-    with col2:
+    c1, c2, c3 = st.columns([1,2,1])
+    with c2:
         if os.path.exists("logo.png"):
-            st.image("logo.png", width=220)
+            st.image("logo.png", width=200)
 
         st.title("🔐 ELOHIM APS")
-        st.subheader("Acesso Restrito ao Sistema")
 
         user = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
@@ -75,12 +70,71 @@ def tela_login():
             else:
                 st.error("Usuário ou senha inválidos")
 
-# ============================================================
-# 🚫 BLOQUEIO
-# ============================================================
 if not st.session_state.logado:
     tela_login()
     st.stop()
+
+# ============================================================
+# 🔄 AUTOLOAD APS (REMOVE "SEM DADOS")
+# ============================================================
+if "df" not in st.session_state:
+    caminho_aps = "data/APS_base.xlsx"
+
+    if os.path.exists(caminho_aps):
+        try:
+            df_auto = pd.read_excel(caminho_aps)
+            st.session_state["df"] = df_auto
+        except:
+            st.session_state["df"] = pd.DataFrame()
+
+# ============================================================
+# 📊 STATUS APS
+# ============================================================
+def status_aps():
+
+    df = st.session_state.get("df", pd.DataFrame())
+
+    if df.empty or "DATA_ENTREGA_APS" not in df.columns or "Data" not in df.columns:
+        return "⚪", "Sem base"
+
+    base = df.copy()
+    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+
+    if base.empty:
+        return "⚪", "Sem dados"
+
+    pv = base.groupby("PV", as_index=False).agg(
+        real=("Data","max"),
+        plan=("DATA_ENTREGA_APS","min")
+    )
+
+    pv["atraso"] = (pv["real"] - pv["plan"]).dt.days.fillna(0)
+    pct = (pv["atraso"] > 0).mean()*100
+
+    if pct > 20:
+        return "🔴", "Crítico"
+    elif pct > 5:
+        return "🟡", "Atenção"
+    else:
+        return "🟢", "Controlado"
+
+# ============================================================
+# 🧠 STATUS CONSOLIDADO
+# ============================================================
+def status_fabrica():
+
+    aps_icon, aps_status = status_aps()
+
+    if aps_icon == "🔴":
+        return "🔴", "Fábrica em Risco", "status-red"
+    elif aps_icon == "🟡":
+        return "🟡", "Atenção Operacional", "status-yellow"
+    elif aps_icon == "🟢":
+        return "🟢", "Operação Controlada", "status-green"
+    else:
+        return "⚪", "Aguardando Dados", "status-gray"
 
 # ============================================================
 # 🎯 SIDEBAR
@@ -88,126 +142,84 @@ if not st.session_state.logado:
 with st.sidebar:
 
     if os.path.exists("logo.png"):
-        st.image("logo.png", width=120)
+        st.image("logo.png", width=110)
 
-    st.markdown("## ⚙️ ELOHIM APS")
-    st.caption("Planejamento e Performance Industrial")
-
-    st.divider()
-
-    st.markdown("### 👤 Sessão")
-    st.info(f"Usuário: **{st.session_state.usuario}**")
+    st.markdown("## ELOHIM APS")
+    st.caption("Performance Industrial")
 
     st.divider()
 
-    st.markdown("### 🧭 Navegação")
+    st.info(f"👤 {st.session_state.usuario}")
 
     pagina = st.radio(
         "",
         [
-            "📊 Visão Geral",
-            "🏭 Carga & Capacidade",
-            "📈 OEE & Qualidade",
-            "📊 Indicadores"
+            "Visão Geral",
+            "Carga & Capacidade",
+            "OEE & Qualidade",
+            "Indicadores"
         ],
         label_visibility="collapsed"
     )
 
     st.divider()
 
-    if st.button("🚪 Sair", use_container_width=True):
+    if st.button("Sair"):
         st.session_state.logado = False
-        st.session_state.usuario = ""
         st.rerun()
 
 # ============================================================
-# 📊 FUNÇÃO STATUS APS (REAL)
+# 🏠 HOME
 # ============================================================
-def status_aps():
+if pagina == "Visão Geral":
 
-    df = st.session_state.get("df", pd.DataFrame())
+    st.title("🚀 ELOHIM APS")
 
-    if df.empty or "DATA_ENTREGA_APS" not in df.columns or "Data" not in df.columns:
-        return "⚪ Sem dados"
+    # 🔥 STATUS GERAL (DESTAQUE)
+    icon, texto, classe = status_fabrica()
 
-    base = df.copy()
+    st.markdown(f"""
+    <div class="status-box {classe}">
+        {icon} {texto}
+    </div>
+    """, unsafe_allow_html=True)
 
-    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
-    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+    # 🔎 KPIs ENXUTOS
+    aps_icon, aps_txt = status_aps()
 
-    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+    c1, c2 = st.columns(2)
 
-    if base.empty:
-        return "⚪ Sem dados"
-
-    pv = base.groupby("PV", as_index=False).agg(
-        real=("Data", "max"),
-        planejado=("DATA_ENTREGA_APS", "min")
-    )
-
-    pv["atraso"] = (pv["real"] - pv["planejado"]).dt.days.fillna(0)
-
-    pct = (pv["atraso"] > 0).mean() * 100
-
-    if pct > 20:
-        return "🔴 Crítico"
-    elif pct > 5:
-        return "🟡 Atenção"
-    else:
-        return "🟢 Controlado"
-
-# ============================================================
-# 📊 VISÃO GERAL
-# ============================================================
-if pagina == "📊 Visão Geral":
-
-    st.title("🚀 ELOHIM APS – Advanced Planning System")
-
-    st.success(f"Bem-vindo, {st.session_state.usuario}")
-
-    st.markdown("## 📌 Painel Central")
-
-    # 🔥 STATUS DINÂMICO
-    statusAPS = status_aps()
-
-    k1, k2, k3, k4 = st.columns(4)
-
-    k1.metric("🏭 APS", statusAPS)
-    k2.metric("📊 OEE", "🟢 Operando")
-    k3.metric("📈 Indicadores", "🟢 Atualizado")
-    k4.metric("🔐 Sistema", "🟢 OK")
+    c1.metric("APS", f"{aps_icon} {aps_txt}")
+    c2.metric("Sistema", "🟢 OK")
 
     # ========================================================
     # 📂 MÓDULOS
     # ========================================================
     st.markdown("---")
-    st.subheader("📂 Módulos")
+    st.subheader("Módulos")
 
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        st.markdown("### 🏭 Carga & Capacidade")
-        if st.button("Abrir", key="btn_carga", use_container_width=True):
+        if st.button("🏭 Carga & Capacidade", key="carga"):
             st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
     with c2:
-        st.markdown("### 📈 OEE & Qualidade")
-        if st.button("Abrir", key="btn_oee", use_container_width=True):
+        if st.button("📈 OEE & Qualidade", key="oee"):
             st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
     with c3:
-        st.markdown("### 📊 Indicadores")
-        if st.button("Abrir", key="btn_ind", use_container_width=True):
+        if st.button("📊 Indicadores", key="ind"):
             st.switch_page("pages/3_Indicadores_Fabrica.py")
 
 # ============================================================
 # 🔁 REDIRECIONAMENTO
 # ============================================================
-elif pagina == "🏭 Carga & Capacidade":
+elif pagina == "Carga & Capacidade":
     st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
-elif pagina == "📈 OEE & Qualidade":
+elif pagina == "OEE & Qualidade":
     st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
-elif pagina == "📊 Indicadores":
+elif pagina == "Indicadores":
     st.switch_page("pages/3_Indicadores_Fabrica.py")
