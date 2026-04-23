@@ -5,6 +5,39 @@ import plotly.express as px
 
 
 # ============================================================
+# 🚀 HEADER EXECUTIVO (SUBSTITUI O PAINEL ANTIGO)
+# ============================================================
+
+st.markdown("## 📊 ELOHIM APS — Visão Geral")
+
+c1, c2, c3 = st.columns(3)
+
+# Produção (APS)
+if pct_atraso is None:
+    c1.metric("🏭 Atrasos (%)", "-")
+else:
+    c1.metric("🏭 Atrasos (%)", f"{pct_atraso:.1f}%")
+
+# Status simples (sem depender de outros módulos)
+if pct_atraso is None:
+    status = "Sem dados"
+elif pct_atraso <= 5:
+    status = "🟢 Controlado"
+elif pct_atraso <= 10:
+    status = "🟡 Atenção"
+else:
+    status = "🔴 Crítico"
+
+c2.metric("Status Produção", status)
+
+# Data de atualização
+from datetime import datetime
+c3.metric("Atualizado em", datetime.now().strftime("%d/%m %H:%M"))
+
+st.divider()
+
+
+# ============================================================
 # 📊 BASE APS (OBRIGATÓRIA)
 # ============================================================
 
