@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import plotly.express as px
 
 # ============================================================
 # BASE APS
@@ -14,7 +15,21 @@ if df_raw is None or not isinstance(df_raw, pd.DataFrame):
 df_aps = df_raw.copy()
 
 # ============================================================
-# CÁLCULO DE ATRASO
+# FUNÇÃO SEGURA (ANTI-NaN)
+# ============================================================
+
+def safe_value(v):
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except:
+        pass
+    return float(v)
+
+# ============================================================
+# CÁLCULO APS
 # ============================================================
 
 pct_atraso = None
@@ -32,68 +47,55 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
 
     pv = pv.dropna(subset=["data_entrega"])
 
-    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
-    pv["Atrasada"] = pv["Atraso_dias"] > 0
+    pv["Atrasada"] = (hoje - pv["data_entrega"]).dt.days > 0
 
     total = len(pv)
     atrasadas = pv["Atrasada"].sum()
 
-    pct_atraso = (atrasadas / total * 100) if total > 0 else None
+    pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
 
 # ============================================================
-# LEITURA RH (DINÂMICO)
+# RH
 # ============================================================
 
 rh_abs = None
 
 try:
-    caminho_rh = "data/Indicadores_RH/Indicadores_RH_2026.xlsx"
-    if os.path.exists(caminho_rh):
-        df_rh = pd.read_excel(caminho_rh)
-
-        col = [c for c in df_rh.columns if "abs" in c.lower()][0]
-        vals = df_rh[col].dropna()
-
-        if not vals.empty:
-            rh_abs = float(vals.iloc[-1])
+    path = "data/Indicadores_RH/Indicadores_RH_2026.xlsx"
+    if os.path.exists(path):
+        df = pd.read_excel(path)
+        col = [c for c in df.columns if "abs" in c.lower()][0]
+        rh_abs = safe_value(df[col].dropna().iloc[-1])
 except:
     pass
 
 # ============================================================
-# LEITURA QUALIDADE
+# QUALIDADE
 # ============================================================
 
 nc_externas = None
 
 try:
-    caminho_q = "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
-    if os.path.exists(caminho_q):
-        df_q = pd.read_excel(caminho_q)
-
-        col = [c for c in df_q.columns if "nc" in c.lower()][0]
-        vals = df_q[col].dropna()
-
-        if not vals.empty:
-            nc_externas = float(vals.iloc[-1])
+    path = "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
+    if os.path.exists(path):
+        df = pd.read_excel(path)
+        col = [c for c in df.columns if "nc" in c.lower()][0]
+        nc_externas = safe_value(df[col].dropna().iloc[-1])
 except:
     pass
 
 # ============================================================
-# LEITURA FORNECEDORES
+# FORNECEDORES
 # ============================================================
 
 forn_prazo = None
 
 try:
-    caminho_f = "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx"
-    if os.path.exists(caminho_f):
-        df_f = pd.read_excel(caminho_f)
-
-        col = [c for c in df_f.columns if "prazo" in c.lower()][0]
-        vals = df_f[col].dropna()
-
-        if not vals.empty:
-            forn_prazo = float(vals.iloc[-1])
+    path = "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx"
+    if os.path.exists(path):
+        df = pd.read_excel(path)
+        col = [c for c in df.columns if "prazo" in c.lower()][0]
+        forn_prazo = safe_value(df[col].dropna().iloc[-1])
 except:
     pass
 
@@ -124,14 +126,14 @@ def classificar(valor, meta, tipo="max"):
         else:
             return "🔴 Crítico"
 
-dados_exec = [
+dados = [
     ["Produção (Atrasos %)", pct_atraso, 5, "max"],
     ["Qualidade (NC %)", nc_externas, 2, "max"],
     ["Fornecedores (Prazo %)", forn_prazo, 98, "min"],
     ["RH (Absenteísmo %)", rh_abs, 2, "max"],
 ]
 
-df_exec = pd.DataFrame(dados_exec, columns=["Indicador", "Valor", "Meta", "Tipo"])
+df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
 
 for _, row in df_exec.iterrows():
 
@@ -139,10 +141,7 @@ for _, row in df_exec.iterrows():
 
     c1.write(f"**{row['Indicador']}**")
 
-    if row["Valor"] is not None:
-        c2.write(f"{row['Valor']:.2f}")
-    else:
-        c2.write("-")
+    c2.write(f"{row['Valor']:.2f}" if row["Valor"] is not None else "-")
 
     c3.write(classificar(row["Valor"], row["Meta"], row["Tipo"]))
 
@@ -163,6 +162,10 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
+
+
+
 
 # ============================================================
 # ABAS
