@@ -19,14 +19,12 @@ df_aps = df_raw.copy()
 # ============================================================
 
 def safe_value(v):
-    if v is None:
-        return None
     try:
-        if pd.isna(v):
+        if v is None or pd.isna(v):
             return None
+        return float(v)
     except:
-        pass
-    return float(v)
+        return None
 
 # ============================================================
 # CÁLCULO APS
@@ -135,13 +133,23 @@ dados = [
 
 df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
 
+# 🔥 LIMPEZA FINAL (ANTI-NaN)
+df_exec["Valor"] = df_exec["Valor"].apply(safe_value)
+
+# ============================================================
+# RENDER
+# ============================================================
+
 for _, row in df_exec.iterrows():
 
     c1, c2, c3 = st.columns([2,1,2])
 
     c1.write(f"**{row['Indicador']}**")
 
-    c2.write(f"{row['Valor']:.2f}" if row["Valor"] is not None else "-")
+    if row["Valor"] is None or pd.isna(row["Valor"]):
+        c2.write("-")
+    else:
+        c2.write(f"{row['Valor']:.2f}")
 
     c3.write(classificar(row["Valor"], row["Meta"], row["Tipo"]))
 
@@ -162,6 +170,7 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
 
 
 
