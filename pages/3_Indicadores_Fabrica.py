@@ -58,14 +58,14 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
 
 
 # ============================================================
-# 🚀 HEADER EXECUTIVO (AGORA NA POSIÇÃO CORRETA)
+# 🚀 HEADER EXECUTIVO
 # ============================================================
 
 st.markdown("## 📊 ELOHIM APS — Visão Geral")
 
 c1, c2, c3 = st.columns(3)
 
-# Produção (APS)
+# Produção
 if pct_atraso is None:
     c1.metric("🏭 Atrasos (%)", "-")
 else:
@@ -83,11 +83,13 @@ else:
 
 c2.metric("Status Produção", status)
 
-# Data
-c3.metric("Atualizado em", datetime.now().strftime("%d/%m %H:%M"))
+# 👇 AQUI É ONDE ENTRA
+from zoneinfo import ZoneInfo
+agora_br = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+c3.metric("Atualizado em", agora_br.strftime("%d/%m %H:%M"))
 
 st.divider()
-
 
 # ============================================================
 # 📊 ABAS
