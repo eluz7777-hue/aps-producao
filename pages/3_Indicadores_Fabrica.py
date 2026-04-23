@@ -53,73 +53,90 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
     pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
 
 # ============================================================
-# DADOS (POR ENQUANTO SEM INTEGRAÇÃO COMPLETA)
+# 📊 LEITOR UNIVERSAL (EXCEL + WORD)
 # ============================================================
 
-rh_abs = None
-nc_externas = None
-forn_prazo = None
+from docx import Document
+import re
 
-
-
-# ============================================================
-# 📊 LEITURA REAL DOS DADOS (SEM DEPENDER DE NOME DE COLUNA)
-# ============================================================
-
-def ler_ultimo_valor(caminho):
+def ler_indicador(caminho):
 
     if not os.path.exists(caminho):
         return None
 
     try:
-        df = pd.read_excel(caminho)
+        # =========================
+        # EXCEL
+        # =========================
+        if caminho.endswith((".xlsx", ".xls")):
 
-        if df.empty:
-            return None
+            df = pd.read_excel(caminho, header=None)
 
-        # pega apenas colunas numéricas
-        df_num = df.select_dtypes(include="number")
+            df = df.apply(pd.to_numeric, errors="coerce")
+            df = df.dropna(how="all")
+            df = df.dropna(axis=1, how="all")
 
-        if df_num.empty:
-            return None
+            if df.empty:
+                return None
 
-        # pega última coluna numérica
-        col = df_num.columns[-1]
+            col = df.columns[-1]
+            valores = df[col].dropna()
 
-        valores = df_num[col].dropna()
+            if valores.empty:
+                return None
 
-        if valores.empty:
-            return None
+            return float(valores.iloc[-1])
 
-        return float(valores.iloc[-1])
+        # =========================
+        # WORD
+        # =========================
+        elif caminho.endswith(".docx"):
+
+            doc = Document(caminho)
+
+            textos = []
+
+            for p in doc.paragraphs:
+                textos.append(p.text)
+
+            for tabela in doc.tables:
+                for linha in tabela.rows:
+                    for celula in linha.cells:
+                        textos.append(celula.text)
+
+            texto = " ".join(textos)
+
+            numeros = re.findall(r"\d+[.,]?\d*", texto)
+
+            if not numeros:
+                return None
+
+            valor = numeros[-1].replace(",", ".")
+
+            return float(valor)
 
     except:
         return None
 
+    return None
+
 
 # ============================================================
-# 🔹 QUALIDADE
+# 🔹 INDICADORES
 # ============================================================
 
-nc_externas = ler_ultimo_valor(
-    "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
+nc_externas = ler_indicador(
+    "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.docx"
 )
 
-# ============================================================
-# 🔹 RH
-# ============================================================
-
-rh_abs = ler_ultimo_valor(
-    "data/Indicadores_RH/Indicadores_RH_2026.xlsx"
+rh_abs = ler_indicador(
+    "data/Indicadores_RH/Indicadores_RH_2026.docx"
 )
 
-# ============================================================
-# 🔹 FORNECEDORES
-# ============================================================
-
-forn_prazo = ler_ultimo_valor(
-    "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx"
+forn_prazo = ler_indicador(
+    "data/Indicadores_Compras_Fornecedores/fornecedores.docx"
 )
+
 
 # ============================================================
 # 🚦 PAINEL EXECUTIVO
@@ -131,7 +148,7 @@ st.caption("Status consolidado dos principais indicadores da fábrica")
 
 def classificar(valor, meta, tipo="max"):
 
-    if valor is None:
+    if valor is None or pd.isna(valor):
         return "⚪ Sem dados"
 
     if tipo == "max":
@@ -151,7 +168,7 @@ def classificar(valor, meta, tipo="max"):
 
 
 # ============================================================
-# 📊 BASE
+# 📊 BASE DO PAINEL
 # ============================================================
 
 dados = [
@@ -163,10 +180,10 @@ dados = [
 
 df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
 
-# limpeza final real
 df_exec["Valor"] = df_exec["Valor"].apply(
     lambda v: None if v is None or pd.isna(v) else float(v)
 )
+
 
 # ============================================================
 # 🎯 RENDER
@@ -189,20 +206,17 @@ for _, row in df_exec.iterrows():
 
 st.divider()
 
+
 # ============================================================
 # 🔥 STATUS GERAL
 # ============================================================
 
-criticos = 0
-validos = 0
+criticos = sum(
+    1 for _, r in df_exec.iterrows()
+    if r["Valor"] is not None and classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico"
+)
 
-for _, r in df_exec.iterrows():
-
-    if r["Valor"] is not None:
-        validos += 1
-
-        if classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico":
-            criticos += 1
+validos = df_exec["Valor"].notna().sum()
 
 if validos == 0:
     st.info("⚪ Sem dados suficientes para análise")
@@ -212,6 +226,7 @@ elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
+
 
 
 
