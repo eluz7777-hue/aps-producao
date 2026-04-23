@@ -726,119 +726,157 @@ with tab4:
 with tab5:
 
     import os
+    import plotly.graph_objects as go
 
     st.subheader("📦 Indicadores de Compras & Fornecedores")
 
-    meses = ["Jan","Fev","Mar"]
+    meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
     # ========================================================
-    # 📊 1 - ÍNDICE DE ENTREGA DO PROVEDOR NO PRAZO
+    # 📊 BASE CONTROLADA
     # ========================================================
-    prazo = [0.87, 1.00, 1.00]   # ajuste fino depois se quiser
-    META_PRAZO = 0.90
+    dados = {
+        "Jan": {"itens": 69, "prazo": 87, "atraso": 9, "devolucao": 2},
+        "Fev": {"itens": 76, "prazo": 100, "atraso": 0, "devolucao": 0},
+        "Mar": {"itens": 93, "prazo": 100, "atraso": 0, "devolucao": 0},
+    }
 
-    df1 = pd.DataFrame({
-        "Mês": meses,
-        "Prazo": [v*100 for v in prazo]
-    })
+    def get_val(mes, chave):
+        return dados[mes][chave] if mes in dados else None
 
+    itens = [get_val(m, "itens") for m in meses]
+    prazo = [get_val(m, "prazo") for m in meses]
+    atraso = [get_val(m, "atraso") for m in meses]
+    devolucao = [get_val(m, "devolucao") for m in meses]
+
+    # ========================================================
+    # 📊 FUNÇÃO ACM
+    # ========================================================
+    def media(vals):
+        v = [x for x in vals if x is not None]
+        return sum(v)/len(v) if v else None
+
+    acm_prazo = media(prazo)
+    acm_devolucao = media(devolucao)
+
+    # ========================================================
+    # 📊 1 - PRAZO DO PROVEDOR
+    # ========================================================
     st.subheader("📊 Índice de Entrega do Provedor no Prazo")
 
-    fig1 = px.bar(df1, x="Mês", y="Prazo", text_auto=".0f")
+    fig1 = go.Figure()
 
-    fig1.add_hline(
-        y=META_PRAZO*100,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Meta ≥ 90%"
+    fig1.add_bar(
+        x=meses,
+        y=prazo,
+        text=[f"{v}%" if v else "" for v in prazo],
+        textposition="outside",
+        name="Prazo (%)"
     )
+
+    fig1.add_trace(go.Scatter(
+        x=meses,
+        y=[90]*len(meses),
+        mode="lines",
+        name="Meta 90%",
+        line=dict(color="red", dash="dash")
+    ))
+
+    fig1.update_layout(height=450, yaxis_title="%")
 
     st.plotly_chart(fig1, use_container_width=True)
 
-    # análise
-    if prazo[-1] >= META_PRAZO:
-        st.success("🟢 Provedor atende prazos acordados")
+    if prazo[2] >= 90:
+        st.success("🟢 Fornecedor dentro do prazo")
     else:
-        st.error("🔴 Atrasos no fornecimento")
+        st.error("🔴 Problemas de prazo")
 
-    st.caption("Avalia a confiabilidade do fornecedor quanto ao prazo.")
+    st.info(f"ACM Prazo: {acm_prazo:.1f}%" if acm_prazo else "Sem dados")
 
     # ========================================================
-    # 📊 2 - DEVOLUÇÕES AO PROVEDOR EXTERNO
+    # 📊 2 - DEVOLUÇÕES
     # ========================================================
-    devolucao = [0.02, 0.00, 0.00]   # % devolução
-    META_DEV = 0.02
-
-    df2 = pd.DataFrame({
-        "Mês": meses,
-        "Devolução": [v*100 for v in devolucao]
-    })
-
     st.subheader("📊 Índice de Devoluções ao Provedor Externo")
 
-    fig2 = px.bar(df2, x="Mês", y="Devolução", text_auto=".1f")
+    fig2 = go.Figure()
 
-    fig2.add_hline(
-        y=META_DEV*100,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Meta ≤ 2%"
+    fig2.add_bar(
+        x=meses,
+        y=devolucao,
+        text=[f"{v}%" if v else "" for v in devolucao],
+        textposition="outside",
+        name="Devolução (%)"
     )
+
+    fig2.add_trace(go.Scatter(
+        x=meses,
+        y=[2]*len(meses),
+        mode="lines",
+        name="Meta 2%",
+        line=dict(color="red", dash="dash")
+    ))
+
+    fig2.update_layout(height=450, yaxis_title="%")
 
     st.plotly_chart(fig2, use_container_width=True)
 
-    # análise
-    if devolucao[-1] <= META_DEV:
-        st.success("🟢 Qualidade do fornecedor adequada")
+    if devolucao[2] <= 2:
+        st.success("🟢 Qualidade adequada")
     else:
-        st.error("🔴 Alto índice de devolução")
+        st.error("🔴 Problema de qualidade")
 
-    st.caption("Mede qualidade do fornecimento.")
+    st.info(f"ACM Devolução: {acm_devolucao:.1f}%" if acm_devolucao else "Sem dados")
 
     # ========================================================
-    # 📊 3 - ENTREGAS NO PRAZO (GRÁFICO COMPLETO)
+    # 📊 3 - VISÃO COMPLETA
     # ========================================================
-
-    itens = [69, 76, 93]
-    no_prazo = [87, 100, 100]
-    atraso = [9, 0, 0]
-
-    META = 98
-
-    df3 = pd.DataFrame({
-        "Mês": meses,
-        "Itens": itens,
-        "No Prazo (%)": no_prazo,
-        "Atraso": atraso
-    })
-
     st.subheader("📊 Entregas no Prazo (Visão Completa)")
 
     fig3 = go.Figure()
 
-    fig3.add_bar(name="Itens Entregues", x=meses, y=itens)
-    fig3.add_bar(name="No Prazo (%)", x=meses, y=no_prazo)
-    fig3.add_bar(name="Em Atraso", x=meses, y=atraso)
+    fig3.add_bar(
+        name="Itens",
+        x=meses,
+        y=itens,
+        text=[str(v) if v else "" for v in itens],
+        textposition="outside"
+    )
+
+    fig3.add_bar(
+        name="No Prazo (%)",
+        x=meses,
+        y=prazo,
+        text=[f"{v}%" if v else "" for v in prazo],
+        textposition="outside"
+    )
+
+    fig3.add_bar(
+        name="Atraso",
+        x=meses,
+        y=atraso,
+        text=[str(v) if v else "" for v in atraso],
+        textposition="outside"
+    )
 
     fig3.add_trace(go.Scatter(
         x=meses,
-        y=[META]*len(meses),
-        mode="lines+markers",
+        y=[98]*len(meses),
+        mode="lines",
         name="Meta 98%",
-        line=dict(dash="dash", color="red")
+        line=dict(color="red", dash="dash")
     ))
 
-    fig3.update_layout(barmode="group", height=500)
+    fig3.update_layout(
+        barmode="group",
+        height=500
+    )
 
     st.plotly_chart(fig3, use_container_width=True)
 
-    # análise
-    if no_prazo[-1] >= META:
-        st.success("🟢 Entregas dentro do nível esperado")
+    if prazo[2] >= 98:
+        st.success("🟢 Performance dentro da meta")
     else:
         st.error("🔴 Performance abaixo da meta")
-
-    st.caption("Visão operacional consolidada das entregas.")
 
     # ========================================================
     # 📎 EVIDÊNCIA
