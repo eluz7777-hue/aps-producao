@@ -2,23 +2,39 @@ import streamlit as st
 
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
-
+# ============================================================
+# 🎨 ESTILO GLOBAL (FUNCIONA NA SIDEBAR NATIVA)
+# ============================================================
 st.markdown("""
 <style>
 
-/* ===== SIDEBAR ===== */
+/* ===== MENU DE PÁGINAS ===== */
+[data-testid="stSidebarNav"] ul li a {
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    text-transform: capitalize !important;
+    padding: 10px 8px !important;
+}
+
+/* item ativo */
+[data-testid="stSidebarNav"] ul li a[aria-current="page"] {
+    background-color: rgba(0, 150, 255, 0.15);
+    border-radius: 8px;
+}
+
+/* remove "app" do topo */
+[data-testid="stSidebarNav"] > ul > li:first-child {
+    display: none;
+}
+
+/* espaçamento */
+[data-testid="stSidebarNav"] {
+    padding-top: 10px;
+}
+
+/* sidebar geral */
 section[data-testid="stSidebar"] {
     background-color: #111827;
-}
-
-section[data-testid="stSidebar"] * {
-    font-size: 16px !important;
-}
-
-section[data-testid="stSidebar"] .stRadio label {
-    text-transform: capitalize;
-    font-weight: 500;
-    padding: 6px 0;
 }
 
 /* usuário */
@@ -27,45 +43,26 @@ section[data-testid="stSidebar"] .stInfo {
     border-radius: 10px;
 }
 
-/* botão sair */
+/* botão */
 section[data-testid="stSidebar"] button {
     border-radius: 8px;
 }
 
-/* ===== FUNDO INDUSTRIAL SUAVE ===== */
-[data-testid="stAppViewContainer"] {
-    background-image: url("https://images.unsplash.com/photo-1581093458791-9d42f4a2c5d6");
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
+/* títulos principais */
+h1 {
+    font-size: 36px !important;
 }
 
-/* camada escura por cima */
-[data-testid="stAppViewContainer"]::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 15, 25, 0.88);
-    z-index: -1;
-}
-
-/* ===== CARDS MAIS BONITOS ===== */
-.stMarkdown h3 {
-    font-size: 22px;
-    font-weight: 600;
-}
-
-button[kind="secondary"] {
-    border-radius: 10px !important;
-    height: 45px;
-    font-size: 15px;
+/* cards */
+h3 {
+    font-size: 22px !important;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# LOGIN
+# 🔐 LOGIN
 # ============================================================
 USUARIOS = {
     "admin": "1608",
@@ -100,7 +97,7 @@ if not st.session_state.logado:
     st.stop()
 
 # ============================================================
-# SIDEBAR
+# 📌 SIDEBAR (USUÁRIO)
 # ============================================================
 with st.sidebar:
     st.markdown("## ELOHIM APS")
@@ -111,18 +108,17 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# HOME SIMPLES
+# 🏠 HOME
 # ============================================================
 st.title("🚀 ELOHIM APS")
 
 st.markdown("### Painel de Módulos")
-
 st.markdown("---")
 
 c1, c2, c3 = st.columns(3)
 
 # ============================================================
-# CARGA & CAPACIDADE
+# 🏭 CARGA & CAPACIDADE
 # ============================================================
 with c1:
     st.markdown("### 🏭 Carga & Capacidade")
@@ -139,7 +135,7 @@ with c1:
         st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
 # ============================================================
-# OEE & QUALIDADE
+# 📈 OEE & QUALIDADE
 # ============================================================
 with c2:
     st.markdown("### 📈 OEE & Qualidade")
@@ -156,7 +152,7 @@ with c2:
         st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
 # ============================================================
-# INDICADORES
+# 📊 INDICADORES
 # ============================================================
 with c3:
     st.markdown("### 📊 Indicadores")
