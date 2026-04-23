@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import plotly.express as px
 
 # ============================================================
 # BASE APS
@@ -15,7 +14,7 @@ if df_raw is None or not isinstance(df_raw, pd.DataFrame):
 df_aps = df_raw.copy()
 
 # ============================================================
-# FUNÇÃO SEGURA (ANTI-NaN)
+# FUNÇÃO SEGURA
 # ============================================================
 
 def safe_value(v):
@@ -27,7 +26,7 @@ def safe_value(v):
         return None
 
 # ============================================================
-# CÁLCULO APS
+# APS
 # ============================================================
 
 pct_atraso = None
@@ -53,49 +52,13 @@ if not df_aps.empty and "PV" in df_aps.columns and "DATA_ENTREGA_APS" in df_aps.
     pct_atraso = safe_value((atrasadas / total * 100) if total > 0 else None)
 
 # ============================================================
-# RH
+# RH / QUALIDADE / FORNECEDORES
+# (mantido simples até integração real)
 # ============================================================
 
 rh_abs = None
-
-try:
-    path = "data/Indicadores_RH/Indicadores_RH_2026.xlsx"
-    if os.path.exists(path):
-        df = pd.read_excel(path)
-        col = [c for c in df.columns if "abs" in c.lower()][0]
-        rh_abs = safe_value(df[col].dropna().iloc[-1])
-except:
-    pass
-
-# ============================================================
-# QUALIDADE
-# ============================================================
-
 nc_externas = None
-
-try:
-    path = "data/Indicadores de Qualidade/Indicadores da Qualidade 2026.xlsx"
-    if os.path.exists(path):
-        df = pd.read_excel(path)
-        col = [c for c in df.columns if "nc" in c.lower()][0]
-        nc_externas = safe_value(df[col].dropna().iloc[-1])
-except:
-    pass
-
-# ============================================================
-# FORNECEDORES
-# ============================================================
-
 forn_prazo = None
-
-try:
-    path = "data/Indicadores_Compras_Fornecedores/fornecedores.xlsx"
-    if os.path.exists(path):
-        df = pd.read_excel(path)
-        col = [c for c in df.columns if "prazo" in c.lower()][0]
-        forn_prazo = safe_value(df[col].dropna().iloc[-1])
-except:
-    pass
 
 # ============================================================
 # PAINEL EXECUTIVO
@@ -132,8 +95,6 @@ dados = [
 ]
 
 df_exec = pd.DataFrame(dados, columns=["Indicador", "Valor", "Meta", "Tipo"])
-
-# 🔥 LIMPEZA FINAL (ANTI-NaN)
 df_exec["Valor"] = df_exec["Valor"].apply(safe_value)
 
 # ============================================================
@@ -146,7 +107,7 @@ for _, row in df_exec.iterrows():
 
     c1.write(f"**{row['Indicador']}**")
 
-    if row["Valor"] is None or pd.isna(row["Valor"]):
+    if row["Valor"] is None:
         c2.write("-")
     else:
         c2.write(f"{row['Valor']:.2f}")
@@ -156,25 +117,26 @@ for _, row in df_exec.iterrows():
 st.divider()
 
 # ============================================================
-# STATUS GERAL
+# STATUS GERAL (CORRIGIDO)
 # ============================================================
 
-criticos = sum(
-    1 for _, r in df_exec.iterrows()
-    if classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico"
-)
+criticos = 0
+validos = 0
 
-if criticos == 0:
+for _, r in df_exec.iterrows():
+    if r["Valor"] is not None:
+        validos += 1
+        if classificar(r["Valor"], r["Meta"], r["Tipo"]) == "🔴 Crítico":
+            criticos += 1
+
+if validos == 0:
+    st.info("⚪ Sem dados suficientes para análise")
+elif criticos == 0:
     st.success("🟢 Operação Controlada")
 elif criticos <= 2:
     st.warning("🟡 Atenção em alguns indicadores")
 else:
     st.error("🔴 Operação em risco")
-
-
-
-
-
 
 # ============================================================
 # ABAS
