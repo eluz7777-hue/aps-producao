@@ -2,6 +2,68 @@ import streamlit as st
 
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
+
+st.markdown("""
+<style>
+
+/* ===== SIDEBAR ===== */
+section[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+section[data-testid="stSidebar"] * {
+    font-size: 16px !important;
+}
+
+section[data-testid="stSidebar"] .stRadio label {
+    text-transform: capitalize;
+    font-weight: 500;
+    padding: 6px 0;
+}
+
+/* usuário */
+section[data-testid="stSidebar"] .stInfo {
+    font-size: 15px;
+    border-radius: 10px;
+}
+
+/* botão sair */
+section[data-testid="stSidebar"] button {
+    border-radius: 8px;
+}
+
+/* ===== FUNDO INDUSTRIAL SUAVE ===== */
+[data-testid="stAppViewContainer"] {
+    background-image: url("https://images.unsplash.com/photo-1581093458791-9d42f4a2c5d6");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+
+/* camada escura por cima */
+[data-testid="stAppViewContainer"]::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 15, 25, 0.88);
+    z-index: -1;
+}
+
+/* ===== CARDS MAIS BONITOS ===== */
+.stMarkdown h3 {
+    font-size: 22px;
+    font-weight: 600;
+}
+
+button[kind="secondary"] {
+    border-radius: 10px !important;
+    height: 45px;
+    font-size: 15px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 # ============================================================
 # LOGIN
 # ============================================================
