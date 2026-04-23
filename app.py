@@ -3,65 +3,6 @@ import streamlit as st
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
-# 🎨 ESTILO GLOBAL (FUNCIONA NA SIDEBAR NATIVA)
-# ============================================================
-st.markdown("""
-<style>
-
-/* ===== MENU DE PÁGINAS ===== */
-[data-testid="stSidebarNav"] ul li a {
-    font-size: 18px !important;
-    font-weight: 600 !important;
-    text-transform: capitalize !important;
-    padding: 10px 8px !important;
-}
-
-/* item ativo */
-[data-testid="stSidebarNav"] ul li a[aria-current="page"] {
-    background-color: rgba(0, 150, 255, 0.15);
-    border-radius: 8px;
-}
-
-/* remove "app" do topo */
-[data-testid="stSidebarNav"] > ul > li:first-child {
-    display: none;
-}
-
-/* espaçamento */
-[data-testid="stSidebarNav"] {
-    padding-top: 10px;
-}
-
-/* sidebar geral */
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-}
-
-/* usuário */
-section[data-testid="stSidebar"] .stInfo {
-    font-size: 15px;
-    border-radius: 10px;
-}
-
-/* botão */
-section[data-testid="stSidebar"] button {
-    border-radius: 8px;
-}
-
-/* títulos principais */
-h1 {
-    font-size: 36px !important;
-}
-
-/* cards */
-h3 {
-    font-size: 22px !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-# ============================================================
 # 🔐 LOGIN
 # ============================================================
 USUARIOS = {
@@ -97,7 +38,7 @@ if not st.session_state.logado:
     st.stop()
 
 # ============================================================
-# 📌 SIDEBAR (USUÁRIO)
+# 📌 SIDEBAR
 # ============================================================
 with st.sidebar:
     st.markdown("## ELOHIM APS")
@@ -108,21 +49,23 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
+# 🧱 ESPAÇO + LOGO (AQUI ESTÁ A SOLUÇÃO)
+# ============================================================
+st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+
+st.image("assets/logo.png", width=180)  # <-- coloque sua logo aqui
+
+# ============================================================
 # 🏠 HOME
 # ============================================================
-st.title("🚀 ELOHIM APS")
+st.title("Painel de Módulos")
 
-st.markdown("### Painel de Módulos")
 st.markdown("---")
 
 c1, c2, c3 = st.columns(3)
 
-# ============================================================
-# 🏭 CARGA & CAPACIDADE
-# ============================================================
 with c1:
     st.markdown("### 🏭 Carga & Capacidade")
-
     st.markdown("""
     - Planejamento de Produção  
     - Capacidade por Máquina  
@@ -130,16 +73,11 @@ with c1:
     - Acompanhamento de Prazos  
     - Identificação de Gargalos  
     """)
-
     if st.button("Abrir", key="aps", use_container_width=True):
         st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
-# ============================================================
-# 📈 OEE & QUALIDADE
-# ============================================================
 with c2:
     st.markdown("### 📈 OEE & Qualidade")
-
     st.markdown("""
     - Cálculo de OEE  
     - Disponibilidade  
@@ -147,16 +85,11 @@ with c2:
     - Qualidade  
     - Análise de Perdas  
     """)
-
     if st.button("Abrir", key="oee", use_container_width=True):
         st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
-# ============================================================
-# 📊 INDICADORES
-# ============================================================
 with c3:
     st.markdown("### 📊 Indicadores")
-
     st.markdown("""
     - Custos de Manutenção  
     - Indicadores Industriais  
@@ -164,10 +97,8 @@ with c3:
     - Análise Mensal  
     - Visão Estratégica  
     """)
-
     if st.button("Abrir", key="indicadores", use_container_width=True):
         st.switch_page("pages/3_Indicadores_Fabrica.py")
 
 st.markdown("---")
-
 st.caption("ELOHIM APS • Sistema de Planejamento e Performance Industrial")
