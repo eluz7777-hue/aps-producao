@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import pandas as pd
 
 # ============================================================
 # ⚙️ CONFIG
@@ -120,7 +121,43 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# 📊 VISÃO GERAL (HOME)
+# 📊 FUNÇÃO STATUS APS (REAL)
+# ============================================================
+def status_aps():
+
+    df = st.session_state.get("df", pd.DataFrame())
+
+    if df.empty or "DATA_ENTREGA_APS" not in df.columns or "Data" not in df.columns:
+        return "⚪ Sem dados"
+
+    base = df.copy()
+
+    base["Data"] = pd.to_datetime(base["Data"], errors="coerce")
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+
+    base = base.dropna(subset=["Data", "DATA_ENTREGA_APS"])
+
+    if base.empty:
+        return "⚪ Sem dados"
+
+    pv = base.groupby("PV", as_index=False).agg(
+        real=("Data", "max"),
+        planejado=("DATA_ENTREGA_APS", "min")
+    )
+
+    pv["atraso"] = (pv["real"] - pv["planejado"]).dt.days.fillna(0)
+
+    pct = (pv["atraso"] > 0).mean() * 100
+
+    if pct > 20:
+        return "🔴 Crítico"
+    elif pct > 5:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Controlado"
+
+# ============================================================
+# 📊 VISÃO GERAL
 # ============================================================
 if pagina == "📊 Visão Geral":
 
@@ -130,13 +167,18 @@ if pagina == "📊 Visão Geral":
 
     st.markdown("## 📌 Painel Central")
 
-    k1, k2, k3 = st.columns(3)
-    k1.metric("🏭 APS", "Ativo")
-    k2.metric("📊 OEE", "Ativo")
-    k3.metric("🔐 Sistema", "OK")
+    # 🔥 STATUS DINÂMICO
+    statusAPS = status_aps()
+
+    k1, k2, k3, k4 = st.columns(4)
+
+    k1.metric("🏭 APS", statusAPS)
+    k2.metric("📊 OEE", "🟢 Operando")
+    k3.metric("📈 Indicadores", "🟢 Atualizado")
+    k4.metric("🔐 Sistema", "🟢 OK")
 
     # ========================================================
-    # 📂 MÓDULOS (CORRIGIDO)
+    # 📂 MÓDULOS
     # ========================================================
     st.markdown("---")
     st.subheader("📂 Módulos")
@@ -145,23 +187,17 @@ if pagina == "📊 Visão Geral":
 
     with c1:
         st.markdown("### 🏭 Carga & Capacidade")
-        st.caption("Planejamento e balanceamento produtivo")
-        
         if st.button("Abrir", key="btn_carga", use_container_width=True):
             st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
     with c2:
         st.markdown("### 📈 OEE & Qualidade")
-        st.caption("Eficiência e controle de qualidade")
-        
         if st.button("Abrir", key="btn_oee", use_container_width=True):
             st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
     with c3:
         st.markdown("### 📊 Indicadores")
-        st.caption("Visão executiva e KPIs da fábrica")
-        
-        if st.button("Abrir", key="btn_indicadores", use_container_width=True):
+        if st.button("Abrir", key="btn_ind", use_container_width=True):
             st.switch_page("pages/3_Indicadores_Fabrica.py")
 
 # ============================================================
