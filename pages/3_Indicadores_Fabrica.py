@@ -797,8 +797,10 @@ with tab5:
     df_plot["Label_Entrega"] = df_plot.apply(lambda r: formatar(r, "Entrega"), axis=1)
 
     # ========================================================
-    # 📊 GRÁFICO PRAZO
+    # 📊 GRÁFICO 1 — PRAZO
     # ========================================================
+    st.subheader("📊 Índice de Entrega do Fornecedor no Prazo")
+
     fig1 = px.bar(df_plot, x="Mês", y="Prazo", text="Label_Prazo")
     fig1.update_traces(textposition="outside")
 
@@ -806,18 +808,31 @@ with tab5:
         y=META_PRAZO * 100,
         line_dash="dash",
         line_color="red",
-        annotation_text="Meta Prazo"
+        annotation_text="Meta ≥ 90%"
     )
 
     fig1.update_yaxes(range=[0, max(df_plot["Prazo"].max()*1.2, META_PRAZO*100*1.2)])
-
     fig1.update_layout(height=450, showlegend=False)
 
     st.plotly_chart(fig1, use_container_width=True)
 
+    # 🔍 ANÁLISE PRAZO
+    prazo_validos = [v for v in prazo_vals if v is not None]
+    if prazo_validos:
+        ultimo_prazo = prazo_validos[-1]
+
+        if ultimo_prazo >= META_PRAZO:
+            st.success("🟢 Fornecedores entregando dentro do prazo acordado")
+        else:
+            st.error("🔴 Atrasos recorrentes nas entregas dos fornecedores")
+
+    st.caption("Mede a confiabilidade dos fornecedores no cumprimento dos prazos.")
+
     # ========================================================
-    # 📊 GRÁFICO ENTREGA
+    # 📊 GRÁFICO 2 — ENTREGA
     # ========================================================
+    st.subheader("📊 Índice de Entregas no Prazo (Impacto na Produção)")
+
     fig2 = px.bar(df_plot, x="Mês", y="Entrega", text="Label_Entrega")
     fig2.update_traces(textposition="outside")
 
@@ -825,17 +840,28 @@ with tab5:
         y=META_ENTREGA * 100,
         line_dash="dash",
         line_color="red",
-        annotation_text="Meta Entrega"
+        annotation_text="Meta ≥ 98%"
     )
 
     fig2.update_yaxes(range=[0, max(df_plot["Entrega"].max()*1.2, META_ENTREGA*100*1.2)])
-
     fig2.update_layout(height=450, showlegend=False)
 
     st.plotly_chart(fig2, use_container_width=True)
 
+    # 🔍 ANÁLISE ENTREGA
+    entrega_validos = [v for v in entrega_vals if v is not None]
+    if entrega_validos:
+        ultimo_entrega = entrega_validos[-1]
+
+        if ultimo_entrega >= META_ENTREGA:
+            st.success("🟢 Abastecimento eficiente sem impacto produtivo")
+        else:
+            st.error("🔴 Risco de parada ou atraso produtivo por falha de fornecimento")
+
+    st.caption("Mede o impacto real do fornecedor no fluxo produtivo.")
+
     # ========================================================
-    # 🎯 SELECT
+    # 🎯 SELECT + KPI
     # ========================================================
     meses_com_dado = list(indicador_fornecedores.keys())
 
@@ -849,11 +875,6 @@ with tab5:
     c1.metric("Prazo", f"{dados['prazo']*100:.0f}%")
     c2.metric("Meta", f"{META_PRAZO*100:.0f}%")
     c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
-
-    if dados["prazo"] >= META_PRAZO:
-        st.success("🟢 Dentro da meta")
-    else:
-        st.error("🔴 Fora da meta")
 
     # ========================================================
     # 📎 EVIDÊNCIA
@@ -869,10 +890,8 @@ with tab5:
     # ========================================================
     # 🚨 REGRA ISO
     # ========================================================
-    valores_validos = [v for v in prazo_vals if v is not None]
-
-    if len(valores_validos) >= 3:
-        if all(v < META_PRAZO for v in valores_validos[-3:]):
-            st.error("🚨 3 meses fora da meta")
+    if len(prazo_validos) >= 3:
+        if all(v < META_PRAZO for v in prazo_validos[-3:]):
+            st.error("🚨 3 meses consecutivos fora da meta — ação obrigatória")
         else:
-            st.success("Indicador sob controle")
+            st.success("Indicador sob controle recente")
