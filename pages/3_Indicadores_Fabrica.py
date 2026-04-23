@@ -716,3 +716,163 @@ with tab4:
     c1.metric("💸 Custo Mês", formatar(ultimo["Total"]))
     c2.metric("📊 Custo Acumulado", formatar(ultimo["Total_acum"]))
     c3.metric("Status ISO Acumulado", status_acum)
+
+
+
+# ============================================================
+# 📦 Indicadores de Compras & Fornecedores
+# ============================================================
+
+with tab5:
+
+    import os
+
+    st.subheader("📦 Indicadores de Compras & Fornecedores")
+
+    ANO = "2026"
+    META_PRAZO = 0.90
+    META_ENTREGA = 0.98
+
+    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+    # ========================================================
+    # 📊 BASE CONTROLADA
+    # ========================================================
+    indicador_fornecedores = {
+        "Jan": {"prazo": 1.00, "entrega": 0.8695, "arquivo": "COMPRAS_FORNECEDORES.docx"},
+        "Fev": {"prazo": 1.00, "entrega": 1.00, "arquivo": "COMPRAS_FORNECEDORES.docx"},
+        "Mar": {"prazo": 0.9468, "entrega": 1.00, "arquivo": "COMPRAS_FORNECEDORES.docx"},
+    }
+
+    prazo_vals = []
+    entrega_vals = []
+
+    for mes in meses_ordem:
+        if mes in indicador_fornecedores:
+            prazo_vals.append(indicador_fornecedores[mes]["prazo"])
+            entrega_vals.append(indicador_fornecedores[mes]["entrega"])
+        else:
+            prazo_vals.append(None)
+            entrega_vals.append(None)
+
+    # ========================================================
+    # 📊 ACM
+    # ========================================================
+    def media(lista):
+        vals = [v for v in lista if v is not None]
+        return sum(vals)/len(vals) if vals else None
+
+    acm_prazo = media(prazo_vals)
+    acm_entrega = media(entrega_vals)
+
+    df_plot = pd.DataFrame({
+        "Mês": meses_ordem,
+        "Prazo": prazo_vals,
+        "Entrega": entrega_vals
+    })
+
+    df_plot = pd.concat([
+        df_plot,
+        pd.DataFrame([{
+            "Mês": "ACM",
+            "Prazo": acm_prazo,
+            "Entrega": acm_entrega
+        }])
+    ], ignore_index=True)
+
+    df_plot["Prazo"] = df_plot["Prazo"] * 100
+    df_plot["Entrega"] = df_plot["Entrega"] * 100
+
+    # ========================================================
+    # 🏷️ LABELS
+    # ========================================================
+    def formatar(row, col):
+        if pd.isna(row[col]):
+            return ""
+        if row["Mês"] == "ACM":
+            return f"{row[col]:.1f}%"
+        return f"{row[col]:.0f}%"
+
+    df_plot["Label_Prazo"] = df_plot.apply(lambda r: formatar(r, "Prazo"), axis=1)
+    df_plot["Label_Entrega"] = df_plot.apply(lambda r: formatar(r, "Entrega"), axis=1)
+
+    # ========================================================
+    # 📊 GRÁFICO PRAZO
+    # ========================================================
+    fig1 = px.bar(df_plot, x="Mês", y="Prazo", text="Label_Prazo")
+    fig1.update_traces(textposition="outside")
+
+    fig1.add_hline(
+        y=META_PRAZO * 100,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Meta Prazo"
+    )
+
+    fig1.update_yaxes(range=[0, max(df_plot["Prazo"].max()*1.2, META_PRAZO*100*1.2)])
+
+    fig1.update_layout(height=450, showlegend=False)
+
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # ========================================================
+    # 📊 GRÁFICO ENTREGA
+    # ========================================================
+    fig2 = px.bar(df_plot, x="Mês", y="Entrega", text="Label_Entrega")
+    fig2.update_traces(textposition="outside")
+
+    fig2.add_hline(
+        y=META_ENTREGA * 100,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="Meta Entrega"
+    )
+
+    fig2.update_yaxes(range=[0, max(df_plot["Entrega"].max()*1.2, META_ENTREGA*100*1.2)])
+
+    fig2.update_layout(height=450, showlegend=False)
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # ========================================================
+    # 🎯 SELECT
+    # ========================================================
+    meses_com_dado = list(indicador_fornecedores.keys())
+
+    mes_sel = st.selectbox("Selecionar mês", meses_com_dado, index=len(meses_com_dado)-1)
+
+    dados = indicador_fornecedores[mes_sel]
+    gap = dados["prazo"] - META_PRAZO
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Prazo", f"{dados['prazo']*100:.0f}%")
+    c2.metric("Meta", f"{META_PRAZO*100:.0f}%")
+    c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
+
+    if dados["prazo"] >= META_PRAZO:
+        st.success("🟢 Dentro da meta")
+    else:
+        st.error("🔴 Fora da meta")
+
+    # ========================================================
+    # 📎 EVIDÊNCIA
+    # ========================================================
+    caminho = f"data/Indicadores_Compras_Fornecedores/{dados['arquivo']}"
+
+    if os.path.exists(caminho):
+        with open(caminho, "rb") as file:
+            st.download_button("📎 Baixar evidência", file, file_name=dados["arquivo"])
+    else:
+        st.warning("Arquivo não encontrado")
+
+    # ========================================================
+    # 🚨 REGRA ISO
+    # ========================================================
+    valores_validos = [v for v in prazo_vals if v is not None]
+
+    if len(valores_validos) >= 3:
+        if all(v < META_PRAZO for v in valores_validos[-3:]):
+            st.error("🚨 3 meses fora da meta")
+        else:
+            st.success("Indicador sob controle")
