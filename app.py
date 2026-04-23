@@ -7,7 +7,7 @@ st.set_page_config(
 )
 
 # ===============================
-# CSS VISUAL APP PRINCIPAL
+# 🎨 CSS
 # ===============================
 st.markdown("""
 <style>
@@ -16,43 +16,15 @@ st.markdown("""
     padding-bottom: 2rem;
 }
 
-/* ===== METRICS ===== */
 div[data-testid="metric-container"] {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
     padding: 16px 18px;
     border-radius: 14px;
-    transition: all 0.2s ease-in-out;
-}
-div[data-testid="metric-container"]:hover {
-    transform: translateY(-2px);
-    border: 1px solid rgba(255,122,0,0.35);
 }
 
-/* ===== ALERTAS ===== */
-div[data-testid="stAlert"] {
-    border-radius: 12px;
-}
-
-/* ===== TABELAS ===== */
-div[data-testid="stDataFrame"] {
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-/* ===== DIVISORES ===== */
-hr {
-    border: none;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    margin: 1.4rem 0;
-}
-
-/* ===== SIDEBAR ===== */
 section[data-testid="stSidebar"] {
     border-right: 1px solid rgba(255,255,255,0.06);
-}
-section[data-testid="stSidebar"] .block-container {
-    padding-top: 1.4rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -83,20 +55,7 @@ def tela_login():
 
     with col2:
         if os.path.exists("logo.png"):
-            st.markdown("""
-            <div style="
-                background: rgba(255,255,255,0.03);
-                padding: 16px;
-                border-radius: 18px;
-                border: 1px solid rgba(255,255,255,0.08);
-                text-align: center;
-                margin-bottom: 18px;
-            ">
-            """, unsafe_allow_html=True)
-
             st.image("logo.png", width=220)
-
-            st.markdown("</div>", unsafe_allow_html=True)
 
         st.title("🔐 ELOHIM APS")
         st.subheader("Acesso Restrito ao Sistema")
@@ -119,115 +78,89 @@ if not st.session_state.logado:
     tela_login()
     st.stop()
 
-# ===============================
-# SIDEBAR PREMIUM
-# ===============================
+# ============================================================
+# 🎯 SIDEBAR PADRÃO
+# ============================================================
 with st.sidebar:
+
     if os.path.exists("logo.png"):
-        st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
         st.image("logo.png", width=120)
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("## ELOHIM APS")
-    st.caption("Sistema de Planejamento e Performance Industrial")
+    st.markdown("## ⚙️ ELOHIM APS")
+    st.caption("Planejamento e Performance Industrial")
 
-    st.markdown("---")
+    st.divider()
 
     st.markdown("### 👤 Sessão")
     st.info(f"Usuário: **{st.session_state.usuario}**")
 
-    st.markdown("### 📊 Módulos")
+    st.divider()
+
+    st.markdown("### 🧭 Navegação")
 
     pagina = st.radio(
-        "Navegação",
+        "",
         [
-            "🏠 Visão Geral",
+            "📊 Visão Geral",
             "🏭 Carga & Capacidade",
-            "📊 OEE & Qualidade"
-        ]
+            "📈 OEE & Qualidade",
+            "📊 Indicadores"
+        ],
+        label_visibility="collapsed"
     )
 
-    st.markdown("---")
+    st.divider()
 
     if st.button("🚪 Sair", use_container_width=True):
         st.session_state.logado = False
         st.session_state.usuario = ""
         st.rerun()
 
-# ===============================
-# HOME / VISÃO GERAL
-# ===============================
-if pagina == "🏠 Visão Geral":
+# ============================================================
+# 📊 VISÃO GERAL
+# ============================================================
+if pagina == "📊 Visão Geral":
 
-    col1, col2 = st.columns([1.3, 6])
+    st.title("🚀 ELOHIM APS – Advanced Planning System")
 
-    with col1:
-        if os.path.exists("logo.png"):
-            st.markdown("""
-            <div style="
-                background: rgba(255,255,255,0.03);
-                padding: 12px;
-                border-radius: 18px;
-                border: 1px solid rgba(255,255,255,0.08);
-                text-align: center;
-            ">
-            """, unsafe_allow_html=True)
+    st.success(f"Bem-vindo, {st.session_state.usuario}")
 
-            st.image("logo.png", width=170)
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.title("🚀 ELOHIM APS – Advanced Planning System")
-        st.success(f"Bem-vindo, {st.session_state.usuario}")
-        st.caption("Sistema inteligente de planejamento, capacidade, desempenho e análise operacional da produção.")
-
-    st.markdown("## 📌 Painel Central do Sistema")
-    st.markdown("Selecione um módulo no menu lateral para navegar.")
+    st.markdown("## 📌 Painel Central")
 
     k1, k2, k3 = st.columns(3)
-
-    k1.metric("🏭 Módulo APS", "Ativo")
-    k2.metric("📊 Módulo OEE", "Ativo")
-    k3.metric("🔐 Segurança", "OK")
+    k1.metric("🏭 APS", "Ativo")
+    k2.metric("📊 OEE", "Ativo")
+    k3.metric("🔐 Sistema", "OK")
 
     st.markdown("---")
 
-    st.subheader("📂 Módulos Disponíveis")
+    st.subheader("📂 Módulos")
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
 
     with c1:
-        st.markdown("### 🏭 APS | Carga & Capacidade")
-        st.write("Planejamento industrial com análise de:")
-        st.write("- carga por processo")
-        st.write("- capacidade produtiva")
-        st.write("- gargalos")
-        st.write("- fila")
-        st.write("- atraso por PV")
-        st.write("- simulação operacional")
-
-        if st.button("Abrir APS Carga & Capacidade", use_container_width=True):
+        st.markdown("### 🏭 Carga & Capacidade")
+        if st.button("Abrir", use_container_width=True):
             st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
     with c2:
-        st.markdown("### 📊 APS | OEE & Qualidade")
-        st.write("Gestão de performance industrial com:")
-        st.write("- OEE geral")
-        st.write("- disponibilidade")
-        st.write("- performance")
-        st.write("- qualidade")
-        st.write("- refugo")
-        st.write("- semáforo executivo")
-
-        if st.button("Abrir APS OEE & Qualidade", use_container_width=True):
+        st.markdown("### 📈 OEE & Qualidade")
+        if st.button("Abrir", use_container_width=True):
             st.switch_page("pages/3_APS_OEE_Qualidade.py")
 
-# ===============================
-# REDIRECIONAMENTO
-# ===============================
+    with c3:
+        st.markdown("### 📊 Indicadores")
+        if st.button("Abrir", use_container_width=True):
+            st.switch_page("pages/3_Indicadores_Fabrica.py")
+
+# ============================================================
+# 🔁 REDIRECIONAMENTO
+# ============================================================
 elif pagina == "🏭 Carga & Capacidade":
     st.switch_page("pages/2_APS_Carga_Capacidade.py")
 
-elif pagina == "📊 OEE & Qualidade":
+elif pagina == "📈 OEE & Qualidade":
     st.switch_page("pages/3_APS_OEE_Qualidade.py")
+
+elif pagina == "📊 Indicadores":
+    st.switch_page("pages/3_Indicadores_Fabrica.py")
