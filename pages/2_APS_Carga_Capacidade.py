@@ -3368,7 +3368,7 @@ col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 
 
 # ------------------------------------------------------------
-# 🧾 FILA ATUAL DE CORTE (AGORA CORRETA)
+# 🧾 FILA ATUAL DE CORTE (ORDENADA + SEMÁFORO)
 # ------------------------------------------------------------
 st.markdown("### 🧾 Fila Atual de Corte")
 
@@ -3376,44 +3376,77 @@ if not fila_corte_dash.empty:
 
     fila_corte_exib = fila_corte_dash.copy()
 
+    # 🔹 DATA REAL (PARA ORDENAR)
     if "ENTREGA" in fila_corte_exib.columns:
-        fila_corte_exib["ENTREGA"] = pd.to_datetime(
+        fila_corte_exib["ENTREGA_DT"] = pd.to_datetime(
             fila_corte_exib["ENTREGA"], errors="coerce"
         )
-        fila_corte_exib["ENTREGA"] = fila_corte_exib["ENTREGA"].dt.strftime("%d/%m/%Y")
 
+    # 🔹 HORAS
     fila_corte_exib["Horas"] = pd.to_numeric(
         fila_corte_exib["Horas"], errors="coerce"
     ).fillna(0).round(1)
 
+    # 🔹 DIAS PARA ENTREGA (SE NÃO EXISTIR)
+    if "ENTREGA_DT" in fila_corte_exib.columns:
+        hoje = pd.Timestamp.today().normalize()
+        fila_corte_exib["Dias para Entrega"] = (
+            fila_corte_exib["ENTREGA_DT"] - hoje
+        ).dt.days
+
+    # 🔹 SEMÁFORO
+    def classificar(dias):
+        if pd.isna(dias):
+            return "⚪"
+        if dias < 0:
+            return "🔴"
+        elif dias <= 2:
+            return "🟡"
+        else:
+            return "🟢"
+
+    if "Dias para Entrega" in fila_corte_exib.columns:
+        fila_corte_exib["Status"] = fila_corte_exib["Dias para Entrega"].apply(classificar)
+
+    # 🔹 COLUNAS
     colunas_corte_fila = [
+        "Status",
         "PV",
         "Cliente",
         "CODIGO_PV",
         "Processo",
         "Horas",
         "Dias para Entrega",
-        "ENTREGA"
+        "ENTREGA",
+        "ENTREGA_DT"
     ]
 
     colunas_corte_fila = [
         c for c in colunas_corte_fila if c in fila_corte_exib.columns
     ]
 
-    if "ENTREGA" in fila_corte_exib.columns:
-        df_exib = fila_corte_exib[colunas_corte_fila] \
-            .sort_values(["Processo", "ENTREGA"], ascending=[True, True])
-    else:
-        df_exib = fila_corte_exib[colunas_corte_fila] \
-            .sort_values(["Processo"], ascending=[True])
+    df_exib = fila_corte_exib[colunas_corte_fila].copy()
+
+    # 🔥 ORDENAÇÃO INTELIGENTE
+    if "ENTREGA_DT" in df_exib.columns:
+        df_exib = df_exib.sort_values(
+            ["ENTREGA_DT"],
+            ascending=[True]
+        )
 
     df_exib = df_exib.reset_index(drop=True)
 
+    # 🔹 FORMATA DATA
+    if "ENTREGA_DT" in df_exib.columns:
+        df_exib["ENTREGA"] = df_exib["ENTREGA_DT"].dt.strftime("%d/%m/%Y")
+        df_exib = df_exib.drop(columns=["ENTREGA_DT"], errors="ignore")
+
+    # 🔹 EXIBE
     st.dataframe(
         df_exib,
         use_container_width=True,
         hide_index=True,
-        height=320
+        height=350
     )
 
 else:
