@@ -3264,17 +3264,113 @@ else:
 
 
 
+
+# =========================================================
+# 🔥 BASE REAL DO DASHBOARD DE CORTE (CORRIGIDA)
+# =========================================================
+st.markdown("## 📊 Dashboard do Corte")
+st.caption("Indicadores operacionais e gerenciais do setor de corte.")
+
+# 🔹 BASE OPERACIONAL
+fila_corte_dash = df_operacional.copy()
+
+fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
+
+fila_corte_dash = fila_corte_dash[
+    fila_corte_dash["PROC_UPPER"].str.contains("SERRA|LASER|PLASMA", na=False)
+].copy()
+
+fila_corte_dash["Horas"] = pd.to_numeric(
+    fila_corte_dash["Horas"], errors="coerce"
+).fillna(0)
+
+# 🔹 HISTÓRICO DE BAIXAS
+hist_corte_dash = df_baixas.copy()
+
+if not hist_corte_dash.empty:
+
+    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
+    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
+
+    hist_corte_dash = hist_corte_dash[
+        hist_corte_dash["PROC_UPPER"].str.contains("SERRA|LASER|PLASMA", na=False)
+    ].copy()
+
+    hist_corte_dash["Horas"] = pd.to_numeric(
+        hist_corte_dash["Horas"], errors="coerce"
+    ).fillna(0)
+
+    # 🔥 REMOVE BAIXADAS DA FILA
+    baixas_validas = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ]
+
+    chaves_baixadas = set(
+        zip(
+            baixas_validas["PV"],
+            baixas_validas["CODIGO_PV"],
+            baixas_validas["Processo"]
+        )
+    )
+
+    fila_corte_dash["CHAVE"] = list(zip(
+        fila_corte_dash["PV"],
+        fila_corte_dash["CODIGO_PV"],
+        fila_corte_dash["Processo"]
+    ))
+
+    fila_corte_dash = fila_corte_dash[
+        ~fila_corte_dash["CHAVE"].isin(chaves_baixadas)
+    ].copy()
+
+# 🔥 LIMPEZA FINAL (IMPORTANTE)
+fila_corte_dash = fila_corte_dash.drop(columns=["CHAVE"], errors="ignore")
+
+
+# =========================================================
+# 📊 KPIs
+# =========================================================
+
+ops_fila_corte = len(fila_corte_dash)
+horas_fila_corte = fila_corte_dash["Horas"].sum()
+
+if not hist_corte_dash.empty:
+
+    baixas_ativas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+    ]
+
+    baixas_estornadas_corte = hist_corte_dash[
+        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
+    ]
+
+    qtd_baixadas_corte = len(baixas_ativas_corte)
+    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
+    qtd_estornadas_corte = len(baixas_estornadas_corte)
+
+else:
+    qtd_baixadas_corte = 0
+    horas_baixadas_corte = 0
+    qtd_estornadas_corte = 0
+
+
+# =========================================================
+# 📊 RENDER KPIs
+# =========================================================
+
+col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
+
+col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
+col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
+col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
+col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
+col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
+
+
 # ------------------------------------------------------------
-# FILA ATUAL DE CORTE (COM ORDENAÇÃO GARANTIDA)
+# 🧾 FILA ATUAL DE CORTE (AGORA CORRETA)
 # ------------------------------------------------------------
 st.markdown("### 🧾 Fila Atual de Corte")
-
-if (
-    "fila_corte_dash" not in locals()
-    or fila_corte_dash is None
-    or not isinstance(fila_corte_dash, pd.DataFrame)
-):
-    fila_corte_dash = pd.DataFrame()
 
 if not fila_corte_dash.empty:
 
@@ -3324,90 +3420,6 @@ else:
     st.success("Nenhuma operação de corte pendente no momento. 🎯")
 
 st.divider()
-
-
-
-
-# =========================================================
-# DASHBOARD DO CORTE (CORRIGIDO DEFINITIVO)
-# =========================================================
-st.markdown("## 📊 Dashboard do Corte")
-st.caption("Indicadores operacionais e gerenciais do setor de corte.")
-
-# ---------------------------------------
-# BASES DO DASHBOARD DE CORTE
-# ---------------------------------------
-
-# 🔥 USA BASE CORRETA (COM STATUS)
-fila_corte_dash = df_operacional.copy()
-
-fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
-
-fila_corte_dash = fila_corte_dash[
-    (
-        fila_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
-        fila_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
-        fila_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
-    )
-].copy()
-
-# 🔥 REMOVE O QUE JÁ FOI BAIXADO
-fila_corte_dash = fila_corte_dash[
-    fila_corte_dash["Status Operacional"] == "⏳ Pendente"
-].copy()
-
-fila_corte_dash["Horas"] = pd.to_numeric(fila_corte_dash["Horas"], errors="coerce").fillna(0)
-
-# 🔥 HISTÓRICO REAL
-hist_corte_dash = df_baixas.copy()
-
-if not hist_corte_dash.empty:
-
-    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
-    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
-
-    hist_corte_dash = hist_corte_dash[
-        (
-            hist_corte_dash["PROC_UPPER"].str.contains("SERRA", na=False) |
-            hist_corte_dash["PROC_UPPER"].str.contains("LASER", na=False) |
-            hist_corte_dash["PROC_UPPER"].str.contains("PLASMA", na=False)
-        )
-    ].copy()
-
-    hist_corte_dash["Horas"] = pd.to_numeric(hist_corte_dash["Horas"], errors="coerce").fillna(0)
-    hist_corte_dash["Data_Baixa"] = pd.to_datetime(hist_corte_dash["Data_Baixa"], errors="coerce")
-
-# ---------------------------------------
-# KPIs DO CORTE
-# ---------------------------------------
-ops_fila_corte = len(fila_corte_dash)
-horas_fila_corte = fila_corte_dash["Horas"].sum()
-
-if not hist_corte_dash.empty:
-
-    baixas_ativas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    baixas_estornadas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
-    ].copy()
-
-    qtd_baixadas_corte = len(baixas_ativas_corte)
-    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
-    qtd_estornadas_corte = len(baixas_estornadas_corte)
-
-else:
-    qtd_baixadas_corte = 0
-    horas_baixadas_corte = 0
-    qtd_estornadas_corte = 0
-
-col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
-col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
-col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
-col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
-col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
-col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 
 
 
