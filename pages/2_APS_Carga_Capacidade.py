@@ -22,6 +22,33 @@ from datetime import datetime
 
 st.set_page_config(layout="wide")
 
+
+
+# ============================================================
+# 🔧 UTILS APS (FORMATAÇÃO GLOBAL)
+# ============================================================
+
+def fmt_br_num(valor, casas=1):
+    try:
+        return f"{float(valor):,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "0"
+
+def fmt_br_pct(valor, casas=1):
+    try:
+        return f"{float(valor):.{casas}f}%"
+    except:
+        return "0%"
+
+def fmt_br_int(valor):
+    try:
+        return f"{int(valor)}"
+    except:
+        return "0"
+
+
+
+
 # ============================================================
 # 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
 # ============================================================
