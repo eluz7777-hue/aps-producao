@@ -913,7 +913,6 @@ df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
-# Blindagem dos auxiliares
 for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
     if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
         _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
@@ -979,7 +978,6 @@ if df.empty:
     st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
 
     st.markdown("### 🔎 Diagnóstico da expansão da base")
-
     st.write("**Total de linhas em df_pv:**", len(df_pv))
     st.write("**Total de PVs únicas no Excel:**", df_pv["PV"].astype(str).str.strip().nunique())
 
@@ -995,11 +993,9 @@ if df.empty:
     st.stop()
 
 
- 
 # ===============================
 # FILTRO POR CLIENTE
 # ===============================
-df_excluidas = pd.DataFrame(pvs_excluidas)
 df["Cliente"] = df["Cliente"].fillna("SEM CLIENTE").astype(str).str.strip()
 
 clientes_disponiveis = sorted(df["Cliente"].dropna().unique().tolist())
@@ -1015,12 +1011,14 @@ if df.empty:
     st.warning("Nenhum dado encontrado para o filtro selecionado.")
     st.stop()
 
+
 # ===============================
 # DATAS
 # ===============================
 df["Semana"] = df["Data"].dt.isocalendar().week.astype(int)
 df["Ano"] = df["Data"].dt.year
 df["Mes"] = df["Data"].dt.month
+
 mes_ref = int(df["Mes"].mode()[0])
 ano_ref = int(df["Ano"].mode()[0])
 
@@ -1028,16 +1026,11 @@ horas_mes = horas_uteis_mes(ano_ref, mes_ref)
 total_recursos = sum(MAQUINAS.values())
 
 
-
 # ===============================
-# 🚀 PRIORIDADE APS (APENAS COMO SINAL — NÃO ORDENA)
+# 🚀 PRIORIDADE APS (SINAL)
 # ===============================
-
 hoje = pd.Timestamp.now().normalize()
 
-# -------------------------------
-# 🔹 BASE POR PV
-# -------------------------------
 pv_base = df.groupby("PV", as_index=False).agg({
     "Horas": "sum",
     "DATA_ENTREGA_APS": "min"
@@ -1047,33 +1040,18 @@ pv_base["DATA_ENTREGA_APS"] = pd.to_datetime(
     pv_base["DATA_ENTREGA_APS"], errors="coerce"
 )
 
-# -------------------------------
-# 🔹 PRAZO
-# -------------------------------
 pv_base["Dias_Restantes"] = (
     pv_base["DATA_ENTREGA_APS"] - hoje
-).dt.days
-
-pv_base["Dias_Restantes"] = pv_base["Dias_Restantes"].fillna(0)
+).dt.days.fillna(0)
 
 pv_base["Score_Prazo"] = 1 / (pv_base["Dias_Restantes"] + 1)
-
-# -------------------------------
-# 🔹 HORAS
-# -------------------------------
 pv_base["Score_Horas"] = 1 / (pv_base["Horas"] + 0.1)
 
-# -------------------------------
-# 🔹 IMPACTO
-# -------------------------------
 impacto = df.groupby("PV")["Processo"].count().reset_index(name="Qtd_Processos")
 pv_base = pv_base.merge(impacto, on="PV", how="left")
 
 pv_base["Score_Impacto"] = pv_base["Qtd_Processos"]
 
-# -------------------------------
-# 🔹 GARGALO
-# -------------------------------
 gargalos_criticos = ["CORTE-LASER", "SOLDAGEM", "CENTRO DE USINAGEM"]
 
 carga_gargalo = (
@@ -1088,43 +1066,17 @@ pv_base["Horas_Gargalo"] = pv_base["Horas_Gargalo"].fillna(0)
 
 pv_base["Score_Gargalo"] = pv_base["Horas_Gargalo"]
 
-# -------------------------------
-# 🔹 PESOS
-# -------------------------------
-w1 = 0.4
-w2 = 0.2
-w3 = 0.2
-w4 = 0.2
-
-# -------------------------------
-# 🔹 PRIORIDADE FINAL
-# -------------------------------
 pv_base["PRIORIDADE_APS"] = (
-    w1 * pv_base["Score_Prazo"] +
-    w2 * pv_base["Score_Horas"] +
-    w3 * pv_base["Score_Gargalo"] +
-    w4 * pv_base["Score_Impacto"]
+    0.4 * pv_base["Score_Prazo"] +
+    0.2 * pv_base["Score_Horas"] +
+    0.2 * pv_base["Score_Gargalo"] +
+    0.2 * pv_base["Score_Impacto"]
 )
 
-# -------------------------------
-# 🔹 APLICA NA BASE (SEM ORDENAR)
-# -------------------------------
-df = df.merge(
-    pv_base[["PV", "PRIORIDADE_APS"]],
-    on="PV",
-    how="left"
-)
+df = df.merge(pv_base[["PV", "PRIORIDADE_APS"]], on="PV", how="left")
 
-# ============================================================
-# 🔥 ORDENAÇÃO OPERACIONAL (VOLTA AO PADRÃO ORIGINAL)
-# ============================================================
-df = df.sort_values(
-    by=["Processo", "Data", "PV"]
-).reset_index(drop=True)
+df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
 
-# -------------------------------
-# 🔁 REPROCESSA FILA
-# -------------------------------
 df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
 
 def capacidade_diaria_real(processo):
@@ -1142,6 +1094,89 @@ df["Fila (dias)"] = np.where(
 )
 
 
+# ============================================================
+# 🔧 TELA DE BAIXA OPERACIONAL (ROBUSTA)
+# ============================================================
+
+st.markdown("---")
+st.subheader("🔧 Dar Baixa em Operação")
+
+df_view = df_baixa_base.copy()
+
+if "PV" not in df_view.columns:
+    st.error("Erro: base de baixa inválida.")
+    st.stop()
+
+pvs = sorted(df_view["PV"].dropna().unique().tolist())
+pv_sel = st.selectbox("Selecionar PV", ["Todas"] + pvs, key="baixa_pv")
+
+if pv_sel != "Todas":
+    df_view = df_view[df_view["PV"] == pv_sel]
+
+st.dataframe(df_view, use_container_width=True, hide_index=True)
+
+if not df_view.empty:
+
+    idx = st.selectbox(
+        "Selecione a operação para baixar",
+        df_view.index,
+        format_func=lambda i: f"PV {df_view.loc[i,'PV']} | {df_view.loc[i,'Processo']} | {df_view.loc[i,'CODIGO_PV']}"
+    )
+
+    if st.button("✅ Confirmar Baixa", use_container_width=True):
+
+        linha = df_view.loc[idx].to_dict()
+        chave_nova = f"{linha['PV']}||{linha['Processo']}||{linha['CODIGO_PV']}"
+
+        df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+
+        if not df_baixas_ativas.empty:
+            df_temp = df_baixas_ativas.copy()
+
+            for col in ["PV", "Processo", "CODIGO_PV"]:
+                if col not in df_temp.columns:
+                    df_temp[col] = ""
+
+                df_temp[col] = (
+                    df_temp[col]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                )
+
+            df_temp["CHAVE"] = (
+                df_temp["PV"] + "||" +
+                df_temp["Processo"] + "||" +
+                df_temp["CODIGO_PV"]
+            )
+
+            if chave_nova in set(df_temp["CHAVE"]):
+                st.warning("⚠️ Essa operação já foi baixada.")
+                st.stop()
+
+        nova_baixa = {
+            "PV": linha["PV"],
+            "Processo": linha["Processo"],
+            "CODIGO_PV": linha["CODIGO_PV"],
+            "Horas": linha.get("Horas", 0),
+            "Data_Baixa": pd.Timestamp.now(),
+            "Usuario": "Operador",
+            "Observacao": "",
+            "Status_Baixa": "ATIVA"
+        }
+
+        df_baixas_ativas = pd.concat(
+            [df_baixas_ativas, pd.DataFrame([nova_baixa])],
+            ignore_index=True
+        )
+
+        st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+        st.success("Baixa realizada com sucesso!")
+        st.rerun()
+else:
+    st.info("Nenhuma operação pendente disponível.")
 
 
 
