@@ -652,8 +652,49 @@ if not df_original.empty:
 # ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
+
 st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
+
+# ===============================
+# 🔧 FUNÇÕES LOCAIS (GARANTIDAS)
+# ===============================
+def fmt_br_num(valor, casas=1):
+    try:
+        return f"{float(valor):,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "0"
+
+def fmt_br_pct(valor, casas=1):
+    try:
+        return f"{float(valor):.{casas}f}%"
+    except:
+        return "0%"
+
+def fmt_br_int(valor):
+    try:
+        return f"{int(valor)}"
+    except:
+        return "0"
+
+# ===============================
+# 🔹 GARANTIA DE VARIÁVEIS
+# ===============================
+carga_total = df["Horas"].sum() if "Horas" in df.columns else 0
+capacidade_total = capacidade_total if "capacidade_total" in locals() else 0
+utilizacao_total = utilizacao_total if "utilizacao_total" in locals() else 0
+pvs_no_aps = df["PV"].nunique() if "PV" in df.columns else 0
+
+atrasos = atrasos if "atrasos" in locals() else []
+risco = risco if "risco" in locals() else []
+ok = ok if "ok" in locals() else 0
+pvs_totais_excel = pvs_totais_excel if "pvs_totais_excel" in locals() else 0
+
+gargalo_exec = gargalo_exec if "gargalo_exec" in locals() else None
+gargalo_raiz = gargalo_raiz if "gargalo_raiz" in locals() else None
+ocupacao_max = ocupacao_max if "ocupacao_max" in locals() else 0
+
+df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
 
 # ===============================
 # KPIs PRINCIPAIS
@@ -708,15 +749,13 @@ s3.metric("🟢 OK", fmt_br_int(ok))
 s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
 
 # ===============================
-# 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
+# 🔥 DESTAQUES DA OPERAÇÃO
 # ===============================
 st.subheader("🔥 Destaques da Operação")
 
 d1, d2, d3, d4 = st.columns(4)
 
-# ------------------------------------------------------------
-# 🔥 GARGALO IMEDIATO (COM FALLBACK INTELIGENTE)
-# ------------------------------------------------------------
+# 🔥 Gargalo imediato
 gargalo_imediato = None
 
 try:
@@ -726,10 +765,10 @@ try:
         resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
         gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
 
-except Exception as e:
-    gargalo_imediato = None
+except:
+    pass
 
-# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
+# 🔁 fallback garantido
 if not gargalo_imediato or gargalo_imediato == "-":
     try:
         gargalo_imediato = (
@@ -746,49 +785,35 @@ d1.metric(
     gargalo_imediato if gargalo_imediato else "N/D"
 )
 
-# ------------------------------------------------------------
-# 📊 GARGALO DE CAPACIDADE
-# ------------------------------------------------------------
+# 📊 Gargalo de capacidade
 d2.metric(
     "📊 Gargalo de Capacidade",
     gargalo_exec if gargalo_exec else "N/D"
 )
 
-# ------------------------------------------------------------
-# 🧠 GARGALO RAIZ (IMPACTO)
-# ------------------------------------------------------------
+# 🧠 Gargalo raiz
 d3.metric(
     "🧠 Gargalo Raiz (Impacto)",
-    gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
+    gargalo_raiz if gargalo_raiz else "N/D"
 )
 
-# ------------------------------------------------------------
-# 📍 PICO DE OCUPAÇÃO
-# ------------------------------------------------------------
+# 📍 Pico de ocupação
 d4.metric(
     "📍 Pico de Ocupação",
     fmt_br_pct(ocupacao_max, 1)
 )
 
-
-# ============================================================
-# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
-# ============================================================
-
+# ===============================
+# ⚠️ ALERTA INTELIGENTE
+# ===============================
 try:
-    if (
-        gargalo_raiz
-        and gargalo_imediato
-        and gargalo_raiz != gargalo_imediato
-    ):
+    if gargalo_raiz and gargalo_imediato and gargalo_raiz != gargalo_imediato:
         st.warning(
             f"⚠️ O gargalo imediato ({gargalo_imediato}) pode ser consequência do gargalo raiz ({gargalo_raiz}). "
             "Atuar na origem pode estabilizar todo o fluxo produtivo."
         )
 except:
     pass
-
-
 
 
 
