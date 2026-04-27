@@ -679,30 +679,8 @@ if not df_original.empty:
 # ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
-
 st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
-
-# ===============================
-# 🔧 FORMATADORES LOCAIS (GARANTIDOS)
-# ===============================
-def _fmt_num(v, c=1):
-    try:
-        return f"{float(v):,.{c}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return "0"
-
-def _fmt_pct(v, c=1):
-    try:
-        return f"{float(v):.{c}f}%"
-    except:
-        return "0%"
-
-def _fmt_int(v):
-    try:
-        return f"{int(v)}"
-    except:
-        return "0"
 
 # ===============================
 # KPIs PRINCIPAIS
@@ -710,10 +688,10 @@ def _fmt_int(v):
 st.subheader("📌 Indicadores Principais")
 
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("🏭 Carga Total (h)", _fmt_num(carga_total, 1))
-k2.metric("⚙️ Capacidade Mensal (h)", _fmt_num(capacidade_total, 1))
-k3.metric("📈 Utilização Global", _fmt_pct(utilizacao_total, 1))
-k4.metric("📦 PVs no APS", _fmt_int(pvs_no_aps))
+k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
+k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
+k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
+k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
 
 # ===============================
 # FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
@@ -751,10 +729,10 @@ def status(x):
 st.subheader("🚦 Status Executivo")
 
 s1, s2, s3, s4 = st.columns(4)
-s1.metric("🔴 Atraso", _fmt_int(len(atrasos)))
-s2.metric("🟡 Risco", _fmt_int(len(risco)))
-s3.metric("🟢 OK", _fmt_int(ok))
-s4.metric("📄 PVs no Excel", _fmt_int(pvs_totais_excel))
+s1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
+s2.metric("🟡 Risco", fmt_br_int(len(risco)))
+s3.metric("🟢 OK", fmt_br_int(ok))
+s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
 
 # ===============================
 # 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
@@ -775,10 +753,10 @@ try:
         resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
         gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
 
-except:
+except Exception as e:
     gargalo_imediato = None
 
-# 🔁 FALLBACK
+# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
 if not gargalo_imediato or gargalo_imediato == "-":
     try:
         gargalo_imediato = (
@@ -816,11 +794,12 @@ d3.metric(
 # ------------------------------------------------------------
 d4.metric(
     "📍 Pico de Ocupação",
-    _fmt_pct(ocupacao_max, 1)
+    fmt_br_pct(ocupacao_max, 1)
 )
 
+
 # ============================================================
-# ⚠️ ALERTA INTELIGENTE
+# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
 # ============================================================
 
 try:
@@ -835,6 +814,7 @@ try:
         )
 except:
     pass
+
 
 
 
@@ -4474,102 +4454,149 @@ else:
 
 
 # ============================================================
-# 🧠 PAINEL EXECUTIVO INTELIGENTE (DECISÃO AUTOMÁTICA)
+# ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
 
-st.markdown("### 🧠 Diagnóstico Inteligente do Sistema")
+st.markdown("## 📊 Painel Executivo APS")
+st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
 
-# 🔒 GARANTE EXISTÊNCIA DAS BASES
-ranking_colapso_safe = globals().get("ranking_colapso", pd.DataFrame())
-df_colapso_safe = globals().get("df_colapso", pd.DataFrame())
-impacto_gargalo_safe = globals().get("impacto_gargalo", pd.DataFrame())
+# ===============================
+# KPIs PRINCIPAIS
+# ===============================
+st.subheader("📌 Indicadores Principais")
 
-gargalo_atual = None
-gargalo_futuro = None
-processo_critico = None
+k1, k2, k3, k4 = st.columns(4)
 
-# -------------------------------
-# 🔥 GARGALO ATUAL
-# -------------------------------
-if not ranking_colapso_safe.empty:
-    gargalo_atual = str(ranking_colapso_safe.iloc[0].get("Processo", "N/A"))
-    status_atual = str(ranking_colapso_safe.iloc[0].get("Semáforo Colapso", "N/A"))
-else:
-    status_atual = "N/A"
-
-# -------------------------------
-# 🔮 GARGALO FUTURO
-# -------------------------------
-if not df_colapso_safe.empty:
-    gargalo_futuro = str(df_colapso_safe.iloc[0].get("Processo", "N/A"))
-    risco_futuro = str(df_colapso_safe.iloc[0].get("Risco Futuro", "N/A"))
-else:
-    risco_futuro = "N/A"
-
-# -------------------------------
-# 📊 PROCESSO DE MAIOR IMPACTO
-# -------------------------------
-if not impacto_gargalo_safe.empty:
-    processo_critico = str(impacto_gargalo_safe.iloc[0].get("Processo", "N/A"))
-else:
-    processo_critico = "N/A"
-
-# -------------------------------
-# 🚦 DECISÃO AUTOMÁTICA (REFINADA)
-# -------------------------------
-st.divider()
-
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric(
-    "🔥 Gargalo Atual",
-    gargalo_atual if gargalo_atual else "N/A"
+k1.metric(
+    "🏭 Carga Total (h)",
+    f"{float(carga_total):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
 )
 
-col2.metric(
-    "🔮 Risco Futuro",
-    gargalo_futuro if gargalo_futuro else "N/A"
+k2.metric(
+    "⚙️ Capacidade Mensal (h)",
+    f"{float(capacidade_total):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
 )
 
-col3.metric(
-    "📊 Maior Impacto (acúmulo)",
-    processo_critico if processo_critico else "N/A"
+k3.metric(
+    "📈 Utilização Global",
+    f"{float(utilizacao_total):.1f}%"
 )
 
-col4.metric(
-    "🏭 Gargalo Real",
-    gargalo_atual if gargalo_atual else "N/A"
+k4.metric(
+    "📦 PVs no APS",
+    str(int(pvs_no_aps))
 )
 
-st.divider()
+# ===============================
+# FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
+# ===============================
+def semaforo_entrega(dias):
+    if pd.isna(dias):
+        return "⚪ Sem data"
+    elif dias < 0:
+        return "🔴 Atrasado"
+    elif dias <= 3:
+        return "🟠 Urgente"
+    elif dias <= 7:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Normal"
 
+def status(x):
+    try:
+        x = float(x)
+    except:
+        return "⚪"
 
+    if x >= 100:
+        return "🔴"
+    elif x >= 90:
+        return "🟠"
+    elif x >= 75:
+        return "🟡"
+    else:
+        return "🟢"
 
-# -------------------------------
-# 🎯 INTERPRETAÇÃO INTELIGENTE (REFINADA)
-# -------------------------------
+# ===============================
+# STATUS EXECUTIVO
+# ===============================
+st.subheader("🚦 Status Executivo")
 
-if gargalo_atual and gargalo_atual == gargalo_futuro == processo_critico:
-    st.error(f"🔥 Colapso crítico confirmado em {gargalo_atual}. Ação imediata necessária.")
+s1, s2, s3, s4 = st.columns(4)
 
-elif gargalo_atual and gargalo_atual == gargalo_futuro:
-    st.warning(f"⚠️ Gargalo persistente em {gargalo_atual}. Tendência de agravamento.")
+s1.metric("🔴 Atraso", str(len(atrasos)))
+s2.metric("🟡 Risco", str(len(risco)))
+s3.metric("🟢 OK", str(int(ok)))
+s4.metric("📄 PVs no Excel", str(int(pvs_totais_excel)))
 
-elif gargalo_futuro and gargalo_futuro == processo_critico:
-    st.warning(f"🔮 Processo {gargalo_futuro} será o próximo gargalo. Antecipar ação.")
+# ===============================
+# 🔥 DESTAQUES DA OPERAÇÃO
+# ===============================
+st.subheader("🔥 Destaques da Operação")
 
-elif gargalo_atual and processo_critico and gargalo_atual != processo_critico:
-    st.info(
-        f"⚠️ Impacto concentrado em {processo_critico}, "
-        f"mas a restrição real do sistema está em {gargalo_atual}."
-    )
+d1, d2, d3, d4 = st.columns(4)
 
-elif gargalo_atual:
-    st.info(f"📌 Gargalo atual identificado em {gargalo_atual}. Monitoramento ativo.")
+# 🔥 Gargalo imediato
+gargalo_imediato = None
 
-else:
-    st.success("Sistema operando dentro da normalidade.")
+try:
+    df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
 
+    if df_dash_tmp is not None and not df_dash_tmp.empty:
+        resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
+        gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
+
+except:
+    pass
+
+# 🔁 fallback
+if not gargalo_imediato or gargalo_imediato == "-":
+    try:
+        gargalo_imediato = (
+            df.groupby("Processo")["Horas"]
+            .sum()
+            .sort_values(ascending=False)
+            .index[0]
+        )
+    except:
+        gargalo_imediato = None
+
+d1.metric(
+    "🔥 Gargalo Imediato (Operacional)",
+    gargalo_imediato if gargalo_imediato else "N/D"
+)
+
+d2.metric(
+    "📊 Gargalo de Capacidade",
+    gargalo_exec if gargalo_exec else "N/D"
+)
+
+d3.metric(
+    "🧠 Gargalo Raiz (Impacto)",
+    gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
+)
+
+d4.metric(
+    "📍 Pico de Ocupação",
+    f"{float(ocupacao_max):.1f}%"
+)
+
+# ============================================================
+# ⚠️ ALERTA INTELIGENTE
+# ============================================================
+
+try:
+    if (
+        gargalo_raiz
+        and gargalo_imediato
+        and gargalo_raiz != gargalo_imediato
+    ):
+        st.warning(
+            f"⚠️ O gargalo imediato ({gargalo_imediato}) pode ser consequência do gargalo raiz ({gargalo_raiz}). "
+            "Atuar na origem pode estabilizar todo o fluxo produtivo."
+        )
+except:
+    pass
 
 
 
