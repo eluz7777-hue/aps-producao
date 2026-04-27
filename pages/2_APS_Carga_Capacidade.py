@@ -1004,11 +1004,8 @@ total_recursos = sum(MAQUINAS.values())
 
 
 
-
-
-
 # ===============================
-# 🚀 ALGORITMO DE PRIORIDADE APS (SUBSTITUI FILA ANTIGA)
+# 🚀 PRIORIDADE APS (APENAS COMO SINAL — NÃO ORDENA)
 # ===============================
 
 hoje = pd.Timestamp.now().normalize()
@@ -1021,12 +1018,17 @@ pv_base = df.groupby("PV", as_index=False).agg({
     "DATA_ENTREGA_APS": "min"
 })
 
-pv_base["DATA_ENTREGA_APS"] = pd.to_datetime(pv_base["DATA_ENTREGA_APS"], errors="coerce")
+pv_base["DATA_ENTREGA_APS"] = pd.to_datetime(
+    pv_base["DATA_ENTREGA_APS"], errors="coerce"
+)
 
 # -------------------------------
 # 🔹 PRAZO
 # -------------------------------
-pv_base["Dias_Restantes"] = (pv_base["DATA_ENTREGA_APS"] - hoje).dt.days
+pv_base["Dias_Restantes"] = (
+    pv_base["DATA_ENTREGA_APS"] - hoje
+).dt.days
+
 pv_base["Dias_Restantes"] = pv_base["Dias_Restantes"].fillna(0)
 
 pv_base["Score_Prazo"] = 1 / (pv_base["Dias_Restantes"] + 1)
@@ -1049,8 +1051,12 @@ pv_base["Score_Impacto"] = pv_base["Qtd_Processos"]
 # -------------------------------
 gargalos_criticos = ["CORTE-LASER", "SOLDAGEM", "CENTRO DE USINAGEM"]
 
-carga_gargalo = df[df["Processo"].isin(gargalos_criticos)] \
-    .groupby("PV")["Horas"].sum().reset_index(name="Horas_Gargalo")
+carga_gargalo = (
+    df[df["Processo"].isin(gargalos_criticos)]
+    .groupby("PV")["Horas"]
+    .sum()
+    .reset_index(name="Horas_Gargalo")
+)
 
 pv_base = pv_base.merge(carga_gargalo, on="PV", how="left")
 pv_base["Horas_Gargalo"] = pv_base["Horas_Gargalo"].fillna(0)
@@ -1076,7 +1082,7 @@ pv_base["PRIORIDADE_APS"] = (
 )
 
 # -------------------------------
-# 🔹 APLICA NA BASE
+# 🔹 APLICA NA BASE (SEM ORDENAR)
 # -------------------------------
 df = df.merge(
     pv_base[["PV", "PRIORIDADE_APS"]],
@@ -1084,12 +1090,11 @@ df = df.merge(
     how="left"
 )
 
-# -------------------------------
-# 🔥 NOVA ORDEM
-# -------------------------------
+# ============================================================
+# 🔥 ORDENAÇÃO OPERACIONAL (VOLTA AO PADRÃO ORIGINAL)
+# ============================================================
 df = df.sort_values(
-    by=["Processo", "PRIORIDADE_APS"],
-    ascending=[True, False]
+    by=["Processo", "Data", "PV"]
 ).reset_index(drop=True)
 
 # -------------------------------
@@ -1110,6 +1115,7 @@ df["Fila (dias)"] = np.where(
     df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
     0
 )
+
 
 
 
