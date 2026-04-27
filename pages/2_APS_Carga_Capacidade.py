@@ -784,7 +784,6 @@ if "df" not in locals() or df is None:
 df_operacional = df_original.copy()
 
 
-
 # --------------------------------------------
 # FUNÇÃO DE NORMALIZAÇÃO (CORRIGIDA)
 # --------------------------------------------
@@ -881,12 +880,35 @@ df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
     lambda chave: "✅ Baixado" if chave in chaves_baixadas_ativas else "⏳ Pendente"
 )
 
+
 # ============================================================
 # BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
 # ============================================================
-df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
+df = df_operacional[
+    df_operacional["Status Operacional"] == "⏳ Pendente"
+].copy()
+
 df = df.reset_index(drop=True)
-# DataFrames auxiliares
+
+
+# ============================================================
+# 🔥 BASE EXCLUSIVA PARA BAIXA OPERACIONAL (NOVO - CORRETO)
+# ============================================================
+
+df_baixa_base = df_operacional.copy()
+
+df_baixa_base = df_baixa_base[
+    df_baixa_base["Status Operacional"] == "⏳ Pendente"
+].copy()
+
+df_baixa_base = df_baixa_base.sort_values(
+    by=["PV", "Processo"]
+).reset_index(drop=True)
+
+
+# ============================================================
+# DATAFRAMES AUXILIARES
+# ============================================================
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
@@ -900,10 +922,14 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
             dayfirst=True
         )
 
+
 # -------------------------------
 # Garantia de rastreabilidade
 # -------------------------------
-pvs_auditadas_set = set(df_auditoria_pv["PV"].astype(str).str.strip().unique()) if not df_auditoria_pv.empty else set()
+pvs_auditadas_set = set(
+    df_auditoria_pv["PV"].astype(str).str.strip().unique()
+) if not df_auditoria_pv.empty else set()
+
 pvs_nao_auditadas = pvs_excel_set - pvs_auditadas_set
 
 for pv_faltante in pvs_nao_auditadas:
@@ -967,7 +993,6 @@ if df.empty:
     st.dataframe(df_pv.head(20), use_container_width=True)
 
     st.stop()
-
 
 
  
