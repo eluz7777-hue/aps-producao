@@ -648,6 +648,150 @@ if not df_original.empty:
 
 
 
+
+# ============================================================
+# ==================== PAINEL EXECUTIVO APS ==================
+# ============================================================
+st.markdown("## 📊 Painel Executivo APS")
+st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
+
+# ===============================
+# KPIs PRINCIPAIS
+# ===============================
+st.subheader("📌 Indicadores Principais")
+
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
+k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
+k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
+k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
+
+# ===============================
+# FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
+# ===============================
+def semaforo_entrega(dias):
+    if pd.isna(dias):
+        return "⚪ Sem data"
+    elif dias < 0:
+        return "🔴 Atrasado"
+    elif dias <= 3:
+        return "🟠 Urgente"
+    elif dias <= 7:
+        return "🟡 Atenção"
+    else:
+        return "🟢 Normal"
+
+def status(x):
+    try:
+        x = float(x)
+    except:
+        return "⚪"
+
+    if x >= 100:
+        return "🔴"
+    elif x >= 90:
+        return "🟠"
+    elif x >= 75:
+        return "🟡"
+    else:
+        return "🟢"
+
+# ===============================
+# STATUS EXECUTIVO
+# ===============================
+st.subheader("🚦 Status Executivo")
+
+s1, s2, s3, s4 = st.columns(4)
+s1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
+s2.metric("🟡 Risco", fmt_br_int(len(risco)))
+s3.metric("🟢 OK", fmt_br_int(ok))
+s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
+
+# ===============================
+# 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
+# ===============================
+st.subheader("🔥 Destaques da Operação")
+
+d1, d2, d3, d4 = st.columns(4)
+
+# ------------------------------------------------------------
+# 🔥 GARGALO IMEDIATO (COM FALLBACK INTELIGENTE)
+# ------------------------------------------------------------
+gargalo_imediato = None
+
+try:
+    df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
+
+    if df_dash_tmp is not None and not df_dash_tmp.empty:
+        resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
+        gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
+
+except Exception as e:
+    gargalo_imediato = None
+
+# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
+if not gargalo_imediato or gargalo_imediato == "-":
+    try:
+        gargalo_imediato = (
+            df.groupby("Processo")["Horas"]
+            .sum()
+            .sort_values(ascending=False)
+            .index[0]
+        )
+    except:
+        gargalo_imediato = None
+
+d1.metric(
+    "🔥 Gargalo Imediato (Operacional)",
+    gargalo_imediato if gargalo_imediato else "N/D"
+)
+
+# ------------------------------------------------------------
+# 📊 GARGALO DE CAPACIDADE
+# ------------------------------------------------------------
+d2.metric(
+    "📊 Gargalo de Capacidade",
+    gargalo_exec if gargalo_exec else "N/D"
+)
+
+# ------------------------------------------------------------
+# 🧠 GARGALO RAIZ (IMPACTO)
+# ------------------------------------------------------------
+d3.metric(
+    "🧠 Gargalo Raiz (Impacto)",
+    gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
+)
+
+# ------------------------------------------------------------
+# 📍 PICO DE OCUPAÇÃO
+# ------------------------------------------------------------
+d4.metric(
+    "📍 Pico de Ocupação",
+    fmt_br_pct(ocupacao_max, 1)
+)
+
+
+# ============================================================
+# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
+# ============================================================
+
+try:
+    if (
+        gargalo_raiz
+        and gargalo_imediato
+        and gargalo_raiz != gargalo_imediato
+    ):
+        st.warning(
+            f"⚠️ O gargalo imediato ({gargalo_imediato}) pode ser consequência do gargalo raiz ({gargalo_raiz}). "
+            "Atuar na origem pode estabilizar todo o fluxo produtivo."
+        )
+except:
+    pass
+
+
+
+
+
 # =============================== 
 # BAIXAS OPERACIONAIS APS
 # ===============================
@@ -1598,145 +1742,6 @@ if not dem_proc.empty:
     )
 
 
-
-# ============================================================
-# ==================== PAINEL EXECUTIVO APS ==================
-# ============================================================
-st.markdown("## 📊 Painel Executivo APS")
-st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
-
-# ===============================
-# KPIs PRINCIPAIS
-# ===============================
-st.subheader("📌 Indicadores Principais")
-
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
-k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
-k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
-k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
-
-# ===============================
-# FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
-# ===============================
-def semaforo_entrega(dias):
-    if pd.isna(dias):
-        return "⚪ Sem data"
-    elif dias < 0:
-        return "🔴 Atrasado"
-    elif dias <= 3:
-        return "🟠 Urgente"
-    elif dias <= 7:
-        return "🟡 Atenção"
-    else:
-        return "🟢 Normal"
-
-def status(x):
-    try:
-        x = float(x)
-    except:
-        return "⚪"
-
-    if x >= 100:
-        return "🔴"
-    elif x >= 90:
-        return "🟠"
-    elif x >= 75:
-        return "🟡"
-    else:
-        return "🟢"
-
-# ===============================
-# STATUS EXECUTIVO
-# ===============================
-st.subheader("🚦 Status Executivo")
-
-s1, s2, s3, s4 = st.columns(4)
-s1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
-s2.metric("🟡 Risco", fmt_br_int(len(risco)))
-s3.metric("🟢 OK", fmt_br_int(ok))
-s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
-
-# ===============================
-# 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
-# ===============================
-st.subheader("🔥 Destaques da Operação")
-
-d1, d2, d3, d4 = st.columns(4)
-
-# ------------------------------------------------------------
-# 🔥 GARGALO IMEDIATO (COM FALLBACK INTELIGENTE)
-# ------------------------------------------------------------
-gargalo_imediato = None
-
-try:
-    df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
-
-    if df_dash_tmp is not None and not df_dash_tmp.empty:
-        resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
-        gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
-
-except Exception as e:
-    gargalo_imediato = None
-
-# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
-if not gargalo_imediato or gargalo_imediato == "-":
-    try:
-        gargalo_imediato = (
-            df.groupby("Processo")["Horas"]
-            .sum()
-            .sort_values(ascending=False)
-            .index[0]
-        )
-    except:
-        gargalo_imediato = None
-
-d1.metric(
-    "🔥 Gargalo Imediato (Operacional)",
-    gargalo_imediato if gargalo_imediato else "N/D"
-)
-
-# ------------------------------------------------------------
-# 📊 GARGALO DE CAPACIDADE
-# ------------------------------------------------------------
-d2.metric(
-    "📊 Gargalo de Capacidade",
-    gargalo_exec if gargalo_exec else "N/D"
-)
-
-# ------------------------------------------------------------
-# 🧠 GARGALO RAIZ (IMPACTO)
-# ------------------------------------------------------------
-d3.metric(
-    "🧠 Gargalo Raiz (Impacto)",
-    gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
-)
-
-# ------------------------------------------------------------
-# 📍 PICO DE OCUPAÇÃO
-# ------------------------------------------------------------
-d4.metric(
-    "📍 Pico de Ocupação",
-    fmt_br_pct(ocupacao_max, 1)
-)
-
-
-# ============================================================
-# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
-# ============================================================
-
-try:
-    if (
-        gargalo_raiz
-        and gargalo_imediato
-        and gargalo_raiz != gargalo_imediato
-    ):
-        st.warning(
-            f"⚠️ O gargalo imediato ({gargalo_imediato}) pode ser consequência do gargalo raiz ({gargalo_raiz}). "
-            "Atuar na origem pode estabilizar todo o fluxo produtivo."
-        )
-except:
-    pass
 
 
 
