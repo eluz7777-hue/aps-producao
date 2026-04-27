@@ -679,8 +679,30 @@ if not df_original.empty:
 # ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
+
 st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
+
+# ===============================
+# 🔧 FORMATADORES LOCAIS (GARANTIDOS)
+# ===============================
+def _fmt_num(v, c=1):
+    try:
+        return f"{float(v):,.{c}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "0"
+
+def _fmt_pct(v, c=1):
+    try:
+        return f"{float(v):.{c}f}%"
+    except:
+        return "0%"
+
+def _fmt_int(v):
+    try:
+        return f"{int(v)}"
+    except:
+        return "0"
 
 # ===============================
 # KPIs PRINCIPAIS
@@ -688,10 +710,10 @@ st.caption("Indicadores estratégicos, status geral e leitura executiva da produ
 st.subheader("📌 Indicadores Principais")
 
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
-k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
-k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
-k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
+k1.metric("🏭 Carga Total (h)", _fmt_num(carga_total, 1))
+k2.metric("⚙️ Capacidade Mensal (h)", _fmt_num(capacidade_total, 1))
+k3.metric("📈 Utilização Global", _fmt_pct(utilizacao_total, 1))
+k4.metric("📦 PVs no APS", _fmt_int(pvs_no_aps))
 
 # ===============================
 # FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
@@ -729,10 +751,10 @@ def status(x):
 st.subheader("🚦 Status Executivo")
 
 s1, s2, s3, s4 = st.columns(4)
-s1.metric("🔴 Atraso", fmt_br_int(len(atrasos)))
-s2.metric("🟡 Risco", fmt_br_int(len(risco)))
-s3.metric("🟢 OK", fmt_br_int(ok))
-s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
+s1.metric("🔴 Atraso", _fmt_int(len(atrasos)))
+s2.metric("🟡 Risco", _fmt_int(len(risco)))
+s3.metric("🟢 OK", _fmt_int(ok))
+s4.metric("📄 PVs no Excel", _fmt_int(pvs_totais_excel))
 
 # ===============================
 # 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
@@ -753,10 +775,10 @@ try:
         resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
         gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
 
-except Exception as e:
+except:
     gargalo_imediato = None
 
-# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
+# 🔁 FALLBACK
 if not gargalo_imediato or gargalo_imediato == "-":
     try:
         gargalo_imediato = (
@@ -794,12 +816,11 @@ d3.metric(
 # ------------------------------------------------------------
 d4.metric(
     "📍 Pico de Ocupação",
-    fmt_br_pct(ocupacao_max, 1)
+    _fmt_pct(ocupacao_max, 1)
 )
 
-
 # ============================================================
-# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
+# ⚠️ ALERTA INTELIGENTE
 # ============================================================
 
 try:
@@ -814,7 +835,6 @@ try:
         )
 except:
     pass
-
 
 
 
