@@ -1002,17 +1002,102 @@ ano_ref = int(df["Ano"].mode()[0])
 horas_mes = horas_uteis_mes(ano_ref, mes_ref)
 total_recursos = sum(MAQUINAS.values())
 
+
+
+
+
+
 # ===============================
-# FILA REAL POR PROCESSO
+# 🚀 ALGORITMO DE PRIORIDADE APS (SUBSTITUI FILA ANTIGA)
 # ===============================
-df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
+
+hoje = pd.Timestamp.now().normalize()
+
+# -------------------------------
+# 🔹 BASE POR PV
+# -------------------------------
+pv_base = df.groupby("PV", as_index=False).agg({
+    "Horas": "sum",
+    "DATA_ENTREGA_APS": "min"
+})
+
+pv_base["DATA_ENTREGA_APS"] = pd.to_datetime(pv_base["DATA_ENTREGA_APS"], errors="coerce")
+
+# -------------------------------
+# 🔹 PRAZO
+# -------------------------------
+pv_base["Dias_Restantes"] = (pv_base["DATA_ENTREGA_APS"] - hoje).dt.days
+pv_base["Dias_Restantes"] = pv_base["Dias_Restantes"].fillna(0)
+
+pv_base["Score_Prazo"] = 1 / (pv_base["Dias_Restantes"] + 1)
+
+# -------------------------------
+# 🔹 HORAS
+# -------------------------------
+pv_base["Score_Horas"] = 1 / (pv_base["Horas"] + 0.1)
+
+# -------------------------------
+# 🔹 IMPACTO
+# -------------------------------
+impacto = df.groupby("PV")["Processo"].count().reset_index(name="Qtd_Processos")
+pv_base = pv_base.merge(impacto, on="PV", how="left")
+
+pv_base["Score_Impacto"] = pv_base["Qtd_Processos"]
+
+# -------------------------------
+# 🔹 GARGALO
+# -------------------------------
+gargalos_criticos = ["CORTE-LASER", "SOLDAGEM", "CENTRO DE USINAGEM"]
+
+carga_gargalo = df[df["Processo"].isin(gargalos_criticos)] \
+    .groupby("PV")["Horas"].sum().reset_index(name="Horas_Gargalo")
+
+pv_base = pv_base.merge(carga_gargalo, on="PV", how="left")
+pv_base["Horas_Gargalo"] = pv_base["Horas_Gargalo"].fillna(0)
+
+pv_base["Score_Gargalo"] = pv_base["Horas_Gargalo"]
+
+# -------------------------------
+# 🔹 PESOS
+# -------------------------------
+w1 = 0.4
+w2 = 0.2
+w3 = 0.2
+w4 = 0.2
+
+# -------------------------------
+# 🔹 PRIORIDADE FINAL
+# -------------------------------
+pv_base["PRIORIDADE_APS"] = (
+    w1 * pv_base["Score_Prazo"] +
+    w2 * pv_base["Score_Horas"] +
+    w3 * pv_base["Score_Gargalo"] +
+    w4 * pv_base["Score_Impacto"]
+)
+
+# -------------------------------
+# 🔹 APLICA NA BASE
+# -------------------------------
+df = df.merge(
+    pv_base[["PV", "PRIORIDADE_APS"]],
+    on="PV",
+    how="left"
+)
+
+# -------------------------------
+# 🔥 NOVA ORDEM
+# -------------------------------
+df = df.sort_values(
+    by=["Processo", "PRIORIDADE_APS"],
+    ascending=[True, False]
+).reset_index(drop=True)
+
+# -------------------------------
+# 🔁 REPROCESSA FILA
+# -------------------------------
 df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
 
 def capacidade_diaria_real(processo):
-    """
-    Capacidade média diária operacional por processo.
-    Usada para estimativa contínua de fila.
-    """
     recursos = MAQUINAS.get(processo, 0)
     if recursos <= 0:
         return 0
@@ -1025,6 +1110,9 @@ df["Fila (dias)"] = np.where(
     df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
     0
 )
+
+
+
 
 
 # ===============================
