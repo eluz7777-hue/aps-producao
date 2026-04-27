@@ -648,63 +648,12 @@ if not df_original.empty:
 
 
 
+
 # ============================================================
 # ==================== PAINEL EXECUTIVO APS ==================
 # ============================================================
-
 st.markdown("## 📊 Painel Executivo APS")
 st.caption("Indicadores estratégicos, status geral e leitura executiva da produção.")
-
-# ===============================
-# 🔧 FUNÇÕES LOCAIS (GARANTIDAS)
-# ===============================
-def fmt_br_num(valor, casas=1):
-    try:
-        return f"{float(valor):,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return "0"
-
-def fmt_br_pct(valor, casas=1):
-    try:
-        return f"{float(valor):.{casas}f}%"
-    except:
-        return "0%"
-
-def fmt_br_int(valor):
-    try:
-        return f"{int(valor)}"
-    except:
-        return "0"
-
-# ===============================
-# 🔒 BASE SEGURA (INDEPENDENTE)
-# ===============================
-if "df" in locals() and isinstance(df, pd.DataFrame) and not df.empty:
-    df_base_painel = df.copy()
-elif "df_operacional" in locals() and isinstance(df_operacional, pd.DataFrame) and not df_operacional.empty:
-    df_base_painel = df_operacional.copy()
-else:
-    df_base_painel = pd.DataFrame()
-
-# ===============================
-# 🔹 VARIÁVEIS SEGURAS
-# ===============================
-carga_total = df_base_painel["Horas"].sum() if "Horas" in df_base_painel.columns else 0
-pvs_no_aps = df_base_painel["PV"].nunique() if "PV" in df_base_painel.columns else 0
-
-capacidade_total = capacidade_total if "capacidade_total" in locals() else 0
-utilizacao_total = utilizacao_total if "utilizacao_total" in locals() else 0
-
-atrasos = atrasos if "atrasos" in locals() else []
-risco = risco if "risco" in locals() else []
-ok = ok if "ok" in locals() else 0
-pvs_totais_excel = pvs_totais_excel if "pvs_totais_excel" in locals() else 0
-
-gargalo_exec = gargalo_exec if "gargalo_exec" in locals() else None
-gargalo_raiz = gargalo_raiz if "gargalo_raiz" in locals() else None
-ocupacao_max = ocupacao_max if "ocupacao_max" in locals() else 0
-
-df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
 
 # ===============================
 # KPIs PRINCIPAIS
@@ -718,7 +667,7 @@ k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
 k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
 
 # ===============================
-# FUNÇÃO AUXILIAR
+# FUNÇÃO AUXILIAR - SEMÁFORO ENTREGA
 # ===============================
 def semaforo_entrega(dias):
     if pd.isna(dias):
@@ -759,27 +708,32 @@ s3.metric("🟢 OK", fmt_br_int(ok))
 s4.metric("📄 PVs no Excel", fmt_br_int(pvs_totais_excel))
 
 # ===============================
-# 🔥 DESTAQUES DA OPERAÇÃO
+# 🔥 DESTAQUES DA OPERAÇÃO (ROBUSTO)
 # ===============================
 st.subheader("🔥 Destaques da Operação")
 
 d1, d2, d3, d4 = st.columns(4)
 
+# ------------------------------------------------------------
+# 🔥 GARGALO IMEDIATO (COM FALLBACK INTELIGENTE)
+# ------------------------------------------------------------
 gargalo_imediato = None
 
 try:
-    df_dash_tmp = montar_mini_dashboard_gargalos(df_base_painel, df_baixas_ativas)
+    df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
 
     if df_dash_tmp is not None and not df_dash_tmp.empty:
         resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
         gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
-except:
-    pass
 
+except Exception as e:
+    gargalo_imediato = None
+
+# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
 if not gargalo_imediato or gargalo_imediato == "-":
     try:
         gargalo_imediato = (
-            df_base_painel.groupby("Processo")["Horas"]
+            df.groupby("Processo")["Horas"]
             .sum()
             .sort_values(ascending=False)
             .index[0]
@@ -787,23 +741,52 @@ if not gargalo_imediato or gargalo_imediato == "-":
     except:
         gargalo_imediato = None
 
-d1.metric("🔥 Gargalo Imediato (Operacional)", gargalo_imediato if gargalo_imediato else "N/D")
-d2.metric("📊 Gargalo de Capacidade", gargalo_exec if gargalo_exec else "N/D")
-d3.metric("🧠 Gargalo Raiz (Impacto)", gargalo_raiz if gargalo_raiz else "N/D")
-d4.metric("📍 Pico de Ocupação", fmt_br_pct(ocupacao_max, 1))
+d1.metric(
+    "🔥 Gargalo Imediato (Operacional)",
+    gargalo_imediato if gargalo_imediato else "N/D"
+)
 
-# ===============================
-# ⚠️ ALERTA INTELIGENTE
-# ===============================
+# ------------------------------------------------------------
+# 📊 GARGALO DE CAPACIDADE
+# ------------------------------------------------------------
+d2.metric(
+    "📊 Gargalo de Capacidade",
+    gargalo_exec if gargalo_exec else "N/D"
+)
+
+# ------------------------------------------------------------
+# 🧠 GARGALO RAIZ (IMPACTO)
+# ------------------------------------------------------------
+d3.metric(
+    "🧠 Gargalo Raiz (Impacto)",
+    gargalo_raiz if 'gargalo_raiz' in locals() and gargalo_raiz else "N/D"
+)
+
+# ------------------------------------------------------------
+# 📍 PICO DE OCUPAÇÃO
+# ------------------------------------------------------------
+d4.metric(
+    "📍 Pico de Ocupação",
+    fmt_br_pct(ocupacao_max, 1)
+)
+
+
+# ============================================================
+# ⚠️ ALERTA INTELIGENTE (CAUSA x EFEITO)
+# ============================================================
+
 try:
-    if gargalo_raiz and gargalo_imediato and gargalo_raiz != gargalo_imediato:
+    if (
+        gargalo_raiz
+        and gargalo_imediato
+        and gargalo_raiz != gargalo_imediato
+    ):
         st.warning(
             f"⚠️ O gargalo imediato ({gargalo_imediato}) pode ser consequência do gargalo raiz ({gargalo_raiz}). "
             "Atuar na origem pode estabilizar todo o fluxo produtivo."
         )
 except:
     pass
-
 
 
 
