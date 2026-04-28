@@ -1323,69 +1323,96 @@ if pv_carga.empty:
 
 
 # ============================================================
-# 🔥 GARGALO POR IMPACTO REAL (APS INTELIGENTE)
+# 🔥 GARGALO REAL (RESTRIÇÃO FÍSICA + PRESSÃO DE FILA)
 # ============================================================
 
-df_impacto = df.copy()
+df_gargalo = df.copy()
 
-if not df_impacto.empty and "Fila (dias)" in df_impacto.columns:
-
-    # ------------------------------------------------------------
-    # NORMALIZAÇÃO SEGURA
-    # ------------------------------------------------------------
-    df_impacto["Fila (dias)"] = pd.to_numeric(
-        df_impacto["Fila (dias)"], errors="coerce"
-    ).fillna(0)
-
-    df_impacto["PV"] = df_impacto["PV"].astype(str).str.strip()
-    df_impacto["Processo"] = df_impacto["Processo"].astype(str).str.strip()
+if not df_gargalo.empty:
 
     # ------------------------------------------------------------
-    # CÁLCULO DE IMPACTO (RAIZ)
+    # NORMALIZAÇÃO
     # ------------------------------------------------------------
-    impacto_gargalo = (
-        df_impacto.groupby("Processo", as_index=False)
+    df_gargalo["Horas"] = pd.to_numeric(df_gargalo["Horas"], errors="coerce").fillna(0)
+    df_gargalo["Processo"] = df_gargalo["Processo"].astype(str).str.strip()
+
+    # ------------------------------------------------------------
+    # BASE POR PROCESSO
+    # ------------------------------------------------------------
+    gargalos = (
+        df_gargalo.groupby("Processo", as_index=False)
         .agg(
-            Impacto_Total_Dias=("Fila (dias)", "sum"),
-            PVs_Impactadas=("PV", "nunique"),
-            Fila_Media_Dias=("Fila (dias)", "mean")
+            Carga_Total=("Horas", "sum"),
+            Fila_Total=("Fila (dias)", "sum"),
+            Fila_Media=("Fila (dias)", "mean"),
+            PVs=("PV", "nunique")
         )
     )
 
     # ------------------------------------------------------------
-    # SCORE INTELIGENTE (MAIS CONFIÁVEL QUE SOMA PURA)
+    # CAPACIDADE REAL
     # ------------------------------------------------------------
-    impacto_gargalo["Score_Impacto"] = (
-        (impacto_gargalo["Impacto_Total_Dias"] * 0.6) +
-        (impacto_gargalo["PVs_Impactadas"] * 2.0) +
-        (impacto_gargalo["Fila_Media_Dias"] * 3.0)
+    gargalos["Recursos"] = gargalos["Processo"].apply(lambda p: MAQUINAS.get(p, 0))
+
+    gargalos["Capacidade_Diaria"] = gargalos["Processo"].apply(capacidade_diaria_real)
+
+    gargalos["Capacidade_Mensal"] = gargalos["Processo"].apply(
+        lambda p: capacidade_mes_por_processo(ano_ref, mes_ref, p)
     )
 
     # ------------------------------------------------------------
-    # ORDENAÇÃO FINAL (GARGALO REAL)
+    # 🔥 UTILIZAÇÃO REAL (O MAIS IMPORTANTE)
     # ------------------------------------------------------------
-    impacto_gargalo = impacto_gargalo.sort_values(
-        ["Score_Impacto", "Impacto_Total_Dias"],
+    gargalos["Utilizacao"] = np.where(
+        gargalos["Capacidade_Mensal"] > 0,
+        (gargalos["Carga_Total"] / gargalos["Capacidade_Mensal"]) * 100,
+        0
+    )
+
+    # ------------------------------------------------------------
+    # 🔥 PESO DE RESTRIÇÃO (MENOS MÁQUINA = MAIS CRÍTICO)
+    # ------------------------------------------------------------
+    gargalos["Peso_Recurso"] = np.where(
+        gargalos["Recursos"] > 0,
+        1 / gargalos["Recursos"],
+        0
+    )
+
+    # ------------------------------------------------------------
+    # 🔥 SCORE CORRIGIDO (RAIZ DE GARGALO)
+    # ------------------------------------------------------------
+    gargalos["Score_Gargalo"] = (
+        (gargalos["Utilizacao"] * 0.5) +          # pressão real
+        (gargalos["Fila_Total"] * 2.0) +          # acúmulo
+        (gargalos["Peso_Recurso"] * 50) +         # restrição física
+        (gargalos["Fila_Media"] * 3.0)            # fluidez
+    )
+
+    # ------------------------------------------------------------
+    # ORDENAÇÃO FINAL
+    # ------------------------------------------------------------
+    gargalos = gargalos.sort_values(
+        ["Score_Gargalo", "Utilizacao"],
         ascending=[False, False]
     ).reset_index(drop=True)
 
     # ------------------------------------------------------------
-    # 🔥 DEFINIÇÃO DO GARGALO RAIZ
+    # 🔥 DEFINIÇÕES FINAIS
     # ------------------------------------------------------------
-    gargalo_raiz = impacto_gargalo.iloc[0]["Processo"]
+    gargalo_raiz = gargalos.iloc[0]["Processo"]
 
-else:
-    impacto_gargalo = pd.DataFrame(
-        columns=[
-            "Processo",
-            "Impacto_Total_Dias",
-            "PVs_Impactadas",
-            "Fila_Media_Dias",
-            "Score_Impacto"
-        ]
+    # Gargalo imediato = maior fila operacional
+    gargalo_imediato = (
+        df.groupby("Processo")["Fila (dias)"]
+        .sum()
+        .sort_values(ascending=False)
+        .index[0]
     )
 
+else:
+    gargalos = pd.DataFrame()
     gargalo_raiz = None
+    gargalo_imediato = None
 
 
 
