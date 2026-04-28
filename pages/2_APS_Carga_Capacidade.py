@@ -1199,7 +1199,7 @@ pv_carga["DATA_ENTREGA_APS"] = pd.to_datetime(
 # 📅 CÁLCULO DE PRAZO
 # ============================================================
 
-hoje = pd.Timestamp.now().normalize()
+hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
 
 pv_carga["Dias Disponíveis"] = (
     pv_carga["DATA_ENTREGA_APS"] - hoje
@@ -2537,7 +2537,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 log = novo.copy()
                 log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
                 log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
-                log["Data_Baixa"] = pd.Timestamp.now()
+                log["Data_Baixa"] = pd.Timestamp.now(tz="America/Sao_Paulo")
 
                 df_existente = pd.concat([df_existente, log], ignore_index=True)
                 df_existente.to_excel(caminho, index=False)
@@ -2623,7 +2623,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     idx = df_baixas[filtro].index[0]
 
     df_baixas.at[idx, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")
+    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now(tz="America/Sao_Paulo").strftime("%d/%m/%Y %H:%M")
     df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
 
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
@@ -3237,7 +3237,7 @@ else:
                     "CODIGO_PV": linha["CODIGO_PV"],
                     "Processo": linha["Processo"],
                     "Horas": linha["Horas"],
-                    "Data_Baixa": pd.Timestamp.now(),
+                    "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
                     "Usuario": "Sistema",
                     "Observacao": "UNITARIO_CORTE",
                     "Status_Baixa": "ATIVA",
@@ -3295,7 +3295,7 @@ else:
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(),
+                        "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
                         "Usuario": "Sistema",
                         "Observacao": "LOTE_CORTE",
                         "Status_Baixa": "ATIVA",
@@ -3696,7 +3696,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(),
+                        "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
                         "Usuario": "Sistema",
                         "Observacao": observacao_baixa,
                         "Status_Baixa": "ATIVA",
@@ -3713,7 +3713,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(),
+                        "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
                         "Usuario": "Sistema",
                         "Observacao": observacao_baixa,
                         "Status_Baixa": "TERCEIRIZADA",
@@ -3742,7 +3742,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "CODIGO_PV": linha["CODIGO_PV"],
                             "Processo": linha["Processo"],
                             "Horas": linha["Horas"],
-                            "Data_Baixa": pd.Timestamp.now(),
+                            "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
                             "Usuario": "Sistema",
                             "Observacao": "",
                             "Status_Baixa": "ATIVA",
