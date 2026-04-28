@@ -2195,22 +2195,23 @@ fig_comp = px.bar(
     x="Processo",
     y=["Horas", "Capacidade Processo"],
     barmode="group",
-    text_auto=True
+    text_auto=".1f"  # 🔥 1 casa decimal
 )
 
 # cores corretas
 fig_comp.update_traces(
     selector=dict(name="Horas"),
-    marker_color="#FF7A00"  # laranja
+    marker_color="#FF7A00"
 )
 
 fig_comp.update_traces(
     selector=dict(name="Capacidade Processo"),
-    marker_color="#1f77b4"  # azul
+    marker_color="#1f77b4"
 )
 
-# rótulos em cima
+# rótulos em cima com formatação fixa
 fig_comp.update_traces(
+    texttemplate='%{y:.1f}',  # 🔥 garante 1 casa decimal
     textposition="outside"
 )
 
@@ -2223,6 +2224,7 @@ fig_comp.update_layout(
 )
 
 st.plotly_chart(fig_comp, use_container_width=True)
+
 
 
 # ============================================================
