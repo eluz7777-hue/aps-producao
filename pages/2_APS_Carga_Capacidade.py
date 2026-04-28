@@ -4896,6 +4896,3 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 
 st.session_state["df"] = df.copy()
 
-# DEBUG (pode remover depois)
-st.write("DEBUG APS → df enviado:")
-st.write(df.columns.tolist())
