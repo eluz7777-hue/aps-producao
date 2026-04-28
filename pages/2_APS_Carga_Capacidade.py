@@ -1035,6 +1035,109 @@ df["Fila (dias)"] = np.where(
 )
 
 
+
+
+
+# ============================================================
+# 🎯 PRIORIDADE INTELIGENTE APS (BASE ÚNICA DE DECISÃO)
+# ============================================================
+
+df_prioridade = df.copy()
+
+if not df_prioridade.empty:
+
+    # ------------------------------------------------------------
+    # 🔒 SEGURANÇA NUMÉRICA
+    # ------------------------------------------------------------
+    for col in ["Horas", "Fila (dias)"]:
+        if col not in df_prioridade.columns:
+            df_prioridade[col] = 0
+
+        df_prioridade[col] = pd.to_numeric(
+            df_prioridade[col],
+            errors="coerce"
+        ).fillna(0)
+
+    # ------------------------------------------------------------
+    # 📅 PRAZO (URGÊNCIA)
+    # ------------------------------------------------------------
+    if "ENTREGA" in df_prioridade.columns:
+        hoje = pd.Timestamp.now().normalize()
+
+        df_prioridade["Dias_Restantes"] = (
+            pd.to_datetime(df_prioridade["ENTREGA"], errors="coerce") - hoje
+        ).dt.days
+
+        df_prioridade["Dias_Restantes"] = pd.to_numeric(
+            df_prioridade["Dias_Restantes"], errors="coerce"
+        ).fillna(999)
+
+    else:
+        df_prioridade["Dias_Restantes"] = 999
+
+    # 🔥 NORMALIZAÇÃO PRAZO (quanto menor, mais urgente)
+    max_dias = df_prioridade["Dias_Restantes"].max()
+    df_prioridade["Prazo_norm"] = 1 - (
+        df_prioridade["Dias_Restantes"] / max_dias if max_dias > 0 else 0
+    )
+
+    df_prioridade["Prazo_norm"] = df_prioridade["Prazo_norm"].clip(0, 1)
+
+    # ------------------------------------------------------------
+    # ⏱️ CARGA (HORAS)
+    # ------------------------------------------------------------
+    max_horas = df_prioridade["Horas"].max()
+    df_prioridade["Horas_norm"] = df_prioridade["Horas"] / max_horas if max_horas > 0 else 0
+
+    # ------------------------------------------------------------
+    # 📦 FILA (IMPACTO)
+    # ------------------------------------------------------------
+    max_fila = df_prioridade["Fila (dias)"].max()
+    df_prioridade["Fila_norm"] = df_prioridade["Fila (dias)"] / max_fila if max_fila > 0 else 0
+
+    # ------------------------------------------------------------
+    # 🔥 GARGALO (CRÍTICO)
+    # ------------------------------------------------------------
+    gargalo_ref = None
+
+    if 'gargalo_exec' in locals() and gargalo_exec:
+        gargalo_ref = gargalo_exec
+    elif 'gargalo_raiz' in locals() and gargalo_raiz:
+        gargalo_ref = gargalo_raiz
+
+    df_prioridade["Gargalo_flag"] = np.where(
+        df_prioridade["Processo"] == gargalo_ref,
+        1,
+        0
+    )
+
+    # ------------------------------------------------------------
+    # 🎯 SCORE FINAL APS
+    # ------------------------------------------------------------
+    df_prioridade["Score_APS"] = (
+        df_prioridade["Prazo_norm"] * 0.4 +   # prazo manda
+        df_prioridade["Gargalo_flag"] * 0.3 + # gargalo manda muito
+        df_prioridade["Fila_norm"] * 0.2 +    # impacto
+        df_prioridade["Horas_norm"] * 0.1     # carga
+    )
+
+    # ------------------------------------------------------------
+    # 🔥 ORDENAÇÃO FINAL (APS REAL)
+    # ------------------------------------------------------------
+    df_prioridade = df_prioridade.sort_values(
+        by=["Score_APS", "Dias_Restantes"],
+        ascending=[False, True]
+    ).reset_index(drop=True)
+
+    df_prioridade["Ranking_APS"] = df_prioridade.index + 1
+
+    # 🔒 ENVIO PARA SISTEMA
+    st.session_state["df_prioridade"] = df_prioridade.copy()
+
+
+
+
+
 # ===============================
 # CALENDÁRIO
 # ===============================
@@ -3155,18 +3258,8 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 
-
-# ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL)
-# ============================================================
-
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
-
 # ------------------------------------------------------------
-# BASE DE CORTE
+# BASE DE CORTE (COM PRIORIDADE APS + PROTEÇÃO)
 # ------------------------------------------------------------
 base_corte = df_operacional.copy()
 base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
@@ -3174,6 +3267,43 @@ base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.stri
 base_corte = base_corte[
     base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
 ].copy()
+
+# ============================================================
+# 🔥 APLICA PRIORIDADE APS (ROBUSTO)
+# ============================================================
+df_prioridade = st.session_state.get("df_prioridade", None)
+
+if df_prioridade is not None and not df_prioridade.empty:
+
+    # 🔒 REMOVE DUPLICIDADE (CRÍTICO)
+    df_prioridade_unique = df_prioridade.drop_duplicates(subset=["PV", "Processo"])
+
+    # 🔗 MERGE SEGURO
+    base_corte = base_corte.merge(
+        df_prioridade_unique[["PV", "Processo", "Ranking_APS"]],
+        on=["PV", "Processo"],
+        how="left"
+    )
+
+    # 🔒 TRATAMENTO
+    base_corte["Ranking_APS"] = pd.to_numeric(
+        base_corte["Ranking_APS"], errors="coerce"
+    ).fillna(9999)
+
+    # 🔥 ORDENAÇÃO APS
+    base_corte = base_corte.sort_values(
+        by=["Ranking_APS", "Data"],
+        ascending=[True, True]
+    ).reset_index(drop=True)
+
+else:
+    # 🔒 FALLBACK ORIGINAL
+    base_corte = base_corte.sort_values(
+        by=["Data"],
+        ascending=[True]
+    ).reset_index(drop=True)
+
+# ============================================================
 
 if base_corte.empty:
     st.info("Nenhuma operação de corte encontrada.")
@@ -3335,6 +3465,9 @@ else:
 
                 if erros:
                     st.warning(f"{erros} não foram baixadas")
+
+
+
 
 
 
