@@ -3160,6 +3160,9 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 # ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL)
 # ============================================================
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
 
 # ------------------------------------------------------------
@@ -3238,7 +3241,7 @@ else:
                     "CODIGO_PV": linha["CODIGO_PV"],
                     "Processo": linha["Processo"],
                     "Horas": linha["Horas"],
-                    "Data_Baixa": pd.Timestamp.now(),
+                    "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
                     "Usuario": "Sistema",
                     "Observacao": "UNITARIO_CORTE",
                     "Status_Baixa": "ATIVA",
@@ -3296,7 +3299,7 @@ else:
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(),
+                        "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
                         "Usuario": "Sistema",
                         "Observacao": "LOTE_CORTE",
                         "Status_Baixa": "ATIVA",
@@ -3328,12 +3331,10 @@ else:
 
                     st.success(f"{sucessos} operações baixadas")
 
-                    # ✅ CORRETO: NÃO mexer direto no multiselect
                     st.rerun()
 
                 if erros:
                     st.warning(f"{erros} não foram baixadas")
-
 
 
 
