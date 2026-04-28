@@ -3777,7 +3777,7 @@ else:
     )
 
 # ============================================================
-# 🔥 CORREÇÃO DE SCORE (ALINHADO COM APS)
+# 🔥 CORREÇÃO DE SCORE (NORMALIZADO E ALINHADO COM APS)
 # ============================================================
 
 if not df_mini_gargalos.empty:
@@ -3785,23 +3785,42 @@ if not df_mini_gargalos.empty:
     # 🔥 integra capacidade real do APS
     if 'gargalos' in locals() and not gargalos.empty:
         df_mini_gargalos = df_mini_gargalos.merge(
-            gargalos[["Processo", "Utilizacao_Real"]],
+            gargalos[["Processo", "Utilizacao"]],
             on="Processo",
             how="left"
         )
     else:
-        df_mini_gargalos["Utilizacao_Real"] = 0
+        df_mini_gargalos["Utilizacao"] = 0
 
-    # 🔥 novo score (causa + efeito)
+    # 🔒 segurança numérica
+    for col in ["Horas_Fila", "Qtd_Fila", "Utilizacao"]:
+        if col not in df_mini_gargalos.columns:
+            df_mini_gargalos[col] = 0
+        df_mini_gargalos[col] = pd.to_numeric(df_mini_gargalos[col], errors="coerce").fillna(0)
+
+    # ------------------------------------------------------------
+    # 🔥 NORMALIZAÇÃO (ELIMINA VIÉS DE ESCALA)
+    # ------------------------------------------------------------
+    max_util = df_mini_gargalos["Utilizacao"].max()
+    max_horas = df_mini_gargalos["Horas_Fila"].max()
+    max_qtd = df_mini_gargalos["Qtd_Fila"].max()
+
+    df_mini_gargalos["Util_norm"] = df_mini_gargalos["Utilizacao"] / max_util if max_util > 0 else 0
+    df_mini_gargalos["Fila_norm"] = df_mini_gargalos["Horas_Fila"] / max_horas if max_horas > 0 else 0
+    df_mini_gargalos["Qtd_norm"] = df_mini_gargalos["Qtd_Fila"] / max_qtd if max_qtd > 0 else 0
+
+    # ------------------------------------------------------------
+    # 🔥 SCORE FINAL (CAUSA > EFEITO)
+    # ------------------------------------------------------------
     df_mini_gargalos["Score"] = (
-        df_mini_gargalos["Utilizacao_Real"].fillna(0) * 0.7 +
-        df_mini_gargalos["Horas_Fila"] * 0.2 +
-        df_mini_gargalos["Qtd_Fila"] * 0.1
+        df_mini_gargalos["Util_norm"] * 0.6 +   # 🔥 gargalo real (capacidade)
+        df_mini_gargalos["Fila_norm"] * 0.3 +   # 📦 acúmulo
+        df_mini_gargalos["Qtd_norm"] * 0.1      # apoio
     )
 
-    # 🔥 ordenação corrigida
+    # 🔥 ordenação correta
     df_mini_gargalos = df_mini_gargalos.sort_values(
-        by=["Score", "Utilizacao_Real", "Horas_Fila"],
+        by=["Score", "Utilizacao", "Horas_Fila"],
         ascending=[False, False, False]
     ).reset_index(drop=True)
 
@@ -3836,25 +3855,25 @@ else:
     st.divider()
 
     # CLASSIFICAÇÃO
-    if score >= 80:
+    if score >= 0.75:
         st.error("🚨 AÇÃO IMEDIATA: Gargalo crítico impactando diretamente os prazos.")
-    elif score >= 50:
+    elif score >= 0.5:
         st.warning("⚠️ Atenção: Gargalo em crescimento, priorizar na sequência.")
     else:
         st.info("🟢 Situação controlada.")
 
-    # SUGESTÃO
+    # AÇÃO
     st.markdown("### 💡 Ação Recomendada")
 
-    if qtd > 10 and horas > 20:
-        st.markdown(f"➡️ Priorizar equipe adicional no processo **{processo}** imediatamente.")
-    elif horas > 15:
-        st.markdown(f"➡️ Avaliar redistribuição de carga para o processo **{processo}**.")
+    if gargalo_top.get("Util_norm", 0) > 0.7:
+        st.markdown(f"➡️ Aumentar capacidade no processo **{processo}** (recurso gargalo).")
+    elif horas > 20:
+        st.markdown(f"➡️ Atuar na fila do processo **{processo}** para reduzir acúmulo.")
     else:
-        st.markdown(f"➡️ Monitorar evolução do processo **{processo}**.")
+        st.markdown(f"➡️ Monitorar o processo **{processo}**.")
 
     # ------------------------------------------------------------
-    # CARDS PRINCIPAIS
+    # CARDS
     # ------------------------------------------------------------
     col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
 
@@ -3862,7 +3881,7 @@ else:
     col_g2.metric("Itens na Fila", cards_gargalos.get("total_itens_fila", 0))
     col_g3.metric("Horas na Fila", f"{cards_gargalos.get('total_horas_fila', 0):.1f}h")
     col_g4.metric("Baixas Ativas", cards_gargalos.get("total_baixas_ativas", 0))
-    col_g5.metric("🔥 Gargalo Imediato (Operacional)", f"🔴 {cards_gargalos.get('gargalo_critico', 'N/D')}")
+    col_g5.metric("🔥 Gargalo Imediato (Operacional)", f"🔴 {processo}")
 
     # ------------------------------------------------------------
     # CLASSIFICAÇÃO
@@ -3890,7 +3909,7 @@ else:
                 st.metric(
                     label=f"{row['Processo']}",
                     value=f"{int(row['Qtd_Fila'])} itens",
-                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.1f}"
+                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.2f}"
                 )
             else:
                 st.metric(label="-", value="-", delta="-")
@@ -3908,48 +3927,10 @@ else:
         hide_index=True
     )
 
-    # ============================================================
-    # 📋 PVs DOS GARGALOS (DETALHAMENTO)
-    # ============================================================
-    st.markdown("### 📋 PVs dos Gargalos")
-
-    processos_top3 = df_mini_gargalos["Processo"].dropna().unique().tolist()
-
-    if "base_gargalos" not in locals() or base_gargalos is None:
-        base_gargalos = pd.DataFrame()
-
-    if processos_top3:
-
-        processo_baixa_sel = st.selectbox(
-            "Selecione o gargalo",
-            processos_top3,
-            key="selectbox_gargalo_processo"
-        )
-
-        fila_gargalo = base_gargalos[
-            base_gargalos["Processo"] == processo_baixa_sel
-        ].copy()
-
-        if "Status Operacional" in fila_gargalo.columns:
-            fila_gargalo_pendente = fila_gargalo[
-                fila_gargalo["Status Operacional"] == "⏳ Pendente"
-            ].copy()
-        else:
-            fila_gargalo_pendente = pd.DataFrame()
-
-        if not fila_gargalo.empty:
-            st.dataframe(
-                fila_gargalo,
-                use_container_width=True,
-                height=360
-            )
-        else:
-            st.info("Nenhuma PV encontrada para o gargalo selecionado.")
-
-    else:
-        st.info("Nenhum gargalo disponível para detalhamento.")
-
     st.divider()
+
+
+
 
        
 # ============================================================
