@@ -3776,10 +3776,32 @@ else:
         df_baixas_ativas=df_baixas_ativas
     )
 
-# 🔒 GARANTIA DE ORDENAÇÃO
+# ============================================================
+# 🔥 CORREÇÃO DE SCORE (ALINHADO COM APS)
+# ============================================================
+
 if not df_mini_gargalos.empty:
+
+    # 🔥 integra capacidade real do APS
+    if 'gargalos' in locals() and not gargalos.empty:
+        df_mini_gargalos = df_mini_gargalos.merge(
+            gargalos[["Processo", "Utilizacao_Real"]],
+            on="Processo",
+            how="left"
+        )
+    else:
+        df_mini_gargalos["Utilizacao_Real"] = 0
+
+    # 🔥 novo score (causa + efeito)
+    df_mini_gargalos["Score"] = (
+        df_mini_gargalos["Utilizacao_Real"].fillna(0) * 0.7 +
+        df_mini_gargalos["Horas_Fila"] * 0.2 +
+        df_mini_gargalos["Qtd_Fila"] * 0.1
+    )
+
+    # 🔥 ordenação corrigida
     df_mini_gargalos = df_mini_gargalos.sort_values(
-        by=["Score", "Horas_Fila", "Qtd_Fila"],
+        by=["Score", "Utilizacao_Real", "Horas_Fila"],
         ascending=[False, False, False]
     ).reset_index(drop=True)
 
@@ -3908,7 +3930,6 @@ else:
             base_gargalos["Processo"] == processo_baixa_sel
         ].copy()
 
-        # 🔴 MANTENDO SUA LÓGICA ORIGINAL (pendentes)
         if "Status Operacional" in fila_gargalo.columns:
             fila_gargalo_pendente = fila_gargalo[
                 fila_gargalo["Status Operacional"] == "⏳ Pendente"
@@ -3929,7 +3950,6 @@ else:
         st.info("Nenhum gargalo disponível para detalhamento.")
 
     st.divider()
-
 
        
 # ============================================================
