@@ -4364,6 +4364,10 @@ if not ranking_colapso_safe.empty:
 else:
     status_atual = "N/A"
 
+# 🔥 fallback (APS)
+if not gargalo_atual and 'gargalo_exec' in locals():
+    gargalo_atual = gargalo_exec
+
 # -------------------------------
 # 🔮 GARGALO FUTURO
 # -------------------------------
@@ -4373,16 +4377,28 @@ if not df_colapso_safe.empty:
 else:
     risco_futuro = "N/A"
 
+# 🔥 fallback (APS)
+if not gargalo_futuro and 'gargalo_exec' in locals():
+    gargalo_futuro = gargalo_exec
+
 # -------------------------------
 # 📊 PROCESSO DE MAIOR IMPACTO
 # -------------------------------
 if not impacto_gargalo_safe.empty:
     processo_critico = str(impacto_gargalo_safe.iloc[0].get("Processo", "N/A"))
+
+# 🔥 fallback inteligente (ESSA É A CORREÇÃO REAL)
+elif 'gargalos' in locals() and not gargalos.empty:
+    processo_critico = str(gargalos.iloc[0]["Processo"])
+
+elif 'gargalo_exec' in locals():
+    processo_critico = gargalo_exec
+
 else:
     processo_critico = "N/A"
 
 # -------------------------------
-# 🚦 DECISÃO AUTOMÁTICA (REFINADA)
+# 🚦 DECISÃO AUTOMÁTICA
 # -------------------------------
 st.divider()
 
@@ -4410,10 +4426,8 @@ col4.metric(
 
 st.divider()
 
-
-
 # -------------------------------
-# 🎯 INTERPRETAÇÃO INTELIGENTE (REFINADA)
+# 🎯 INTERPRETAÇÃO INTELIGENTE
 # -------------------------------
 
 if gargalo_atual and gargalo_atual == gargalo_futuro == processo_critico:
@@ -4436,7 +4450,6 @@ elif gargalo_atual:
 
 else:
     st.success("Sistema operando dentro da normalidade.")
-
 
 
 
