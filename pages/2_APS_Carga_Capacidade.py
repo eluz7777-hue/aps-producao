@@ -1323,7 +1323,7 @@ if pv_carga.empty:
 
 
 # ============================================================
-# 🔥 GARGALO REAL (RESTRIÇÃO FÍSICA + PRESSÃO DE FILA)
+# 🔥 GARGALO REAL (BASE ÚNICA = DEM + SUPORTE DE FILA)
 # ============================================================
 
 df_gargalo = df.copy()
@@ -1337,7 +1337,7 @@ if not df_gargalo.empty:
     df_gargalo["Processo"] = df_gargalo["Processo"].astype(str).str.strip()
 
     # ------------------------------------------------------------
-    # BASE POR PROCESSO
+    # BASE POR PROCESSO (MANTIDA)
     # ------------------------------------------------------------
     gargalos = (
         df_gargalo.groupby("Processo", as_index=False)
@@ -1350,28 +1350,39 @@ if not df_gargalo.empty:
     )
 
     # ------------------------------------------------------------
-    # CAPACIDADE REAL
+    # 🔥 BASE REAL DE CAPACIDADE (AGORA VEM DO DEM)
+    # ------------------------------------------------------------
+    if not dem.empty:
+
+        dem_base = (
+            dem.groupby("Processo", as_index=False)
+            .agg(
+                Carga_DEM=("Horas", "sum"),
+                Capacidade_DEM=("Capacidade", "sum")
+            )
+        )
+
+        dem_base["Utilizacao_Real"] = np.where(
+            dem_base["Capacidade_DEM"] > 0,
+            (dem_base["Carga_DEM"] / dem_base["Capacidade_DEM"]) * 100,
+            0
+        )
+
+        # merge com gargalos (mantém tudo que você já tinha)
+        gargalos = gargalos.merge(
+            dem_base[["Processo", "Utilizacao_Real"]],
+            on="Processo",
+            how="left"
+        )
+
+    else:
+        gargalos["Utilizacao_Real"] = 0
+
+    # ------------------------------------------------------------
+    # 🔥 PESO DE RESTRIÇÃO (MANTIDO)
     # ------------------------------------------------------------
     gargalos["Recursos"] = gargalos["Processo"].apply(lambda p: MAQUINAS.get(p, 0))
 
-    gargalos["Capacidade_Diaria"] = gargalos["Processo"].apply(capacidade_diaria_real)
-
-    gargalos["Capacidade_Mensal"] = gargalos["Processo"].apply(
-        lambda p: capacidade_mes_por_processo(ano_ref, mes_ref, p)
-    )
-
-    # ------------------------------------------------------------
-    # 🔥 UTILIZAÇÃO REAL (O MAIS IMPORTANTE)
-    # ------------------------------------------------------------
-    gargalos["Utilizacao"] = np.where(
-        gargalos["Capacidade_Mensal"] > 0,
-        (gargalos["Carga_Total"] / gargalos["Capacidade_Mensal"]) * 100,
-        0
-    )
-
-    # ------------------------------------------------------------
-    # 🔥 PESO DE RESTRIÇÃO (MENOS MÁQUINA = MAIS CRÍTICO)
-    # ------------------------------------------------------------
     gargalos["Peso_Recurso"] = np.where(
         gargalos["Recursos"] > 0,
         1 / gargalos["Recursos"],
@@ -1379,29 +1390,28 @@ if not df_gargalo.empty:
     )
 
     # ------------------------------------------------------------
-    # 🔥 SCORE CORRIGIDO (RAIZ DE GARGALO)
+    # 🔥 SCORE CORRIGIDO (SEM DISTORCER REALIDADE)
     # ------------------------------------------------------------
     gargalos["Score_Gargalo"] = (
-        (gargalos["Utilizacao"] * 0.5) +          # pressão real
-        (gargalos["Fila_Total"] * 2.0) +          # acúmulo
-        (gargalos["Peso_Recurso"] * 50) +         # restrição física
-        (gargalos["Fila_Media"] * 3.0)            # fluidez
+        (gargalos["Utilizacao_Real"] * 0.7) +   # 🔥 BASE REAL (principal)
+        (gargalos["Peso_Recurso"] * 50) +       # restrição física
+        (gargalos["Fila_Media"] * 2.0)          # apoio (não dominante)
     )
 
     # ------------------------------------------------------------
     # ORDENAÇÃO FINAL
     # ------------------------------------------------------------
     gargalos = gargalos.sort_values(
-        ["Score_Gargalo", "Utilizacao"],
+        ["Score_Gargalo", "Utilizacao_Real"],
         ascending=[False, False]
     ).reset_index(drop=True)
 
     # ------------------------------------------------------------
-    # 🔥 DEFINIÇÕES FINAIS
+    # 🔥 DEFINIÇÕES FINAIS CORRETAS
     # ------------------------------------------------------------
     gargalo_raiz = gargalos.iloc[0]["Processo"]
 
-    # Gargalo imediato = maior fila operacional
+    # Gargalo imediato = MAIOR FILA (continua válido)
     gargalo_imediato = (
         df.groupby("Processo")["Fila (dias)"]
         .sum()
@@ -1413,8 +1423,6 @@ else:
     gargalos = pd.DataFrame()
     gargalo_raiz = None
     gargalo_imediato = None
-
-
 
 
 # ===============================
@@ -1454,21 +1462,39 @@ gargalo_exec = None
 processo_mais_carga = None
 ocupacao_max = 0.0
 
+# ------------------------------------------------------------
+# 🔥 AGORA TOTALMENTE ALINHADO COM O GRÁFICO
+# ------------------------------------------------------------
 if not dem.empty:
-    gargalo_exec = (
-        dem.sort_values(["Ocupacao", "Horas"], ascending=[False, False])
-        .iloc[0]["Processo"]
+
+    dem_proc_real = (
+        dem.groupby("Processo", as_index=False)
+        .agg(
+            Carga_Total=("Horas", "sum"),
+            Capacidade_Total=("Capacidade", "sum")
+        )
     )
-    ocupacao_max = float(
-        dem.sort_values(["Ocupacao", "Horas"], ascending=[False, False])
-        .iloc[0]["Ocupacao"]
+
+    dem_proc_real["Utilizacao"] = np.where(
+        dem_proc_real["Capacidade_Total"] > 0,
+        (dem_proc_real["Carga_Total"] / dem_proc_real["Capacidade_Total"]) * 100,
+        0
     )
+
+    dem_proc_real = dem_proc_real.sort_values(
+        ["Utilizacao", "Carga_Total"],
+        ascending=[False, False]
+    )
+
+    gargalo_exec = dem_proc_real.iloc[0]["Processo"]
+    ocupacao_max = float(dem_proc_real.iloc[0]["Utilizacao"])
 
 if not dem_proc.empty:
     processo_mais_carga = (
         dem_proc.sort_values("Horas", ascending=False)
         .iloc[0]["Processo"]
     )
+
 
 
 
