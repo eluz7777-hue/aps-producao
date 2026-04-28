@@ -338,13 +338,14 @@ if st.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
 
-# 🔧 horário correto do Brasil
+# 🔧 horário Brasil sem pytz
 from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo
 
-agora_br = datetime.now(pytz.timezone("America/Sao_Paulo"))
+agora_br = datetime.now(ZoneInfo("America/Sao_Paulo"))
 
 st.write("Última atualização:", agora_br.strftime("%d/%m/%Y %H:%M:%S"))
+
 
 
 # ===============================
