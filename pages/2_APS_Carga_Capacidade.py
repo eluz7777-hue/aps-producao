@@ -2190,28 +2190,45 @@ for col in ["Horas", "Capacidade Processo"]:
 
     base[col] = pd.to_numeric(base[col], errors="coerce").fillna(0)
 
+# 🔥 identificação do gargalo
+gargalo = gargalo_exec if 'gargalo_exec' in locals() else None
+
 fig_comp = px.bar(
     base.sort_values("Horas", ascending=False),
     x="Processo",
     y=["Horas", "Capacidade Processo"],
     barmode="group",
-    text_auto=".1f"  # 🔥 1 casa decimal
+    text_auto=".1f"
 )
 
-# cores corretas
+# ------------------------------------------------------------
+# 🎨 CORES DINÂMICAS
+# ------------------------------------------------------------
+cores_horas = []
+cores_cap = []
+
+for proc in base.sort_values("Horas", ascending=False)["Processo"]:
+    if proc == gargalo:
+        cores_horas.append("#FF2B2B")   # 🔥 vermelho destaque
+        cores_cap.append("#FF6B6B")     # vermelho claro
+    else:
+        cores_horas.append("#FF7A00")   # laranja padrão
+        cores_cap.append("#1f77b4")     # azul padrão
+
+# aplica cores
 fig_comp.update_traces(
     selector=dict(name="Horas"),
-    marker_color="#FF7A00"
+    marker_color=cores_horas
 )
 
 fig_comp.update_traces(
     selector=dict(name="Capacidade Processo"),
-    marker_color="#1f77b4"
+    marker_color=cores_cap
 )
 
-# rótulos em cima com formatação fixa
+# labels
 fig_comp.update_traces(
-    texttemplate='%{y:.1f}',  # 🔥 garante 1 casa decimal
+    texttemplate='%{y:.1f}',
     textposition="outside"
 )
 
@@ -2224,7 +2241,6 @@ fig_comp.update_layout(
 )
 
 st.plotly_chart(fig_comp, use_container_width=True)
-
 
 
 # ============================================================
