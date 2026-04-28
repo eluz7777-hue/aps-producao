@@ -338,7 +338,14 @@ if st.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
 
-st.write("Última atualização:", time.strftime("%d/%m/%Y %H:%M:%S"))
+# 🔧 horário correto do Brasil
+from datetime import datetime
+import pytz
+
+agora_br = datetime.now(pytz.timezone("America/Sao_Paulo"))
+
+st.write("Última atualização:", agora_br.strftime("%d/%m/%Y %H:%M:%S"))
+
 
 # ===============================
 # LEITURA
