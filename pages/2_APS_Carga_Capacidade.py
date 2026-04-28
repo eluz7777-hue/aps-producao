@@ -3777,29 +3777,48 @@ else:
     )
 
 # ============================================================
-# 🔥 CORREÇÃO DE SCORE (NORMALIZADO E ALINHADO COM APS)
+# 🔥 CORREÇÃO DE SCORE (ROBUSTA + NORMALIZADA)
 # ============================================================
 
 if not df_mini_gargalos.empty:
 
-    # 🔥 integra capacidade real do APS
+    # ------------------------------------------------------------
+    # 🔒 DETECÇÃO SEGURA DA COLUNA DE UTILIZAÇÃO
+    # ------------------------------------------------------------
+    col_util = None
+
     if 'gargalos' in locals() and not gargalos.empty:
+        for col in ["Utilizacao", "Utilizacao (%)", "Utilizacao_Real"]:
+            if col in gargalos.columns:
+                col_util = col
+                break
+
+    # ------------------------------------------------------------
+    # 🔥 MERGE SEGURO
+    # ------------------------------------------------------------
+    if col_util:
         df_mini_gargalos = df_mini_gargalos.merge(
-            gargalos[["Processo", "Utilizacao"]],
+            gargalos[["Processo", col_util]].rename(columns={col_util: "Utilizacao"}),
             on="Processo",
             how="left"
         )
     else:
         df_mini_gargalos["Utilizacao"] = 0
 
-    # 🔒 segurança numérica
+    # ------------------------------------------------------------
+    # 🔒 SEGURANÇA NUMÉRICA
+    # ------------------------------------------------------------
     for col in ["Horas_Fila", "Qtd_Fila", "Utilizacao"]:
         if col not in df_mini_gargalos.columns:
             df_mini_gargalos[col] = 0
-        df_mini_gargalos[col] = pd.to_numeric(df_mini_gargalos[col], errors="coerce").fillna(0)
+
+        df_mini_gargalos[col] = pd.to_numeric(
+            df_mini_gargalos[col],
+            errors="coerce"
+        ).fillna(0)
 
     # ------------------------------------------------------------
-    # 🔥 NORMALIZAÇÃO (ELIMINA VIÉS DE ESCALA)
+    # 🔥 NORMALIZAÇÃO (REMOVE VIÉS DE ESCALA)
     # ------------------------------------------------------------
     max_util = df_mini_gargalos["Utilizacao"].max()
     max_horas = df_mini_gargalos["Horas_Fila"].max()
@@ -3813,18 +3832,24 @@ if not df_mini_gargalos.empty:
     # 🔥 SCORE FINAL (CAUSA > EFEITO)
     # ------------------------------------------------------------
     df_mini_gargalos["Score"] = (
-        df_mini_gargalos["Util_norm"] * 0.6 +   # 🔥 gargalo real (capacidade)
-        df_mini_gargalos["Fila_norm"] * 0.3 +   # 📦 acúmulo
-        df_mini_gargalos["Qtd_norm"] * 0.1      # apoio
+        df_mini_gargalos["Util_norm"] * 0.6 +
+        df_mini_gargalos["Fila_norm"] * 0.3 +
+        df_mini_gargalos["Qtd_norm"] * 0.1
     )
 
-    # 🔥 ordenação correta
+    # ------------------------------------------------------------
+    # 🔥 ORDENAÇÃO FINAL
+    # ------------------------------------------------------------
     df_mini_gargalos = df_mini_gargalos.sort_values(
         by=["Score", "Utilizacao", "Horas_Fila"],
         ascending=[False, False, False]
     ).reset_index(drop=True)
 
     df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+
+# ============================================================
+# 🔒 CARDS
+# ============================================================
 
 cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
 
@@ -3834,7 +3859,7 @@ if df_mini_gargalos.empty:
 else:
 
     # ============================================================
-    # 🚨 ALERTA INTELIGENTE DE GARGALO
+    # 🚨 ALERTA INTELIGENTE
     # ============================================================
 
     st.markdown("## 🚨 Alerta Inteligente de Produção")
@@ -3854,7 +3879,9 @@ else:
 
     st.divider()
 
+    # ------------------------------------------------------------
     # CLASSIFICAÇÃO
+    # ------------------------------------------------------------
     if score >= 0.75:
         st.error("🚨 AÇÃO IMEDIATA: Gargalo crítico impactando diretamente os prazos.")
     elif score >= 0.5:
@@ -3862,18 +3889,20 @@ else:
     else:
         st.info("🟢 Situação controlada.")
 
-    # AÇÃO
+    # ------------------------------------------------------------
+    # AÇÃO RECOMENDADA
+    # ------------------------------------------------------------
     st.markdown("### 💡 Ação Recomendada")
 
     if gargalo_top.get("Util_norm", 0) > 0.7:
-        st.markdown(f"➡️ Aumentar capacidade no processo **{processo}** (recurso gargalo).")
+        st.markdown(f"➡️ Aumentar capacidade no processo **{processo}** (gargalo real).")
     elif horas > 20:
         st.markdown(f"➡️ Atuar na fila do processo **{processo}** para reduzir acúmulo.")
     else:
         st.markdown(f"➡️ Monitorar o processo **{processo}**.")
 
     # ------------------------------------------------------------
-    # CARDS
+    # CARDS PRINCIPAIS
     # ------------------------------------------------------------
     col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
 
@@ -3907,7 +3936,7 @@ else:
             if i < len(top3):
                 row = top3.iloc[i]
                 st.metric(
-                    label=f"{row['Processo']}",
+                    label=row["Processo"],
                     value=f"{int(row['Qtd_Fila'])} itens",
                     delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.2f}"
                 )
