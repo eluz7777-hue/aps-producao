@@ -1199,8 +1199,18 @@ pv_carga["DATA_ENTREGA_APS"] = pd.to_datetime(
 # 📅 CÁLCULO DE PRAZO
 # ============================================================
 
-hoje = pd.Timestamp.now(tz="America/Sao_Paulo").normalize()
+# 🔧 garante tipo datetime
+pv_carga["DATA_ENTREGA_APS"] = pd.to_datetime(
+    pv_carga["DATA_ENTREGA_APS"],
+    errors="coerce"
+)
 
+# 🔧 garante mesma base (sem timezone)
+hoje = pd.Timestamp.now().normalize()
+
+# ------------------------------------------------------------
+# cálculo principal
+# ------------------------------------------------------------
 pv_carga["Dias Disponíveis"] = (
     pv_carga["DATA_ENTREGA_APS"] - hoje
 ).dt.days
@@ -1226,7 +1236,6 @@ pv_carga["Status Prazo"] = np.where(
         "OK"
     )
 )
-
 
 # ============================================================
 # 🔮 PREVISÃO REAL DE ENTREGA (APS INTELIGENTE)
@@ -2190,45 +2199,28 @@ for col in ["Horas", "Capacidade Processo"]:
 
     base[col] = pd.to_numeric(base[col], errors="coerce").fillna(0)
 
-# 🔥 identificação do gargalo
-gargalo = gargalo_exec if 'gargalo_exec' in locals() else None
-
 fig_comp = px.bar(
     base.sort_values("Horas", ascending=False),
     x="Processo",
     y=["Horas", "Capacidade Processo"],
     barmode="group",
-    text_auto=".1f"
+    text_auto=".1f"  # 🔥 1 casa decimal
 )
 
-# ------------------------------------------------------------
-# 🎨 CORES DINÂMICAS
-# ------------------------------------------------------------
-cores_horas = []
-cores_cap = []
-
-for proc in base.sort_values("Horas", ascending=False)["Processo"]:
-    if proc == gargalo:
-        cores_horas.append("#FF2B2B")   # 🔥 vermelho destaque
-        cores_cap.append("#FF6B6B")     # vermelho claro
-    else:
-        cores_horas.append("#FF7A00")   # laranja padrão
-        cores_cap.append("#1f77b4")     # azul padrão
-
-# aplica cores
+# cores corretas
 fig_comp.update_traces(
     selector=dict(name="Horas"),
-    marker_color=cores_horas
+    marker_color="#FF7A00"
 )
 
 fig_comp.update_traces(
     selector=dict(name="Capacidade Processo"),
-    marker_color=cores_cap
+    marker_color="#1f77b4"
 )
 
-# labels
+# rótulos em cima com formatação fixa
 fig_comp.update_traces(
-    texttemplate='%{y:.1f}',
+    texttemplate='%{y:.1f}',  # 🔥 garante 1 casa decimal
     textposition="outside"
 )
 
@@ -2241,6 +2233,7 @@ fig_comp.update_layout(
 )
 
 st.plotly_chart(fig_comp, use_container_width=True)
+
 
 
 # ============================================================
@@ -2537,7 +2530,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 log = novo.copy()
                 log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
                 log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
-                log["Data_Baixa"] = pd.Timestamp.now(tz="America/Sao_Paulo")
+                log["Data_Baixa"] = pd.Timestamp.now()
 
                 df_existente = pd.concat([df_existente, log], ignore_index=True)
                 df_existente.to_excel(caminho, index=False)
@@ -2623,7 +2616,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     idx = df_baixas[filtro].index[0]
 
     df_baixas.at[idx, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now(tz="America/Sao_Paulo").strftime("%d/%m/%Y %H:%M")
+    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")
     df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
 
     with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
@@ -3237,7 +3230,7 @@ else:
                     "CODIGO_PV": linha["CODIGO_PV"],
                     "Processo": linha["Processo"],
                     "Horas": linha["Horas"],
-                    "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
+                    "Data_Baixa": pd.Timestamp.now(),
                     "Usuario": "Sistema",
                     "Observacao": "UNITARIO_CORTE",
                     "Status_Baixa": "ATIVA",
@@ -3295,7 +3288,7 @@ else:
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
+                        "Data_Baixa": pd.Timestamp.now(),
                         "Usuario": "Sistema",
                         "Observacao": "LOTE_CORTE",
                         "Status_Baixa": "ATIVA",
@@ -3696,7 +3689,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
+                        "Data_Baixa": pd.Timestamp.now(),
                         "Usuario": "Sistema",
                         "Observacao": observacao_baixa,
                         "Status_Baixa": "ATIVA",
@@ -3713,7 +3706,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
-                        "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
+                        "Data_Baixa": pd.Timestamp.now(),
                         "Usuario": "Sistema",
                         "Observacao": observacao_baixa,
                         "Status_Baixa": "TERCEIRIZADA",
@@ -3742,7 +3735,7 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
                             "CODIGO_PV": linha["CODIGO_PV"],
                             "Processo": linha["Processo"],
                             "Horas": linha["Horas"],
-                            "Data_Baixa": pd.Timestamp.now(tz="America/Sao_Paulo"),
+                            "Data_Baixa": pd.Timestamp.now(),
                             "Usuario": "Sistema",
                             "Observacao": "",
                             "Status_Baixa": "ATIVA",
