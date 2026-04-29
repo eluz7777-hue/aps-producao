@@ -4,6 +4,26 @@ import os
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
+# 🔒 DEFINIÇÃO DE CAMINHO (GARANTIDO)
+# ============================================================
+PAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = PAGE_DIR  # app.py já está na raiz
+
+BASE_PATH = ROOT_DIR
+
+# ============================================================
+# 🔥 FORÇA CRIAÇÃO DO ARQUIVO DE BAIXAS
+# ============================================================
+from seu_modulo import garantir_arquivo_baixas  # ⚠️ AJUSTE SE NECESSÁRIO
+
+caminho_debug = garantir_arquivo_baixas(BASE_PATH)
+
+st.write("📄 Criando arquivo de baixas em:")
+st.write(caminho_debug)
+st.write("📌 Existe?", os.path.exists(caminho_debug))
+
+
+# ============================================================
 # 🎨 ESTILO SIDEBAR (FUNCIONA NA NAV NATIVA)
 # ============================================================
 st.markdown("""
