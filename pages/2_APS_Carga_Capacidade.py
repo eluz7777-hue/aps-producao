@@ -3688,7 +3688,8 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
 # ============================================================
 st.subheader("📌 Fila por Processo")
 
-fila = df.copy()
+# 🔥 USA PRIORIDADE APS (SE EXISTIR)
+fila = st.session_state.get("df_prioridade", df).copy()
 
 if "ENTREGA" in fila.columns:
     fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
@@ -3697,6 +3698,36 @@ else:
     fila["Dias para Entrega"] = None
 
 fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
+
+# ============================================================
+# 🔥 GARGALO VISUAL
+# ============================================================
+gargalo_ref = None
+if 'gargalo_exec' in locals() and gargalo_exec:
+    gargalo_ref = gargalo_exec
+elif 'gargalo_raiz' in locals() and gargalo_raiz:
+    gargalo_ref = gargalo_raiz
+
+fila["Gargalo"] = np.where(fila["Processo"] == gargalo_ref, "🔥", "")
+
+# ============================================================
+# 🔥 PRIORIDADE VISUAL (SEMÁFORO APS)
+# ============================================================
+def prioridade_visual(row):
+    dias = row.get("Dias para Entrega", 999)
+    score = row.get("Score_APS", 0)
+    gargalo = row.get("Gargalo", "")
+
+    if dias < 0 or score > 0.8:
+        return "🔴"
+    elif dias <= 3 or gargalo == "🔥":
+        return "🟠"
+    elif dias <= 7:
+        return "🟡"
+    else:
+        return "🟢"
+
+fila["Prioridade"] = fila.apply(prioridade_visual, axis=1)
 
 # ---------------------------------------
 # FILTROS
@@ -3748,7 +3779,19 @@ if "ENTREGA" in fila_detalhe.columns:
     fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
     fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-colunas_fila = ["Semáforo","PV","Cliente","CODIGO_PV","Processo","Horas","Dias para Entrega","ENTREGA"]
+colunas_fila = [
+    "Prioridade",   # 🔥 NOVO
+    "Gargalo",      # 🔥 NOVO
+    "Semáforo",
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Dias para Entrega",
+    "ENTREGA"
+]
+
 colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
 
 fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
