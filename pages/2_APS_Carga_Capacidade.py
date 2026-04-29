@@ -690,13 +690,13 @@ def garantir_arquivo_baixas(base_path):
 
 
 # =============================== 
-# PADRONIZAR BAIXAS OPERACIONAIS APS (CORRIGIDO)
+# PADRONIZAR BAIXAS OPERACIONAIS APS (VERSÃO DEFINITIVA)
 # ===============================
 
 def _padronizar_df_baixas(df_baixas):
 
     if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
 
     df_baixas = df_baixas.copy()
 
@@ -735,13 +735,16 @@ def _padronizar_df_baixas(df_baixas):
     df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
 
     # ------------------------------------------------------------
-    # 🔥 CORREÇÃO DEFINITIVA DE DATA
+    # 🔥 TRATAMENTO CORRETO DE DATA (SEM PERDER HISTÓRICO)
     # ------------------------------------------------------------
     df_baixas["Data_Baixa"] = pd.to_datetime(
         df_baixas["Data_Baixa"], errors="coerce"
     )
 
-    # 🔥 BACKFILL: elimina NaT / None SEM PERDER HISTÓRICO
+    # 🔥 FLAG DE CONTROLE (IMPORTANTE)
+    df_baixas["DATA_ESTIMADA"] = df_baixas["Data_Baixa"].isna()
+
+    # 🔥 APENAS PARA VISUALIZAÇÃO — NÃO ALTERA HISTÓRICO REAL
     hoje = pd.Timestamp.now()
 
     df_baixas["Data_Baixa"] = df_baixas["Data_Baixa"].fillna(hoje)
@@ -752,7 +755,7 @@ def _padronizar_df_baixas(df_baixas):
     df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str)
 
     # ------------------------------------------------------------
-    # 🔥 CHAVE OPERACIONAL (BASE DO SISTEMA)
+    # 🔥 CHAVE OPERACIONAL
     # ------------------------------------------------------------
     df_baixas["CHAVE_OPERACAO"] = (
         df_baixas["PV"] + "||" +
@@ -772,7 +775,7 @@ def _padronizar_df_baixas(df_baixas):
 
 
 # ============================================================
-# FUNÇÃO DE CARREGAMENTO
+# FUNÇÃO DE CARREGAMENTO (MANTIDA)
 # ============================================================
 @st.cache_data(ttl=0)
 def carregar_baixas_operacionais(base_path, file_mtime_baixas):
@@ -784,7 +787,8 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
         return _padronizar_df_baixas(df_baixas)
     except Exception as e:
         st.warning(f"Erro ao ler baixas: {e}")
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
+
 
 
 # ============================================================
@@ -2749,19 +2753,19 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
 
 # ============================================================
-# HISTÓRICOS (SEM PERDA DE DADOS)
+# HISTÓRICOS (ALINHADO COM PADRONIZAÇÃO NOVA)
 # ============================================================
 
 def historico_baixas_completo(df_baixas):
     if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
 
     return _padronizar_df_baixas(df_baixas.copy())
 
 
 def historico_baixas_ativas(df_baixas):
     if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
 
     df_tmp = _padronizar_df_baixas(df_baixas.copy())
 
@@ -2771,7 +2775,7 @@ def historico_baixas_ativas(df_baixas):
 
 
 # ============================================================
-# ESTORNO (BLINDADO - NÃO PERDE HISTÓRICO)
+# ESTORNO (BLINDADO E CONSISTENTE COM PADRONIZAÇÃO)
 # ============================================================
 
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
@@ -2786,9 +2790,10 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if df_baixas is None or df_baixas.empty:
         return False, "Arquivo de baixas vazio."
 
+    # 🔥 padroniza antes de qualquer operação
     df_baixas = _padronizar_df_baixas(df_baixas)
 
-    # 🔒 CHAVE CONSISTENTE
+    # 🔒 CHAVE CONSISTENTE (mesma regra do sistema inteiro)
     chave = (
         str(pv).strip().upper() + "||" +
         str(processo).strip().upper() + "||" +
@@ -2803,11 +2808,11 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if not filtro.any():
         return False, "Nenhuma baixa ativa encontrada."
 
-    # 🔥 pega a mais recente (importante para histórico)
+    # 🔥 pega a mais recente (segurança para múltiplos registros)
     idx = df_baixas[filtro].index[0]
 
     # ------------------------------------------------------------
-    # ATUALIZA SEM PERDER LINHA
+    # ATUALIZA SEM PERDER HISTÓRICO
     # ------------------------------------------------------------
     df_baixas.at[idx, "Status_Baixa"] = "ESTORNADA"
     df_baixas.at[idx, "Data_Estorno"] = datetime.now(
@@ -2817,16 +2822,21 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
 
     # ------------------------------------------------------------
-    # 🔒 GRAVAÇÃO SEGURA (SEM PERDA)
+    # 🔥 GARANTE QUE NÃO PERDE COLUNAS AO SALVAR
     # ------------------------------------------------------------
+    df_para_salvar = df_baixas.copy()
+
+    # remove colunas auxiliares que não pertencem ao Excel
+    colunas_salvar = [col for col in COLUNAS_BAIXAS if col in df_para_salvar.columns]
+
     try:
         with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-            df_baixas[COLUNAS_BAIXAS].to_excel(writer, index=False)
+            df_para_salvar[colunas_salvar].to_excel(writer, index=False)
     except Exception as e:
         return False, f"Erro ao salvar arquivo: {e}"
 
     # ------------------------------------------------------------
-    # 🔒 BACKUP (EXTRA SEGURANÇA)
+    # 🔒 BACKUP (SEGURANÇA EXTRA)
     # ------------------------------------------------------------
     try:
         _criar_backup()
@@ -4480,17 +4490,26 @@ else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ============================================================
-# 🚨 DASHBOARD DE ERROS OPERACIONAIS
+# 🚨 DASHBOARD DE ERROS OPERACIONAIS (CONSISTENTE)
 # ============================================================
 
 st.markdown("## 🚨 Inteligência de Erros Operacionais")
 
-try:
-    caminho = garantir_arquivo_baixas(BASE_PATH)
-    df_baixas_full = pd.read_excel(caminho, dtype=str)
+# 🔥 usa base já carregada no sistema
+df_baixas_full = st.session_state.get("df_baixas_ativas_full")
+
+if df_baixas_full is None or df_baixas_full.empty:
+
+    try:
+        caminho = garantir_arquivo_baixas(BASE_PATH)
+        df_baixas_full = pd.read_excel(caminho, dtype=str)
+        df_baixas_full = _padronizar_df_baixas(df_baixas_full)
+    except Exception:
+        df_baixas_full = pd.DataFrame()
+
+# 🔒 garante consistência global
+if not df_baixas_full.empty:
     df_baixas_full = _padronizar_df_baixas(df_baixas_full)
-except Exception:
-    df_baixas_full = pd.DataFrame()
 
 if df_baixas_full.empty:
     st.info("Sem dados para análise de erros.")
@@ -4555,15 +4574,22 @@ else:
         st.divider()
 
         # ------------------------------------------------------------
-        # ÚLTIMAS OCORRÊNCIAS
+        # 🔥 ÚLTIMAS OCORRÊNCIAS (COM CONTROLE DE DATA)
         # ------------------------------------------------------------
         st.markdown("### 🕒 Últimas Tentativas")
 
+        df_view = df_erros.copy()
+
+        # 🔥 separa dados confiáveis
+        if "DATA_ESTIMADA" in df_view.columns:
+            df_view["Data Confiável"] = ~df_view["DATA_ESTIMADA"]
+
         st.dataframe(
-            df_erros.sort_values("Data_Baixa", ascending=False).head(20),
+            df_view.sort_values("Data_Baixa", ascending=False).head(20),
             use_container_width=True,
             hide_index=True
         )
+
 
 
 # ============================================================
