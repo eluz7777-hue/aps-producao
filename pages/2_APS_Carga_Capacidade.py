@@ -761,7 +761,7 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
 
 # ============================================================
-# 🔥 CARREGAMENTO DAS BAIXAS (TEM QUE VIR AQUI)
+# 🔥 CARREGAMENTO DAS BAIXAS (ROBUSTO E CONSISTENTE)
 # ============================================================
 
 caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
@@ -773,12 +773,24 @@ except:
 
 df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
 
+# 🔒 normalização crítica
+if not df_baixas.empty:
+
+    df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip()
+    df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.upper().str.strip()
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].astype(str).str.strip()
+
+    df_baixas["CHAVE"] = (
+        df_baixas["PV"] + "|" +
+        df_baixas["Processo"] + "|" +
+        df_baixas["CODIGO_PV"]
+    )
+
 df_baixas_ativas = df_baixas[
-    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+    df_baixas["Status_Baixa"].astype(str).str.upper().str.strip().isin(["ATIVA", "TERCEIRIZADA"])
 ].copy()
 
 st.session_state["df_baixas_ativas"] = df_baixas_ativas
-
 
 # ============================================================
 # BASE OPERACIONAL VISUAL
@@ -3048,45 +3060,68 @@ risco = pv_carga[
 
 
 # ------------------------------------------------------------
-# BASE DE CORTE (COM PRIORIDADE APS + PROTEÇÃO)
+# BASE DE CORTE (COM PRIORIDADE APS + PROTEÇÃO REAL)
 # ------------------------------------------------------------
 base_corte = df_operacional.copy()
-base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
 
+# 🔒 NORMALIZAÇÃO (CRÍTICA)
+base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
+base_corte["PV"] = base_corte["PV"].astype(str).str.strip()
+base_corte["CODIGO_PV"] = base_corte["CODIGO_PV"].astype(str).str.strip()
+
+# 🔥 CHAVE DETERMINÍSTICA (NUNCA MUDA)
+base_corte["CHAVE"] = (
+    base_corte["PV"] + "|" +
+    base_corte["Processo"] + "|" +
+    base_corte["CODIGO_PV"]
+)
+
+# 🔥 FILTRO DE PROCESSOS DE CORTE
 base_corte = base_corte[
     base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
 ].copy()
 
 # ============================================================
-# 🔥 APLICA PRIORIDADE APS (ROBUSTO)
+# 🔥 REMOVE OPERAÇÕES JÁ BAIXADAS (DEFINITIVO)
+# ============================================================
+df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+
+if not df_baixas_ativas.empty and "CHAVE" in df_baixas_ativas.columns:
+    base_corte = base_corte[
+        ~base_corte["CHAVE"].isin(df_baixas_ativas["CHAVE"])
+    ].copy()
+
+# ============================================================
+# 🔥 PRIORIDADE APS
 # ============================================================
 df_prioridade = st.session_state.get("df_prioridade", None)
 
 if df_prioridade is not None and not df_prioridade.empty:
 
-    # 🔒 REMOVE DUPLICIDADE (CRÍTICO)
-    df_prioridade_unique = df_prioridade.drop_duplicates(subset=["PV", "Processo"])
+    df_prioridade = df_prioridade.copy()
 
-    # 🔗 MERGE SEGURO
+    df_prioridade["PV"] = df_prioridade["PV"].astype(str).str.strip()
+    df_prioridade["Processo"] = df_prioridade["Processo"].astype(str).str.upper().str.strip()
+    df_prioridade["CODIGO_PV"] = df_prioridade["CODIGO_PV"].astype(str).str.strip()
+
+    df_prioridade_unique = df_prioridade.drop_duplicates(subset=["PV", "Processo", "CODIGO_PV"])
+
     base_corte = base_corte.merge(
-        df_prioridade_unique[["PV", "Processo", "Ranking_APS"]],
-        on=["PV", "Processo"],
+        df_prioridade_unique[["PV", "Processo", "CODIGO_PV", "Ranking_APS"]],
+        on=["PV", "Processo", "CODIGO_PV"],
         how="left"
     )
 
-    # 🔒 TRATAMENTO
     base_corte["Ranking_APS"] = pd.to_numeric(
         base_corte["Ranking_APS"], errors="coerce"
     ).fillna(9999)
 
-    # 🔥 ORDENAÇÃO APS
     base_corte = base_corte.sort_values(
         by=["Ranking_APS", "Data"],
         ascending=[True, True]
     ).reset_index(drop=True)
 
 else:
-    # 🔒 FALLBACK ORIGINAL
     base_corte = base_corte.sort_values(
         by=["Data"],
         ascending=[True]
@@ -3101,7 +3136,6 @@ else:
     base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
 
     base_corte = base_corte.reset_index(drop=True)
-    base_corte["ID_UNICO"] = base_corte.index.astype(str)
 
     base_corte["LABEL"] = (
         "PV " + base_corte["PV"].astype(str) +
@@ -3121,7 +3155,7 @@ else:
         opcoes = base_corte_pendente["LABEL"].tolist()
 
         # ------------------------------------------------------------
-        # CONTROLE DE RESET
+        # RESET LIMPO (SEM BUG)
         # ------------------------------------------------------------
         if "reset_corte_unitario" not in st.session_state:
             st.session_state["reset_corte_unitario"] = False
@@ -3129,12 +3163,11 @@ else:
         if "reset_corte_lote" not in st.session_state:
             st.session_state["reset_corte_lote"] = False
 
-        if st.session_state["reset_corte_unitario"]:
-            if opcoes:
-                st.session_state["corte_unitario"] = opcoes[0]
+        if st.session_state.get("reset_corte_unitario", False):
+            st.session_state["corte_unitario"] = None
             st.session_state["reset_corte_unitario"] = False
 
-        if st.session_state["reset_corte_lote"]:
+        if st.session_state.get("reset_corte_lote", False):
             st.session_state["corte_lote"] = []
             st.session_state["reset_corte_lote"] = False
 
@@ -3143,54 +3176,63 @@ else:
         # ------------------------------------------------------------
         st.markdown("#### 🔹 Baixa Unitária")
 
-        escolha = st.selectbox("Operação", opcoes, key="corte_unitario")
+        escolha = st.selectbox(
+            "Operação",
+            opcoes,
+            key="corte_unitario",
+            index=None,
+            placeholder="Selecione uma operação"
+        )
 
-        linha_sel = base_corte_pendente[
-            base_corte_pendente["LABEL"] == escolha
-        ]
+        if escolha:
 
-        if not linha_sel.empty:
-            linha = linha_sel.iloc[0]
+            linha_sel = base_corte_pendente[
+                base_corte_pendente["LABEL"] == escolha
+            ]
 
-            if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
+            if not linha_sel.empty:
+                linha = linha_sel.iloc[0]
 
-                resultado = salvar_baixa_operacional(BASE_PATH, {
-                    "PV": linha["PV"],
-                    "Cliente": linha.get("Cliente", ""),
-                    "CODIGO_PV": linha["CODIGO_PV"],
-                    "Processo": linha["Processo"],
-                    "Horas": linha["Horas"],
-                    "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
-                    "Usuario": "Sistema",
-                    "Observacao": "UNITARIO_CORTE",
-                    "Status_Baixa": "ATIVA",
-                    "Data_Estorno": "",
-                    "Motivo_Estorno": ""
-                })
+                if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
 
-                if resultado.get("ok"):
+                    resultado = salvar_baixa_operacional(BASE_PATH, {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "CHAVE": linha["CHAVE"],  # 🔥 CRÍTICO
+                        "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
+                        "Usuario": "Sistema",
+                        "Observacao": "UNITARIO_CORTE",
+                        "Status_Baixa": "ATIVA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    })
 
-                    st.cache_data.clear()
+                    if resultado.get("ok"):
 
-                    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-                    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+                        st.cache_data.clear()
 
-                    df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+                        caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+                        file_mtime_baixas = os.path.getmtime(caminho_baixas)
 
-                    df_baixas_ativas = df_baixas[
-                        df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-                    ].copy()
+                        df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
 
-                    st.session_state["df_baixas_ativas"] = df_baixas_ativas
+                        df_baixas_ativas = df_baixas[
+                            df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+                        ].copy()
 
-                    st.session_state["reset_corte_unitario"] = True
+                        st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
-                    st.success("Baixa registrada com sucesso")
+                        st.session_state["reset_corte_unitario"] = True
 
-                    st.rerun()
+                        st.success("Baixa registrada com sucesso")
 
-                else:
-                    st.error(resultado.get("erro", "Erro ao registrar baixa"))
+                        st.rerun()
+
+                    else:
+                        st.error(resultado.get("erro", "Erro ao registrar baixa"))
 
         st.divider()
 
@@ -3218,6 +3260,7 @@ else:
                         "CODIGO_PV": linha["CODIGO_PV"],
                         "Processo": linha["Processo"],
                         "Horas": linha["Horas"],
+                        "CHAVE": linha["CHAVE"],  # 🔥 CRÍTICO
                         "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
                         "Usuario": "Sistema",
                         "Observacao": "LOTE_CORTE",
@@ -3231,7 +3274,6 @@ else:
                     else:
                         erros += 1
 
-                # 🔥 RECARREGA BASE
                 st.cache_data.clear()
 
                 caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
@@ -3247,14 +3289,11 @@ else:
 
                 if sucessos:
                     st.session_state["reset_corte_lote"] = True
-
                     st.success(f"{sucessos} operações baixadas")
-
                     st.rerun()
 
                 if erros:
                     st.warning(f"{erros} não foram baixadas")
-
 
 
 
