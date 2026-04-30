@@ -689,10 +689,16 @@ def garantir_arquivo_baixas(base_path):
     return caminho
 
 
-# =============================== 
-# PADRONIZAR BAIXAS OPERACIONAIS APS (VERSÃO DEFINITIVA)
-# ===============================
 
+
+
+# ============================================================
+# PADRONIZAR + SALVAR + CARREGAR + INTEGRAÇÃO APS (DEFINITIVO)
+# ============================================================
+
+# ============================================================
+# 🔒 PADRONIZAÇÃO
+# ============================================================
 def _padronizar_df_baixas(df_baixas):
 
     if df_baixas is None or df_baixas.empty:
@@ -706,9 +712,6 @@ def _padronizar_df_baixas(df_baixas):
 
     df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
 
-    # ------------------------------------------------------------
-    # 🔒 NORMALIZAÇÃO TEXTO
-    # ------------------------------------------------------------
     colunas_texto = [
         "PV", "Cliente", "CODIGO_PV", "Processo",
         "Usuario", "Observacao", "Status_Baixa",
@@ -729,92 +732,78 @@ def _padronizar_df_baixas(df_baixas):
         .str.upper()
     )
 
-    # ------------------------------------------------------------
-    # 🔒 NUMÉRICO
-    # ------------------------------------------------------------
     df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
 
-    # ------------------------------------------------------------
-    # 🔥 TRATAMENTO CORRETO DE DATA (SEM PERDER HISTÓRICO)
-    # ------------------------------------------------------------
-    df_baixas["Data_Baixa"] = pd.to_datetime(
-        df_baixas["Data_Baixa"], errors="coerce"
-    )
+    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
 
-    # 🔥 FLAG DE CONTROLE (IMPORTANTE)
     df_baixas["DATA_ESTIMADA"] = df_baixas["Data_Baixa"].isna()
 
-    # 🔥 APENAS PARA VISUALIZAÇÃO — NÃO ALTERA HISTÓRICO REAL
-    hoje = pd.Timestamp.now()
+    df_baixas["Data_Baixa"] = df_baixas["Data_Baixa"].fillna(pd.Timestamp.now())
 
-    df_baixas["Data_Baixa"] = df_baixas["Data_Baixa"].fillna(hoje)
-
-    # ------------------------------------------------------------
-    # 🔒 ESTORNO
-    # ------------------------------------------------------------
     df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str)
 
-    # ------------------------------------------------------------
-    # 🔥 CHAVE OPERACIONAL
-    # ------------------------------------------------------------
     df_baixas["CHAVE_OPERACAO"] = (
         df_baixas["PV"] + "||" +
         df_baixas["Processo"] + "||" +
         df_baixas["CODIGO_PV"]
     )
 
-    # ------------------------------------------------------------
-    # 🔒 ORDENAÇÃO
-    # ------------------------------------------------------------
-    df_baixas = df_baixas.sort_values(
-        by=["Data_Baixa", "PV", "Processo"],
-        ascending=[False, True, True]
-    ).reset_index(drop=True)
-
     return df_baixas
 
 
 # ============================================================
-# FUNÇÃO DE CARREGAMENTO (MANTIDA)
+# 🔥 SALVAR BAIXA (COM PROTEÇÃO CONTRA PERDA)
 # ============================================================
-@st.cache_data(ttl=0)
-def carregar_baixas_operacionais(base_path, file_mtime_baixas):
+def salvar_baixa_operacional(base_path, nova_baixa):
+
+    caminho = garantir_arquivo_baixas(base_path)
+
+    try:
+        df_existente = pd.read_excel(caminho, dtype=str)
+    except:
+        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+    df_existente = _padronizar_df_baixas(df_existente)
+
+    df_novo = pd.DataFrame([nova_baixa])
+    df_novo = _padronizar_df_baixas(df_novo)
+
+    # 🔥 EVITA DUPLICIDADE REAL
+    chave_nova = df_novo["CHAVE_OPERACAO"].iloc[0]
+
+    if "CHAVE_OPERACAO" in df_existente.columns:
+        if chave_nova in df_existente["CHAVE_OPERACAO"].values:
+            return False, "Baixa já registrada"
+
+    # 🔥 CONCATENA CORRETAMENTE
+    df_final = pd.concat([df_existente, df_novo], ignore_index=True)
+
+    # 🔒 SALVAMENTO SEGURO
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
+
+    return True, "Baixa salva"
+
+
+# ============================================================
+# 🔒 CARREGAMENTO (SEM CACHE PROBLEMÁTICO)
+# ============================================================
+def carregar_baixas_operacionais(base_path):
 
     caminho = garantir_arquivo_baixas(base_path)
 
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
-        return _padronizar_df_baixas(df_baixas)
-    except Exception as e:
-        st.warning(f"Erro ao ler baixas: {e}")
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
+    except:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
+    return _padronizar_df_baixas(df_baixas)
 
 
 # ============================================================
-# 🔥 CARREGAMENTO DAS BAIXAS (FINAL CORRIGIDO)
+# 🔥 CARREGA BASE DE BAIXAS
 # ============================================================
-
-caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-
-try:
-    file_mtime_baixas = os.path.getmtime(caminho_baixas)
-except:
-    file_mtime_baixas = 0
-
-df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
-
-if not df_baixas.empty:
-
-    df_baixas["PV"] = df_baixas["PV"].astype(str).str.strip()
-    df_baixas["Processo"] = df_baixas["Processo"].astype(str).str.upper().str.strip()
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].astype(str).str.strip()
-
-    df_baixas["CHAVE"] = (
-        df_baixas["PV"] + "|" +
-        df_baixas["Processo"] + "|" +
-        df_baixas["CODIGO_PV"]
-    )
+df_baixas = carregar_baixas_operacionais(BASE_PATH)
 
 df_baixas_ativas = df_baixas[
     df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
@@ -824,24 +813,13 @@ st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
 
 # ============================================================
-# BASE OPERACIONAL VISUAL
+# 🔧 NORMALIZAÇÃO DE CHAVE (APS x BAIXAS)
 # ============================================================
-
-if "df" not in locals() or df is None:
-    df = df_original.copy()
-
-df_operacional = df_original.copy()
-
-
-# --------------------------------------------
-# FUNÇÃO DE NORMALIZAÇÃO (CORRIGIDA)
-# --------------------------------------------
 def normalizar_chave_operacao(pv, processo, codigo):
 
     def limpar(valor):
         if pd.isna(valor):
             return ""
-
         return (
             str(valor)
             .strip()
@@ -852,49 +830,41 @@ def normalizar_chave_operacao(pv, processo, codigo):
             .replace(" -", "-")
         )
 
-    pv = limpar(pv)
-    processo = limpar(processo)
-    codigo = limpar(codigo)
-
-    return f"{pv}||{processo}||{codigo}"
+    return f"{limpar(pv)}||{limpar(processo)}||{limpar(codigo)}"
 
 
-# --------------------------------------------
-# GARANTE CHAVE PADRÃO NA BASE OPERACIONAL
-# --------------------------------------------
-if not df_operacional.empty:
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        if col not in df_operacional.columns:
-            df_operacional[col] = ""
+# ============================================================
+# 🔥 BASE OPERACIONAL APS
+# ============================================================
+df_operacional = df_original.copy()
 
-        df_operacional[col] = (
-            df_operacional[col]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
+for col in ["PV", "Processo", "CODIGO_PV"]:
+    if col not in df_operacional.columns:
+        df_operacional[col] = ""
 
-    df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
+    df_operacional[col] = (
+        df_operacional[col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
     )
-else:
-    df_operacional["CHAVE_OPERACAO"] = ""
+
+df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
+    lambda r: normalizar_chave_operacao(
+        r["PV"], r["Processo"], r["CODIGO_PV"]
+    ),
+    axis=1
+)
 
 
-# --------------------------------------------
-# BASE OFICIAL PARA TIRAR DA FILA (CORRIGIDO)
-# --------------------------------------------
-df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
-
+# ============================================================
+# 🔥 REMOVE BAIXADOS DA FILA (AGORA FUNCIONA DE VERDADE)
+# ============================================================
 if not df_baixas_ativas.empty:
 
     df_baixas_tmp = df_baixas_ativas.copy()
 
-    # NORMALIZA IGUAL À BASE OPERACIONAL
     for col in ["PV", "Processo", "CODIGO_PV"]:
         if col not in df_baixas_tmp.columns:
             df_baixas_tmp[col] = ""
@@ -907,7 +877,6 @@ if not df_baixas_ativas.empty:
             .str.upper()
         )
 
-    # 🔥 CHAVE USANDO A MESMA FUNÇÃO
     df_baixas_tmp["CHAVE_OPERACAO"] = df_baixas_tmp.apply(
         lambda r: normalizar_chave_operacao(
             r["PV"], r["Processo"], r["CODIGO_PV"]
@@ -915,11 +884,20 @@ if not df_baixas_ativas.empty:
         axis=1
     )
 
-    # 🔥 SET DE CHAVES (SIMPLES E CONFIÁVEL)
-    chaves_baixadas_ativas = set(df_baixas_tmp["CHAVE_OPERACAO"])
+    chaves_baixadas = set(df_baixas_tmp["CHAVE_OPERACAO"])
 
-else:
-    chaves_baixadas_ativas = set()
+    df_operacional = df_operacional[
+        ~df_operacional["CHAVE_OPERACAO"].isin(chaves_baixadas)
+    ].copy()
+
+# ============================================================
+# BASE OPERACIONAL
+# ============================================================
+
+if "df" not in locals() or df is None:
+    df = df_original.copy()
+
+df_operacional = df_original.copy()
 
 
 # --------------------------------------------
