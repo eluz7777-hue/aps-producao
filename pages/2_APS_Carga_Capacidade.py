@@ -926,6 +926,52 @@ df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
     axis=1
 )
 
+
+
+
+# ------------------------------------------------------------
+# GARANTE BASE DE BAIXAS ATIVAS (OBRIGATÓRIO)
+# ------------------------------------------------------------
+df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+
+if not df_baixas_ativas.empty:
+
+    df_baixas_tmp = df_baixas_ativas.copy()
+
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col not in df_baixas_tmp.columns:
+            df_baixas_tmp[col] = ""
+
+        df_baixas_tmp[col] = (
+            df_baixas_tmp[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+    df_baixas_tmp["CHAVE_OPERACAO"] = df_baixas_tmp.apply(
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
+        axis=1
+    )
+
+    chaves_baixadas_ativas = set(df_baixas_tmp["CHAVE_OPERACAO"])
+
+else:
+    chaves_baixadas_ativas = set()
+
+
+# 🔥 LINHA QUE JÁ EXISTE (NÃO MEXE)
+df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
+    lambda chave: "✅ Baixado" if chave in chaves_baixadas_ativas else "⏳ Pendente"
+)
+
+
+
+
+
 # ------------------------------------------------------------
 # STATUS OPERACIONAL
 # ------------------------------------------------------------
