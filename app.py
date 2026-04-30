@@ -1,26 +1,43 @@
 import streamlit as st
 import os
+import pandas as pd
 
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
-# 🔒 DEFINIÇÃO DE CAMINHO (GARANTIDO)
+# 🔒 DEFINIÇÃO DE CAMINHO
 # ============================================================
-PAGE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = PAGE_DIR  # app.py já está na raiz
-
-BASE_PATH = ROOT_DIR
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
-# 🔥 FORÇA CRIAÇÃO DO ARQUIVO DE BAIXAS
+# 🔥 CRIAÇÃO GARANTIDA DO EXCEL DE BAIXAS
 # ============================================================
-from seu_modulo import garantir_arquivo_baixas  # ⚠️ AJUSTE SE NECESSÁRIO
+ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
 
-caminho_debug = garantir_arquivo_baixas(BASE_PATH)
+def garantir_arquivo_baixas_local(base_path):
+    os.makedirs(base_path, exist_ok=True)
+    caminho = os.path.join(base_path, ARQUIVO_BAIXAS)
 
-st.write("📄 Criando arquivo de baixas em:")
+    if not os.path.exists(caminho):
+        df_vazio = pd.DataFrame(columns=[
+            "PV","Cliente","CODIGO_PV","Processo","Horas",
+            "Data_Baixa","Usuario","Observacao",
+            "Status_Baixa","Data_Estorno","Motivo_Estorno"
+        ])
+        df_vazio.to_excel(caminho, index=False)
+
+    return caminho
+
+# ============================================================
+# 🔍 EXECUÇÃO
+# ============================================================
+caminho_debug = garantir_arquivo_baixas_local(BASE_PATH)
+
+st.write("📄 Caminho do arquivo de baixas:")
 st.write(caminho_debug)
-st.write("📌 Existe?", os.path.exists(caminho_debug))
+
+st.write("📌 Arquivo existe?")
+st.write(os.path.exists(caminho_debug))
 
 
 # ============================================================
