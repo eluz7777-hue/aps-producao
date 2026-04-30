@@ -2688,7 +2688,13 @@ else:
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
+    # 🔍 DEBUG (TEMPORÁRIO - REMOVER DEPOIS)
+    st.warning("🔥 FUNÇÃO DE SALVAR FOI CHAMADA")
+
     caminho = garantir_arquivo_baixas(base_path)
+
+    # 🔍 DEBUG CAMINHO (TEMPORÁRIO)
+    st.write("📁 SALVANDO EM:", caminho)
 
     # ------------------------------------------------------------
     # CARREGA BASE
@@ -2785,7 +2791,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
                 df_existente = pd.concat([df_existente, log], ignore_index=True)
 
-                # 🔥 CORREÇÃO AQUI (GRAVAÇÃO SEGURA)
+                # 🔥 GRAVAÇÃO SEGURA (CORRIGIDA)
                 with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
                     df_existente.to_excel(writer, index=False)
 
@@ -2796,14 +2802,16 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 }
 
     # ------------------------------------------------------------
-    # SALVAMENTO FINAL (CORREÇÃO ÚNICA)
+    # SALVAMENTO FINAL (CORRIGIDO)
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
     try:
-        # 🔥 ÚNICA MUDANÇA REAL
         with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
             df_final.to_excel(writer, index=False)
+
+        # 🔍 DEBUG FINAL
+        st.success("✅ BAIXA SALVA NO EXCEL")
 
         return {"ok": True}
 
@@ -2813,6 +2821,8 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             "erro": str(e),
             "tipo": "erro_gravacao"
         }
+
+
 
 
 
