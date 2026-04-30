@@ -3890,15 +3890,46 @@ col_k3.metric("Horas na Fila", f"{pd.to_numeric(fila['Horas'], errors='coerce').
 st.markdown("### 📋 PVs na Fila")
 
 fila_detalhe = fila.copy()
-fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
+
+# ------------------------------------------------------------
+# 🔒 TRATAMENTOS
+# ------------------------------------------------------------
+fila_detalhe["Horas"] = pd.to_numeric(
+    fila_detalhe["Horas"], errors="coerce"
+).fillna(0).round(1)
+
+fila_detalhe["Dias para Entrega"] = pd.to_numeric(
+    fila_detalhe["Dias para Entrega"], errors="coerce"
+).fillna(999)
 
 if "ENTREGA" in fila_detalhe.columns:
-    fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
+    fila_detalhe["ENTREGA"] = pd.to_datetime(
+        fila_detalhe["ENTREGA"], errors="coerce"
+    )
+
+# ------------------------------------------------------------
+# 🔥 ORDENAÇÃO INTELIGENTE (AQUI ESTAVA O ERRO)
+# ------------------------------------------------------------
+fila_detalhe = fila_detalhe.sort_values(
+    by=[
+        "Dias para Entrega",  # menor prazo primeiro
+        "Horas"               # maior carga primeiro
+    ],
+    ascending=[True, False]
+)
+
+# ------------------------------------------------------------
+# 🔒 FORMATAR DATA (DEPOIS DA ORDENAÇÃO)
+# ------------------------------------------------------------
+if "ENTREGA" in fila_detalhe.columns:
     fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
+# ------------------------------------------------------------
+# 🔒 COLUNAS
+# ------------------------------------------------------------
 colunas_fila = [
-    "Prioridade",   # 🔥 NOVO
-    "Gargalo",      # 🔥 NOVO
+    "Prioridade",
+    "Gargalo",
     "Semáforo",
     "PV",
     "Cliente",
@@ -3913,6 +3944,9 @@ colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
 
 fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
 
+# ------------------------------------------------------------
+# 🔒 EXIBIÇÃO
+# ------------------------------------------------------------
 st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
