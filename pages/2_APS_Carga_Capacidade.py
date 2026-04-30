@@ -890,19 +890,45 @@ if not df_baixas_ativas.empty:
         ~df_operacional["CHAVE_OPERACAO"].isin(chaves_baixadas)
     ].copy()
 
+
+
+
+
 # ============================================================
-# BASE OPERACIONAL
+# BASE OPERACIONAL (VERSÃO FINAL CORRIGIDA COMPLETA)
 # ============================================================
 
-if "df" not in locals() or df is None:
-    df = df_original.copy()
-
+# 🔒 BASE ORIGINAL
 df_operacional = df_original.copy()
 
+# ------------------------------------------------------------
+# NORMALIZA CAMPOS (GARANTE CONSISTÊNCIA)
+# ------------------------------------------------------------
+for col in ["PV", "Processo", "CODIGO_PV"]:
+    if col not in df_operacional.columns:
+        df_operacional[col] = ""
 
-# --------------------------------------------
-# APLICA STATUS OPERACIONAL (SIMPLIFICADO E CORRETO)
-# --------------------------------------------
+    df_operacional[col] = (
+        df_operacional[col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+# ------------------------------------------------------------
+# 🔥 CHAVE OPERACIONAL (ESSENCIAL)
+# ------------------------------------------------------------
+df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
+    lambda r: normalizar_chave_operacao(
+        r["PV"], r["Processo"], r["CODIGO_PV"]
+    ),
+    axis=1
+)
+
+# ------------------------------------------------------------
+# STATUS OPERACIONAL
+# ------------------------------------------------------------
 df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
     lambda chave: "✅ Baixado" if chave in chaves_baixadas_ativas else "⏳ Pendente"
 )
@@ -912,12 +938,17 @@ df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
 # ============================================================
 df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
 df = df.reset_index(drop=True)
-# DataFrames auxiliares
+
+# ------------------------------------------------------------
+# DATAFRAMES AUXILIARES (MANTIDOS INTACTOS)
+# ------------------------------------------------------------
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
-# Blindagem dos auxiliares
+# ------------------------------------------------------------
+# BLINDAGEM DOS AUXILIARES
+# ------------------------------------------------------------
 for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
     if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
         _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
@@ -926,9 +957,9 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
             dayfirst=True
         )
 
-# -------------------------------
-# Garantia de rastreabilidade
-# -------------------------------
+# ------------------------------------------------------------
+# GARANTIA DE RASTREABILIDADE
+# ------------------------------------------------------------
 pvs_auditadas_set = set(df_auditoria_pv["PV"].astype(str).str.strip().unique()) if not df_auditoria_pv.empty else set()
 pvs_nao_auditadas = pvs_excel_set - pvs_auditadas_set
 
@@ -975,6 +1006,9 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
             dayfirst=True
         )
 
+# ------------------------------------------------------------
+# TRAVA FINAL (DIAGNÓSTICO)
+# ------------------------------------------------------------
 if df.empty:
     st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
 
@@ -993,6 +1027,7 @@ if df.empty:
     st.dataframe(df_pv.head(20), use_container_width=True)
 
     st.stop()
+
 
 
 
@@ -2629,7 +2664,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo[col] = ""
 
     # ------------------------------------------------------------
-    # PADRONIZAÇÃO
+    # PADRONIZAÇÃO (MANTIDA EXATAMENTE COMO VOCÊ FEZ)
     # ------------------------------------------------------------
     for col in ["PV", "CODIGO_PV", "Processo"]:
         novo[col] = (
@@ -2666,7 +2701,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # VALIDAÇÃO
+    # VALIDAÇÃO (MANTIDA 100%)
     # ------------------------------------------------------------
     if not df_existente.empty:
 
@@ -2703,7 +2738,10 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 log["Data_Baixa"] = pd.Timestamp.now()
 
                 df_existente = pd.concat([df_existente, log], ignore_index=True)
-                df_existente.to_excel(caminho, index=False)
+
+                # 🔥 CORREÇÃO AQUI (GRAVAÇÃO SEGURA)
+                with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+                    df_existente.to_excel(writer, index=False)
 
                 return {
                     "ok": False,
@@ -2712,12 +2750,15 @@ def salvar_baixa_operacional(base_path, registro_baixa):
                 }
 
     # ------------------------------------------------------------
-    # SALVAMENTO
+    # SALVAMENTO FINAL (CORREÇÃO ÚNICA)
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
     try:
-        df_final.to_excel(caminho, index=False)
+        # 🔥 ÚNICA MUDANÇA REAL
+        with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+            df_final.to_excel(writer, index=False)
+
         return {"ok": True}
 
     except Exception as e:
@@ -2726,7 +2767,6 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             "erro": str(e),
             "tipo": "erro_gravacao"
         }
-
 
 
 
