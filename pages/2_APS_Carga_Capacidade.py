@@ -5336,34 +5336,3 @@ st.session_state["df"] = df.copy()
 
 
 
-# ============================================================
-# 🔧 RECUPERAÇÃO MANUAL DE BAIXAS (TEMPORÁRIO)
-# ============================================================
-
-if st.button("🔧 REPROCESSAR BAIXAS PERDIDAS"):
-
-    lista_pvs = [
-        6994, 6996, 6959, 7005, 6962, 6945, 6937, 6820, 6821, 6944,
-        6922, 6923, 6906, 6846, 6941, 6903, 6972, 6940, 6946, 6958,
-        6808, 6954, 7026, 6975, 6972, 6981, 6937, 7027, 6973, 6943,
-        6930, 6829, 6989, 7035, 7075, 6938, 6972, 6995, 6934
-    ]
-
-    for pv in lista_pvs:
-
-        salvar_baixa_operacional(BASE_PATH, {
-            "PV": pv,
-            "Cliente": "",
-            "CODIGO_PV": "",
-            "Processo": "CORTE - LASER",  # ⚠️ depois ajustamos outros processos
-            "Horas": 1,
-            "Data_Baixa": pd.Timestamp.now(),
-            "Usuario": "RECUPERACAO",
-            "Observacao": "Recuperação manual",
-            "Status_Baixa": "ATIVA",
-            "Data_Estorno": "",
-            "Motivo_Estorno": ""
-        })
-
-    st.success("✅ Baixas reprocessadas com sucesso")
-
