@@ -5,17 +5,17 @@ import pandas as pd
 st.set_page_config(page_title="ELOHIM APS", layout="wide")
 
 # ============================================================
-# 🔒 DEFINIÇÃO DE CAMINHO
+# 🔒 BASE PATH REAL (PERSISTÊNCIA LOCAL GARANTIDA)
 # ============================================================
-BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+BASE_PATH = os.getcwd()
+os.makedirs(BASE_PATH, exist_ok=True)
 
 # ============================================================
-# 🔥 CRIAÇÃO GARANTIDA DO EXCEL DE BAIXAS
+# 🔥 ARQUIVO DE BAIXAS
 # ============================================================
 ARQUIVO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
 
 def garantir_arquivo_baixas_local(base_path):
-    os.makedirs(base_path, exist_ok=True)
     caminho = os.path.join(base_path, ARQUIVO_BAIXAS)
 
     if not os.path.exists(caminho):
@@ -29,17 +29,9 @@ def garantir_arquivo_baixas_local(base_path):
     return caminho
 
 # ============================================================
-# 🔍 EXECUÇÃO
+# 🔒 GARANTE EXISTÊNCIA DO ARQUIVO (SEM DEBUG)
 # ============================================================
-caminho_debug = garantir_arquivo_baixas_local(BASE_PATH)
-
-st.write("📄 Caminho do arquivo de baixas:")
-st.write(caminho_debug)
-
-st.write("📌 Arquivo existe?")
-st.write(os.path.exists(caminho_debug))
-
-
+caminho_baixas = garantir_arquivo_baixas_local(BASE_PATH)
 # ============================================================
 # 🎨 ESTILO SIDEBAR (FUNCIONA NA NAV NATIVA)
 # ============================================================
