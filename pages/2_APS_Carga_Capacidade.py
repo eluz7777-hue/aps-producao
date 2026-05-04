@@ -752,37 +752,76 @@ def _padronizar_df_baixas(df_baixas):
 
 
 # ============================================================
-# 🔥 SALVAR BAIXA (COM PROTEÇÃO CONTRA PERDA)
+# 🔥 SALVAR BAIXA (VERSÃO SEGURA E CONSISTENTE)
 # ============================================================
 def salvar_baixa_operacional(base_path, nova_baixa):
 
     caminho = garantir_arquivo_baixas(base_path)
 
-    try:
-        df_existente = pd.read_excel(caminho, dtype=str)
-    except:
+    # ------------------------------------------------------------
+    # 🔒 CARREGA BASE COM SEGURANÇA
+    # ------------------------------------------------------------
+    if os.path.exists(caminho):
+        try:
+            df_existente = pd.read_excel(caminho, dtype=str)
+        except:
+            df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+    else:
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
     df_existente = _padronizar_df_baixas(df_existente)
 
+    # ------------------------------------------------------------
+    # 🔥 NOVO REGISTRO
+    # ------------------------------------------------------------
     df_novo = pd.DataFrame([nova_baixa])
     df_novo = _padronizar_df_baixas(df_novo)
 
-    # 🔥 EVITA DUPLICIDADE REAL
     chave_nova = df_novo["CHAVE_OPERACAO"].iloc[0]
 
-    if "CHAVE_OPERACAO" in df_existente.columns:
-        if chave_nova in df_existente["CHAVE_OPERACAO"].values:
-            return False, "Baixa já registrada"
+    # ------------------------------------------------------------
+    # 🔒 VALIDAÇÃO DE DUPLICIDADE (CORRETA)
+    # ------------------------------------------------------------
+    if not df_existente.empty and "CHAVE_OPERACAO" in df_existente.columns:
 
-    # 🔥 CONCATENA CORRETAMENTE
+        df_existente["Status_Baixa"] = (
+            df_existente["Status_Baixa"]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+        )
+
+        duplicadas_ativas = df_existente[
+            (df_existente["CHAVE_OPERACAO"] == chave_nova) &
+            (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
+        ]
+
+        if not duplicadas_ativas.empty:
+            return False, "Baixa já registrada (ativa)"
+
+    # ------------------------------------------------------------
+    # 🔥 CONCATENA
+    # ------------------------------------------------------------
     df_final = pd.concat([df_existente, df_novo], ignore_index=True)
 
-    # 🔒 SALVAMENTO SEGURO
-    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-        df_final[COLUNAS_BAIXAS].to_excel(writer, index=False)
+    # ------------------------------------------------------------
+    # 🔒 BACKUP ANTES DE SALVAR
+    # ------------------------------------------------------------
+    import shutil
+    if os.path.exists(caminho):
+        try:
+            shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
+        except:
+            pass
+
+    # ------------------------------------------------------------
+    # 🔒 SALVAMENTO SEGURO (SEM WRITER)
+    # ------------------------------------------------------------
+    df_final[COLUNAS_BAIXAS].to_excel(caminho, index=False)
 
     return True, "Baixa salva"
+
+
 
 
 # ============================================================
@@ -2633,27 +2672,35 @@ else:
 
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL INTEGRADA APS)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL INTEGRADA APS - SEGURA)
 # ============================================================
 def salvar_baixa_operacional(base_path, registro_baixa):
 
-    # 🔍 DEBUG (TEMPORÁRIO - REMOVER DEPOIS)
+    # 🔍 DEBUG (MANTIDO)
     st.warning("🔥 FUNÇÃO DE SALVAR FOI CHAMADA")
 
     caminho = garantir_arquivo_baixas(base_path)
 
-    # 🔍 DEBUG CAMINHO (TEMPORÁRIO)
+    # 🔍 DEBUG CAMINHO (MANTIDO)
     st.write("📁 SALVANDO EM:", caminho)
 
     # ------------------------------------------------------------
-    # CARREGA BASE
+    # 🔒 CARREGA BASE COM SEGURANÇA
     # ------------------------------------------------------------
-    try:
-        df_existente = pd.read_excel(caminho, dtype=str)
-    except Exception:
+    if os.path.exists(caminho):
+        try:
+            df_existente = pd.read_excel(caminho, dtype=str)
+        except Exception:
+            df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+    else:
         df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
     df_existente = df_existente.copy()
+
+    # 🔒 GARANTE COLUNAS
+    for col in COLUNAS_BAIXAS:
+        if col not in df_existente.columns:
+            df_existente[col] = ""
 
     # ------------------------------------------------------------
     # NOVO REGISTRO
@@ -2665,7 +2712,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             novo[col] = ""
 
     # ------------------------------------------------------------
-    # PADRONIZAÇÃO (MANTIDA EXATAMENTE COMO VOCÊ FEZ)
+    # PADRONIZAÇÃO (MANTIDA)
     # ------------------------------------------------------------
     for col in ["PV", "CODIGO_PV", "Processo"]:
         novo[col] = (
@@ -2690,7 +2737,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     novo["Data_Baixa"] = pd.to_datetime(novo["Data_Baixa"], errors="coerce")
 
     # ------------------------------------------------------------
-    # 🔥 CHAVE USANDO FUNÇÃO OFICIAL (CRÍTICO)
+    # 🔥 CHAVE PADRÃO
     # ------------------------------------------------------------
     novo["CHAVE_OPERACAO"] = novo.apply(
         lambda r: normalizar_chave_operacao(
@@ -2702,7 +2749,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
     chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # VALIDAÇÃO (MANTIDA 100%)
+    # 🔒 VALIDAÇÃO DE DUPLICIDADE
     # ------------------------------------------------------------
     if not df_existente.empty:
 
@@ -2710,7 +2757,7 @@ def salvar_baixa_operacional(base_path, registro_baixa):
 
         df_tmp["CHAVE_OPERACAO"] = df_tmp.apply(
             lambda r: normalizar_chave_operacao(
-                r["PV"], r["Processo"], r["CODIGO_PV"]
+                r.get("PV", ""), r.get("Processo", ""), r.get("CODIGO_PV", "")
             ),
             axis=1
         )
@@ -2723,43 +2770,53 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             .str.upper()
         )
 
-        registros = df_tmp[df_tmp["CHAVE_OPERACAO"] == chave_nova]
+        registros_ativos = df_tmp[
+            (df_tmp["CHAVE_OPERACAO"] == chave_nova) &
+            (df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
+        ]
 
-        if not registros.empty:
+        if not registros_ativos.empty:
 
-            registros_ativos = registros[
-                registros["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-            ]
+            log = novo.copy()
+            log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
+            log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
+            log["Data_Baixa"] = pd.Timestamp.now()
 
-            if not registros_ativos.empty:
+            df_existente = pd.concat([df_existente, log], ignore_index=True)
 
-                log = novo.copy()
-                log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
-                log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
-                log["Data_Baixa"] = pd.Timestamp.now()
+            # 🔒 BACKUP ANTES DE SALVAR
+            import shutil
+            if os.path.exists(caminho):
+                try:
+                    shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
+                except:
+                    pass
 
-                df_existente = pd.concat([df_existente, log], ignore_index=True)
+            df_existente.to_excel(caminho, index=False)
 
-                # 🔥 GRAVAÇÃO SEGURA (CORRIGIDA)
-                with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-                    df_existente.to_excel(writer, index=False)
-
-                return {
-                    "ok": False,
-                    "erro": "Operação já possui baixa ativa",
-                    "tipo": "duplicidade"
-                }
+            return {
+                "ok": False,
+                "erro": "Operação já possui baixa ativa",
+                "tipo": "duplicidade"
+            }
 
     # ------------------------------------------------------------
-    # SALVAMENTO FINAL (CORRIGIDO)
+    # 🔥 SALVAMENTO FINAL (SEGURO)
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, novo], ignore_index=True)
 
-    try:
-        with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-            df_final.to_excel(writer, index=False)
+    # 🔒 BACKUP ANTES DE SALVAR
+    import shutil
+    if os.path.exists(caminho):
+        try:
+            shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
+        except:
+            pass
 
-        # 🔍 DEBUG FINAL
+    try:
+        df_final.to_excel(caminho, index=False)
+
+        # 🔍 DEBUG FINAL (MANTIDO)
         st.success("✅ BAIXA SALVA NO EXCEL")
 
         return {"ok": True}
@@ -2770,8 +2827,6 @@ def salvar_baixa_operacional(base_path, registro_baixa):
             "erro": str(e),
             "tipo": "erro_gravacao"
         }
-
-
 
 
 
@@ -2845,26 +2900,31 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
 
     # ------------------------------------------------------------
-    # 🔥 GARANTE QUE NÃO PERDE COLUNAS AO SALVAR
+    # 🔒 PREPARA PARA SALVAR
     # ------------------------------------------------------------
     df_para_salvar = df_baixas.copy()
 
-    # remove colunas auxiliares que não pertencem ao Excel
     colunas_salvar = [col for col in COLUNAS_BAIXAS if col in df_para_salvar.columns]
 
-    try:
-        with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
-            df_para_salvar[colunas_salvar].to_excel(writer, index=False)
-    except Exception as e:
-        return False, f"Erro ao salvar arquivo: {e}"
+    # ------------------------------------------------------------
+    # 🔥 BACKUP ANTES DE SALVAR (CRÍTICO)
+    # ------------------------------------------------------------
+    import os
+    import shutil
+
+    if os.path.exists(caminho):
+        try:
+            shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
+        except Exception:
+            pass
 
     # ------------------------------------------------------------
-    # 🔒 BACKUP (SEGURANÇA EXTRA)
+    # 🔒 SALVAMENTO SEGURO
     # ------------------------------------------------------------
     try:
-        _criar_backup()
-    except Exception:
-        pass
+        df_para_salvar[colunas_salvar].to_excel(caminho, index=False)
+    except Exception as e:
+        return False, f"Erro ao salvar arquivo: {e}"
 
     return True, "Baixa estornada com sucesso."
 
