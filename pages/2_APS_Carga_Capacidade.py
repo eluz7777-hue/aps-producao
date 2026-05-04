@@ -3220,15 +3220,20 @@ risco = pv_carga[
 base_corte = df_operacional.copy()
 
 # 🔒 NORMALIZAÇÃO (CRÍTICA)
-base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
-base_corte["PV"] = base_corte["PV"].astype(str).str.strip()
-base_corte["CODIGO_PV"] = base_corte["CODIGO_PV"].astype(str).str.strip()
+for col in ["PV", "Processo", "CODIGO_PV"]:
+    base_corte[col] = (
+        base_corte[col]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-# 🔥 CHAVE DETERMINÍSTICA (NUNCA MUDA)
-base_corte["CHAVE"] = (
-    base_corte["PV"] + "|" +
-    base_corte["Processo"] + "|" +
-    base_corte["CODIGO_PV"]
+# 🔥 CHAVE OFICIAL DO SISTEMA (ALINHADA)
+base_corte["CHAVE_OPERACAO"] = base_corte.apply(
+    lambda r: normalizar_chave_operacao(
+        r["PV"], r["Processo"], r["CODIGO_PV"]
+    ),
+    axis=1
 )
 
 # 🔥 FILTRO DE PROCESSOS DE CORTE
@@ -3236,13 +3241,9 @@ base_corte = base_corte[
     base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
 ].copy()
 
-
-
-
 # ============================================================
-# 🔥 REMOVE OPERAÇÕES JÁ BAIXADAS (ALINHADO COM APS)
+# 🔥 REMOVE OPERAÇÕES JÁ BAIXADAS (ALINHADO COM EXCEL)
 # ============================================================
-
 try:
     caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
     df_baixas = pd.read_excel(caminho_baixas, dtype=str)
@@ -3251,12 +3252,10 @@ except:
 
 if not df_baixas.empty:
 
-    # 🔒 garante colunas
     for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa"]:
         if col not in df_baixas.columns:
             df_baixas[col] = ""
 
-    # 🔒 normalização
     for col in ["PV", "Processo", "CODIGO_PV"]:
         df_baixas[col] = (
             df_baixas[col]
@@ -3277,7 +3276,6 @@ if not df_baixas.empty:
         df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
     ].copy()
 
-    # 🔥 chave padrão do sistema
     df_baixas_ativas["CHAVE_OPERACAO"] = df_baixas_ativas.apply(
         lambda r: normalizar_chave_operacao(
             r["PV"], r["Processo"], r["CODIGO_PV"]
@@ -3287,13 +3285,12 @@ if not df_baixas.empty:
 
     chaves_baixadas = set(df_baixas_ativas["CHAVE_OPERACAO"])
 
-    # 🔥 REMOVE DA BASE CORTE (AGORA CORRETO)
     base_corte = base_corte[
         ~base_corte["CHAVE_OPERACAO"].isin(chaves_baixadas)
     ].copy()
 
 # ============================================================
-# 🔥 PRIORIDADE APS (MANTIDO INTACTO)
+# 🔥 PRIORIDADE APS (MANTIDO)
 # ============================================================
 df_prioridade = st.session_state.get("df_prioridade", None)
 
@@ -3301,11 +3298,17 @@ if df_prioridade is not None and not df_prioridade.empty:
 
     df_prioridade = df_prioridade.copy()
 
-    df_prioridade["PV"] = df_prioridade["PV"].astype(str).str.strip()
-    df_prioridade["Processo"] = df_prioridade["Processo"].astype(str).str.upper().str.strip()
-    df_prioridade["CODIGO_PV"] = df_prioridade["CODIGO_PV"].astype(str).str.strip()
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        df_prioridade[col] = (
+            df_prioridade[col]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
-    df_prioridade_unique = df_prioridade.drop_duplicates(subset=["PV", "Processo", "CODIGO_PV"])
+    df_prioridade_unique = df_prioridade.drop_duplicates(
+        subset=["PV", "Processo", "CODIGO_PV"]
+    )
 
     base_corte = base_corte.merge(
         df_prioridade_unique[["PV", "Processo", "CODIGO_PV", "Ranking_APS"]],
@@ -3334,7 +3337,9 @@ if base_corte.empty:
     st.info("Nenhuma operação de corte encontrada.")
 else:
 
-    base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
+    base_corte["Horas"] = pd.to_numeric(
+        base_corte["Horas"], errors="coerce"
+    ).fillna(0).round(1)
 
     base_corte = base_corte.reset_index(drop=True)
 
@@ -3345,13 +3350,13 @@ else:
         " | " + base_corte["Horas"].astype(str) + " h"
     )
 
-    base_corte_pendente = base_corte.copy()  # 🔥 agora já filtrado corretamente
+    # 🔥 AGORA SIM: BASE REAL PENDENTE
+    base_corte_pendente = base_corte.copy()
 
     if base_corte_pendente.empty:
         st.info("Nenhuma operação pendente de corte.")
     else:
         opcoes = base_corte_pendente["LABEL"].tolist()
-
 
 
 
