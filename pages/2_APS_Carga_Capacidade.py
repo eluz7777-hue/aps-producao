@@ -17,92 +17,43 @@ import os
 import time
 import holidays
 import math
-import shutil
 from datetime import datetime
 
 st.set_page_config(layout="wide")
 
+# ============================================================
+# 🔒 COLUNAS PADRÃO DAS BAIXAS (GARANTIA LOCAL)
+# ============================================================
+COLUNAS_BAIXAS = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Data_Baixa",
+    "Usuario",
+    "Observacao",
+    "Status_Baixa",
+    "Data_Estorno",
+    "Motivo_Estorno"
+]
 
 # ============================================================
-# 🧠 BASE DE BAIXAS EM MEMÓRIA (SUBSTITUI EXCEL)
+# 🧠 BASE DE BAIXAS EM MEMÓRIA (OFICIAL)
 # ============================================================
-
 if "df_baixas" not in st.session_state:
     st.session_state.df_baixas = pd.DataFrame(
         columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
     )
 
-
 # ============================================================
-# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
+# 🔐 UTILITÁRIO DE LIMPEZA (OPCIONAL, NÃO PERDE FUNCIONALIDADE)
 # ============================================================
+def resetar_baixas_sessao():
+    st.session_state.df_baixas = pd.DataFrame(
+        columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+    )
 
-PASTA_BACKUP_BAIXAS = "backup_baixas"
-ARQUIVO_HISTORICO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
-
-
-def _garantir_pasta_backup():
-    os.makedirs(PASTA_BACKUP_BAIXAS, exist_ok=True)
-
-
-def _gerar_nome_backup():
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return f"APS_BAIXAS_OPERACIONAIS_{timestamp}.xlsx"
-
-
-def _criar_backup():
-    try:
-        if not os.path.exists(ARQUIVO_HISTORICO_BAIXAS):
-            return False, "Arquivo ainda não existe (primeira gravação)"
-
-        _garantir_pasta_backup()
-
-        destino = os.path.join(
-            PASTA_BACKUP_BAIXAS,
-            _gerar_nome_backup()
-        )
-
-        shutil.copy2(ARQUIVO_HISTORICO_BAIXAS, destino)
-
-        return True, destino
-
-    except Exception as e:
-        return False, str(e)
-
-
-def salvar_historico_baixas(df):
-    """
-    🔴 ÚNICO PONTO OFICIAL DE GRAVAÇÃO DO HISTÓRICO
-    🔒 COM PROTEÇÃO CONTRA PERDA DE DADOS
-    """
-
-    try:
-        if df is None or df.empty:
-            return {
-                "ok": False,
-                "erro": "DataFrame vazio - gravação cancelada para evitar perda de histórico",
-                "backup_ok": False,
-                "backup_msg": None
-            }
-
-        backup_ok, backup_msg = _criar_backup()
-
-        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
-
-        return {
-            "ok": True,
-            "linhas": len(df),
-            "backup_ok": backup_ok,
-            "backup_msg": backup_msg
-        }
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "erro": str(e),
-            "backup_ok": False,
-            "backup_msg": None
-        }
 
 # ===============================
 # FORMATAÇÃO BR (INALTERADO)
