@@ -1057,31 +1057,92 @@ df_operacional["Qtde_Baixas"] = pd.to_numeric(
     errors="coerce"
 ).fillna(0)
 
+
+
+
+
+
 # ------------------------------------------------------------
-# 🔥 CÁLCULO DE SALDO REAL
+# 🔥 CÁLCULO DE SALDO CORRETO (POR OPERAÇÃO REAL)
 # ------------------------------------------------------------
-df_operacional["Saldo_Horas"] = (
-    df_operacional["Horas"] - df_operacional["Horas_Baixadas"]
+
+# 🔒 garante numérico
+df_operacional["Horas"] = pd.to_numeric(
+    df_operacional["Horas"], errors="coerce"
+).fillna(0)
+
+df_operacional["Horas_Baixadas"] = pd.to_numeric(
+    df_operacional.get("Horas_Baixadas", 0), errors="coerce"
+).fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 TOTAL REAL POR OPERAÇÃO
+# ------------------------------------------------------------
+base_total = (
+    df_operacional.groupby("CHAVE_OPERACAO", as_index=False)
+    .agg(Horas_Total=("Horas", "sum"))
 )
 
-# 🔒 PROTEÇÃO CONTRA NEGATIVO
-df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].clip(lower=0)
+# ------------------------------------------------------------
+# 🔥 BAIXAS CONSOLIDADAS
+# ------------------------------------------------------------
+base_baixada = df_baixas_agg.copy()
+
+base_baixada["Horas_Baixadas"] = pd.to_numeric(
+    base_baixada.get("Horas_Baixadas", 0),
+    errors="coerce"
+).fillna(0)
 
 # ------------------------------------------------------------
-# 🔥 STATUS OPERACIONAL INTELIGENTE
+# 🔥 MERGE CORRETO
 # ------------------------------------------------------------
+base_saldo = base_total.merge(
+    base_baixada,
+    on="CHAVE_OPERACAO",
+    how="left"
+)
+
+base_saldo["Horas_Baixadas"] = base_saldo["Horas_Baixadas"].fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 SALDO REAL
+# ------------------------------------------------------------
+base_saldo["Saldo_Horas"] = (
+    base_saldo["Horas_Total"] - base_saldo["Horas_Baixadas"]
+)
+
+base_saldo["Saldo_Horas"] = base_saldo["Saldo_Horas"].clip(lower=0)
+
+# ------------------------------------------------------------
+# 🔥 TRAZ SALDO PARA BASE OPERACIONAL
+# ------------------------------------------------------------
+df_operacional = df_operacional.drop(columns=["Saldo_Horas"], errors="ignore")
+
+df_operacional = df_operacional.merge(
+    base_saldo[["CHAVE_OPERACAO", "Saldo_Horas"]],
+    on="CHAVE_OPERACAO",
+    how="left"
+)
+
+df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 STATUS OPERACIONAL CORRETO
+# ------------------------------------------------------------
+total_por_operacao = df_operacional.groupby("CHAVE_OPERACAO")["Horas"].transform("sum")
+
 df_operacional["Status Operacional"] = np.where(
     df_operacional["Saldo_Horas"] <= 0,
     "✅ Baixado",
     np.where(
-        df_operacional["Horas_Baixadas"] > 0,
+        df_operacional["Saldo_Horas"] < total_por_operacao,
         "🟡 Parcial",
         "⏳ Pendente"
     )
 )
 
 # ------------------------------------------------------------
-# 🔥 BASE REAL DO APS (CORRIGIDA)
+# 🔥 BASE REAL DO APS (AGORA CORRETA)
 # ------------------------------------------------------------
 df = df_operacional[
     df_operacional["Saldo_Horas"] > 0
