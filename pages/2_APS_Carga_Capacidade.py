@@ -890,7 +890,17 @@ df_operacional = df_original.copy()
 # ------------------------------------------------------------
 # 🔒 NORMALIZA CAMPOS (PADRÃO ÚNICO DO SISTEMA)
 # ------------------------------------------------------------
-for col in ["PV", "Processo", "CODIGO_PV"]:
+def _normalizar_codigo(x):
+    if pd.isna(x):
+        return ""
+    x = str(x)
+    x = x.replace("\xa0", "")
+    x = x.replace(" ", "")
+    x = x.replace(".0", "")
+    x = x.strip()
+    return x.upper()
+
+for col in ["PV", "Processo"]:
     if col not in df_operacional.columns:
         df_operacional[col] = ""
 
@@ -902,28 +912,25 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
         .str.upper()
     )
 
+# 🔥 NORMALIZAÇÃO FORTE DO CODIGO
+df_operacional["CODIGO_PV"] = df_operacional["CODIGO_PV"].apply(_normalizar_codigo)
+
 # ------------------------------------------------------------
 # 🔥 CHAVE OPERACIONAL (ÚNICA E CONSISTENTE)
 # ------------------------------------------------------------
-df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
-    lambda r: normalizar_chave_operacao(
-        r["PV"], r["Processo"], r["CODIGO_PV"]
-    ),
-    axis=1
+df_operacional["CHAVE_OPERACAO"] = (
+    df_operacional["PV"] + "||" +
+    df_operacional["Processo"] + "||" +
+    df_operacional["CODIGO_PV"]
 )
 
-
-
 # ============================================================
-# 🔥 BASE DE BAIXAS ATIVAS (AGORA VIA MEMÓRIA)
+# 🔥 BASE DE BAIXAS ATIVAS (MEMÓRIA)
 # ============================================================
-
 df_baixas_ativas = st.session_state.df_baixas.copy()
-
 df_baixas_ativas = _padronizar_df_baixas(df_baixas_ativas)
 
 if not df_baixas_ativas.empty:
-
     df_baixas_ativas["Status_Baixa"] = (
         df_baixas_ativas["Status_Baixa"]
         .fillna("")
@@ -931,25 +938,28 @@ if not df_baixas_ativas.empty:
         .str.upper()
     )
 
-    # 🔥 mantém apenas baixas válidas
     df_baixas_ativas = df_baixas_ativas[
         df_baixas_ativas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
     ].copy()
 
 df_baixas_ativas = df_baixas_ativas.reset_index(drop=True)
 
-
-
 # ============================================================
-# 🔥 INTEGRAÇÃO REAL DE BAIXAS NA BASE APS (SEM PERDA DE HISTÓRICO)
+# 🔥 AGREGAÇÃO REAL DAS BAIXAS (CRÍTICO)
 # ============================================================
-
-# 🔒 garante base de agregação (caso ainda não exista)
-try:
-    df_baixas_agg
-except NameError:
+if df_baixas_ativas.empty:
     df_baixas_agg = pd.DataFrame(
         columns=["CHAVE_OPERACAO", "Horas_Baixadas", "Qtde_Baixas", "Ultima_Baixa"]
+    )
+else:
+    df_baixas_agg = (
+        df_baixas_ativas
+        .groupby("CHAVE_OPERACAO", as_index=False)
+        .agg(
+            Horas_Baixadas=("Horas", "sum"),
+            Qtde_Baixas=("Horas", "count"),
+            Ultima_Baixa=("Data_Baixa", "max")
+        )
     )
 
 # ------------------------------------------------------------
@@ -974,56 +984,28 @@ df_operacional["Qtde_Baixas"] = pd.to_numeric(
     errors="coerce"
 ).fillna(0)
 
-
-
-
-
-
 # ------------------------------------------------------------
 # 🔥 CÁLCULO DE SALDO CORRETO (POR OPERAÇÃO REAL)
 # ------------------------------------------------------------
-
-# 🔒 garante numérico
 df_operacional["Horas"] = pd.to_numeric(
     df_operacional["Horas"], errors="coerce"
 ).fillna(0)
 
-df_operacional["Horas_Baixadas"] = pd.to_numeric(
-    df_operacional.get("Horas_Baixadas", 0), errors="coerce"
-).fillna(0)
-
-# ------------------------------------------------------------
-# 🔥 TOTAL REAL POR OPERAÇÃO
-# ------------------------------------------------------------
+# 🔥 TOTAL POR OPERAÇÃO
 base_total = (
     df_operacional.groupby("CHAVE_OPERACAO", as_index=False)
     .agg(Horas_Total=("Horas", "sum"))
 )
 
-# ------------------------------------------------------------
-# 🔥 BAIXAS CONSOLIDADAS
-# ------------------------------------------------------------
-base_baixada = df_baixas_agg.copy()
-
-base_baixada["Horas_Baixadas"] = pd.to_numeric(
-    base_baixada.get("Horas_Baixadas", 0),
-    errors="coerce"
-).fillna(0)
-
-# ------------------------------------------------------------
-# 🔥 MERGE CORRETO
-# ------------------------------------------------------------
+# 🔥 MERGE SALDO
 base_saldo = base_total.merge(
-    base_baixada,
+    df_baixas_agg,
     on="CHAVE_OPERACAO",
     how="left"
 )
 
 base_saldo["Horas_Baixadas"] = base_saldo["Horas_Baixadas"].fillna(0)
 
-# ------------------------------------------------------------
-# 🔥 SALDO REAL
-# ------------------------------------------------------------
 base_saldo["Saldo_Horas"] = (
     base_saldo["Horas_Total"] - base_saldo["Horas_Baixadas"]
 )
@@ -1044,7 +1026,7 @@ df_operacional = df_operacional.merge(
 df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].fillna(0)
 
 # ------------------------------------------------------------
-# 🔥 STATUS OPERACIONAL CORRETO
+# 🔥 STATUS OPERACIONAL
 # ------------------------------------------------------------
 total_por_operacao = df_operacional.groupby("CHAVE_OPERACAO")["Horas"].transform("sum")
 
@@ -1059,14 +1041,13 @@ df_operacional["Status Operacional"] = np.where(
 )
 
 # ------------------------------------------------------------
-# 🔥 BASE REAL DO APS (AGORA CORRETA)
+# 🔥 BASE REAL DO APS
 # ------------------------------------------------------------
 df = df_operacional[
     df_operacional["Saldo_Horas"] > 0
 ].copy()
 
 df = df.reset_index(drop=True)
-
 
 
 
