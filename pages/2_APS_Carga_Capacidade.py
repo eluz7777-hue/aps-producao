@@ -2024,38 +2024,17 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         axis=1
     )
 
-
     # ------------------------------------------------------------
-    # 🔥 REMOVE OPERAÇÕES JÁ BAIXADAS (CORREÇÃO CRÍTICA)
+    # 🔥 BASE DE FILA JÁ CORRETA (USA SALDO REAL DO APS)
     # ------------------------------------------------------------
-    if (
-        not df_baixas_ativas.empty
-        and "PV" in df_baixas_ativas.columns
-        and "Processo" in df_baixas_ativas.columns
-        and "CODIGO_PV" in df_baixas_ativas.columns
-    ):
-
-        baixas_tmp = df_baixas_ativas.copy()
-        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
-
-        baixas_tmp["PV"] = baixas_tmp["PV"].astype(str).str.strip()
-        baixas_tmp["CODIGO_PV"] = baixas_tmp["CODIGO_PV"].astype(str).str.strip()
-
-        # 🔥 CHAVE PADRÃO (IGUAL AO RESTO DO SISTEMA)
-        baixas_tmp["CHAVE_OPERACAO"] = baixas_tmp.apply(
-            lambda r: normalizar_chave_operacao(
-                r["PV"], r["Processo"], r["CODIGO_PV"]
-            ),
-            axis=1
-        )
-
-        fila_tmp = fila_tmp[
-            ~fila_tmp["CHAVE_OPERACAO"].isin(baixas_tmp["CHAVE_OPERACAO"])
-        ].copy()
+    # ⚠️ IMPORTANTE:
+    # Não removemos mais por baixa aqui.
+    # A base "fila" já vem do APS filtrada por Saldo_Horas > 0.
+    # Qualquer remoção adicional gera inconsistência.
 
 
     # ------------------------------------------------------------
-    # BASE DE FILA (AGORA LIMPA)
+    # BASE DE FILA (AGORA LIMPA E CONFIÁVEL)
     # ------------------------------------------------------------
     resumo_fila = (
         fila_tmp.groupby("Processo", dropna=False)
@@ -2066,9 +2045,8 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         .reset_index()
     )
 
-
     # ------------------------------------------------------------
-    # BASE DE BAIXAS ATIVAS (MANTIDA)
+    # BASE DE BAIXAS ATIVAS (MANTIDA PARA CONTEXTO)
     # ------------------------------------------------------------
     if (
         df_baixas_ativas is None
@@ -2138,7 +2116,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Ranking"] = df_dash.index + 1
 
     return df_dash
-
 
 
 
