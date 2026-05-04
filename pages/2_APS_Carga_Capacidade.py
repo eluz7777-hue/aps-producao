@@ -722,7 +722,20 @@ def _padronizar_df_baixas(df_baixas):
         df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
     df_baixas["PV"] = df_baixas["PV"].str.upper()
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].str.upper()
+
+    # 🔥 CORREÇÃO CRÍTICA: NORMALIZAÇÃO FORTE DO CODIGO_PV (ALINHADO COM APS)
+    def _normalizar_codigo_baixa(x):
+        if pd.isna(x):
+            return ""
+        x = str(x)
+        x = x.replace("\xa0", "")
+        x = x.replace(" ", "")
+        x = x.replace(".0", "")
+        x = x.strip()
+        return x.upper()
+
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].apply(_normalizar_codigo_baixa)
+
     df_baixas["Processo"] = df_baixas["Processo"].str.upper()
     df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
 
@@ -749,6 +762,7 @@ def _padronizar_df_baixas(df_baixas):
     )
 
     return df_baixas
+
 
 
 # ============================================================
