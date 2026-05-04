@@ -3221,6 +3221,9 @@ base_corte = df_operacional.copy()
 
 # 🔒 NORMALIZAÇÃO (CRÍTICA)
 for col in ["PV", "Processo", "CODIGO_PV"]:
+    if col not in base_corte.columns:
+        base_corte[col] = ""
+
     base_corte[col] = (
         base_corte[col]
         .astype(str)
@@ -3350,14 +3353,44 @@ else:
         " | " + base_corte["Horas"].astype(str) + " h"
     )
 
-    # 🔥 AGORA SIM: BASE REAL PENDENTE
     base_corte_pendente = base_corte.copy()
 
     if base_corte_pendente.empty:
         st.info("Nenhuma operação pendente de corte.")
     else:
-        opcoes = base_corte_pendente["LABEL"].tolist()
 
+        selecionado = st.selectbox(
+            "Selecione a operação de corte",
+            options=base_corte_pendente["LABEL"].tolist(),
+            key="corte_unitario"
+        )
+
+        if selecionado:
+
+            linha = base_corte_pendente[
+                base_corte_pendente["LABEL"] == selecionado
+            ].iloc[0]
+
+            if st.button("Confirmar Baixa Corte"):
+
+                registro = {
+                    "PV": linha["PV"],
+                    "Cliente": linha.get("Cliente", ""),
+                    "CODIGO_PV": linha["CODIGO_PV"],
+                    "Processo": linha["Processo"],
+                    "Horas": linha["Horas"],
+                    "Data_Baixa": pd.Timestamp.now(),
+                    "Usuario": "APS",
+                    "Observacao": "Baixa corte",
+                    "Status_Baixa": "ATIVA",
+                    "Data_Estorno": "",
+                    "Motivo_Estorno": ""
+                }
+
+                salvar_baixa_operacional(BASE_PATH, registro)
+
+                st.success("Baixa realizada com sucesso")
+                st.rerun()
 
 
 
