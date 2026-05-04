@@ -2871,7 +2871,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     # 🔥 padroniza antes de qualquer operação
     df_baixas = _padronizar_df_baixas(df_baixas)
 
-    # 🔒 CHAVE CONSISTENTE (mesma regra do sistema inteiro)
+    # 🔒 CHAVE CONSISTENTE
     chave = (
         str(pv).strip().upper() + "||" +
         str(processo).strip().upper() + "||" +
@@ -2886,7 +2886,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if not filtro.any():
         return False, "Nenhuma baixa ativa encontrada."
 
-    # 🔥 pega a mais recente (segurança para múltiplos registros)
+    # 🔥 pega a mais recente
     idx = df_baixas[filtro].index[0]
 
     # ------------------------------------------------------------
@@ -2900,14 +2900,16 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
 
     # ------------------------------------------------------------
-    # 🔒 PREPARA PARA SALVAR
+    # 🔒 GARANTE TODAS AS COLUNAS
     # ------------------------------------------------------------
-    df_para_salvar = df_baixas.copy()
+    for col in COLUNAS_BAIXAS:
+        if col not in df_baixas.columns:
+            df_baixas[col] = ""
 
-    colunas_salvar = [col for col in COLUNAS_BAIXAS if col in df_para_salvar.columns]
+    df_para_salvar = df_baixas[COLUNAS_BAIXAS].copy()
 
     # ------------------------------------------------------------
-    # 🔥 BACKUP ANTES DE SALVAR (CRÍTICO)
+    # 🔥 BACKUP ANTES DE SALVAR
     # ------------------------------------------------------------
     import os
     import shutil
@@ -2922,7 +2924,7 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     # 🔒 SALVAMENTO SEGURO
     # ------------------------------------------------------------
     try:
-        df_para_salvar[colunas_salvar].to_excel(caminho, index=False)
+        df_para_salvar.to_excel(caminho, index=False)
     except Exception as e:
         return False, f"Erro ao salvar arquivo: {e}"
 
