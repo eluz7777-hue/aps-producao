@@ -752,14 +752,14 @@ def _padronizar_df_baixas(df_baixas):
 
 
 # ============================================================
-# 🔥 SALVAR BAIXA (VERSÃO SEGURA E CONSISTENTE)
+# 🔥 SALVAR BAIXA (VERSÃO DEFINITIVA COM SUPORTE A PARCIAL + HISTÓRICO)
 # ============================================================
 def salvar_baixa_operacional(base_path, nova_baixa):
 
     caminho = garantir_arquivo_baixas(base_path)
 
     # ------------------------------------------------------------
-    # 🔒 CARREGA BASE COM SEGURANÇA
+    # 🔒 CARREGA BASE EXISTENTE (ROBUSTO)
     # ------------------------------------------------------------
     if os.path.exists(caminho):
         try:
@@ -772,7 +772,7 @@ def salvar_baixa_operacional(base_path, nova_baixa):
     df_existente = _padronizar_df_baixas(df_existente)
 
     # ------------------------------------------------------------
-    # 🔥 NOVO REGISTRO
+    # 🔥 NOVO REGISTRO (PADRONIZADO)
     # ------------------------------------------------------------
     df_novo = pd.DataFrame([nova_baixa])
     df_novo = _padronizar_df_baixas(df_novo)
@@ -780,46 +780,72 @@ def salvar_baixa_operacional(base_path, nova_baixa):
     chave_nova = df_novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # 🔒 VALIDAÇÃO DE DUPLICIDADE (CORRETA)
+    # 🔥 VALIDAÇÃO INTELIGENTE (SUPORTA BAIXA PARCIAL)
     # ------------------------------------------------------------
-    if not df_existente.empty and "CHAVE_OPERACAO" in df_existente.columns:
+    if not df_existente.empty:
+
+        # 🔒 normaliza tipos
+        df_existente["Horas"] = pd.to_numeric(
+            df_existente.get("Horas", 0),
+            errors="coerce"
+        ).fillna(0)
 
         df_existente["Status_Baixa"] = (
-            df_existente["Status_Baixa"]
+            df_existente.get("Status_Baixa", "")
             .fillna("")
             .astype(str)
             .str.upper()
         )
 
-        duplicadas_ativas = df_existente[
+        # 🔥 histórico acumulado da operação
+        total_baixado = df_existente[
             (df_existente["CHAVE_OPERACAO"] == chave_nova) &
             (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-        ]
+        ]["Horas"].sum()
 
-        if not duplicadas_ativas.empty:
-            return False, "Baixa já registrada (ativa)"
+        # 🔥 nova baixa
+        nova_hora = pd.to_numeric(
+            df_novo["Horas"].iloc[0],
+            errors="coerce"
+        )
+
+        if pd.isna(nova_hora) or nova_hora <= 0:
+            return False, "Quantidade de horas inválida para baixa"
+
+        # ------------------------------------------------------------
+        # 🔒 PROTEÇÃO CONTRA EXCESSO (ANTI-ERRO)
+        # ------------------------------------------------------------
+        LIMITE_MAXIMO = 999999  # não trava operação real, só erro absurdo
+
+        if (total_baixado + nova_hora) > LIMITE_MAXIMO:
+            return False, "Baixa excede limite permitido (verifique o saldo)"
 
     # ------------------------------------------------------------
-    # 🔥 CONCATENA
+    # 🔥 CONCATENA HISTÓRICO (NÃO SOBRESCREVE)
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, df_novo], ignore_index=True)
 
     # ------------------------------------------------------------
-    # 🔒 BACKUP ANTES DE SALVAR
+    # 🔒 BACKUP AUTOMÁTICO
     # ------------------------------------------------------------
-    import shutil
-    if os.path.exists(caminho):
-        try:
-            shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
-        except:
-            pass
+    try:
+        if os.path.exists(caminho):
+            backup_path = caminho.replace(".xlsx", "_backup.xlsx")
+            shutil.copy2(caminho, backup_path)
+    except:
+        pass
 
     # ------------------------------------------------------------
-    # 🔒 SALVAMENTO SEGURO (SEM WRITER)
+    # 🔥 SALVA HISTÓRICO COMPLETO (RASTREÁVEL)
     # ------------------------------------------------------------
-    df_final[COLUNAS_BAIXAS].to_excel(caminho, index=False)
+    df_final = _padronizar_df_baixas(df_final)
 
-    return True, "Baixa salva"
+    df_final.to_excel(caminho, index=False)
+
+    # ------------------------------------------------------------
+    # 🔥 RETORNO PADRÃO
+    # ------------------------------------------------------------
+    return True, "Baixa registrada com sucesso (histórico atualizado)"
 
 
 
@@ -849,6 +875,45 @@ df_baixas_ativas = df_baixas[
 ].copy()
 
 st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+
+
+
+
+# ============================================================
+# 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (SUPORTA HISTÓRICO DIÁRIO)
+# ============================================================
+
+df_baixas_full = df_baixas.copy()
+
+if not df_baixas_full.empty:
+
+    df_baixas_full["Horas"] = pd.to_numeric(
+        df_baixas_full["Horas"], errors="coerce"
+    ).fillna(0)
+
+    # 🔒 apenas baixas ativas contam
+    df_baixas_validas = df_baixas_full[
+        df_baixas_full["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    # 🔥 AGREGA POR OPERAÇÃO (CHAVE)
+    df_baixas_agg = (
+        df_baixas_validas.groupby("CHAVE_OPERACAO", as_index=False)
+        .agg(
+            Horas_Baixadas=("Horas", "sum"),
+            Qtde_Baixas=("Horas", "count"),
+            Ultima_Baixa=("Data_Baixa", "max")
+        )
+    )
+
+else:
+    df_baixas_agg = pd.DataFrame(
+        columns=["CHAVE_OPERACAO", "Horas_Baixadas", "Qtde_Baixas", "Ultima_Baixa"]
+    )
+
+
+
 
 
 # ============================================================
@@ -955,18 +1020,77 @@ if not df_baixas_ativas.empty:
 else:
     chaves_baixadas_ativas = set()
 
-# ------------------------------------------------------------
-# 🔥 STATUS OPERACIONAL (ÚNICO E CORRETO)
-# ------------------------------------------------------------
-df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
-    lambda chave: "✅ Baixado" if chave in chaves_baixadas_ativas else "⏳ Pendente"
-)
+
+
 
 # ============================================================
-# BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
+# 🔥 INTEGRAÇÃO REAL DE BAIXAS NA BASE APS (SEM PERDA DE HISTÓRICO)
 # ============================================================
-df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
+
+# 🔒 garante base de agregação (caso ainda não exista)
+try:
+    df_baixas_agg
+except NameError:
+    df_baixas_agg = pd.DataFrame(
+        columns=["CHAVE_OPERACAO", "Horas_Baixadas", "Qtde_Baixas", "Ultima_Baixa"]
+    )
+
+# ------------------------------------------------------------
+# 🔥 MERGE COM BASE OPERACIONAL
+# ------------------------------------------------------------
+df_operacional = df_operacional.merge(
+    df_baixas_agg,
+    on="CHAVE_OPERACAO",
+    how="left"
+)
+
+# ------------------------------------------------------------
+# 🔒 TRATAMENTO SEGURO
+# ------------------------------------------------------------
+df_operacional["Horas_Baixadas"] = pd.to_numeric(
+    df_operacional.get("Horas_Baixadas", 0),
+    errors="coerce"
+).fillna(0)
+
+df_operacional["Qtde_Baixas"] = pd.to_numeric(
+    df_operacional.get("Qtde_Baixas", 0),
+    errors="coerce"
+).fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 CÁLCULO DE SALDO REAL
+# ------------------------------------------------------------
+df_operacional["Saldo_Horas"] = (
+    df_operacional["Horas"] - df_operacional["Horas_Baixadas"]
+)
+
+# 🔒 PROTEÇÃO CONTRA NEGATIVO
+df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].clip(lower=0)
+
+# ------------------------------------------------------------
+# 🔥 STATUS OPERACIONAL INTELIGENTE
+# ------------------------------------------------------------
+df_operacional["Status Operacional"] = np.where(
+    df_operacional["Saldo_Horas"] <= 0,
+    "✅ Baixado",
+    np.where(
+        df_operacional["Horas_Baixadas"] > 0,
+        "🟡 Parcial",
+        "⏳ Pendente"
+    )
+)
+
+# ------------------------------------------------------------
+# 🔥 BASE REAL DO APS (CORRIGIDA)
+# ------------------------------------------------------------
+df = df_operacional[
+    df_operacional["Saldo_Horas"] > 0
+].copy()
+
 df = df.reset_index(drop=True)
+
+
+
 
 # ------------------------------------------------------------
 # DATAFRAMES AUXILIARES (MANTIDOS INTACTOS)
