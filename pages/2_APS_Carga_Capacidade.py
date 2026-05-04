@@ -22,6 +22,17 @@ from datetime import datetime
 
 st.set_page_config(layout="wide")
 
+
+# ============================================================
+# 🧠 BASE DE BAIXAS EM MEMÓRIA (SUBSTITUI EXCEL)
+# ============================================================
+
+if "df_baixas" not in st.session_state:
+    st.session_state.df_baixas = pd.DataFrame(
+        columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+    )
+
+
 # ============================================================
 # 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
 # ============================================================
@@ -766,23 +777,14 @@ def _padronizar_df_baixas(df_baixas):
 
 
 # ============================================================
-# 🔥 SALVAR BAIXA (VERSÃO DEFINITIVA COM SUPORTE A PARCIAL + HISTÓRICO)
+# 🔥 SALVAR BAIXA (AGORA EM MEMÓRIA - SEM EXCEL)
 # ============================================================
 def salvar_baixa_operacional(base_path, nova_baixa):
 
-    caminho = garantir_arquivo_baixas(base_path)
-
     # ------------------------------------------------------------
-    # 🔒 CARREGA BASE EXISTENTE (ROBUSTO)
+    # 🔒 BASE ATUAL EM MEMÓRIA
     # ------------------------------------------------------------
-    if os.path.exists(caminho):
-        try:
-            df_existente = pd.read_excel(caminho, dtype=str)
-        except:
-            df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
-    else:
-        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
-
+    df_existente = st.session_state.df_baixas.copy()
     df_existente = _padronizar_df_baixas(df_existente)
 
     # ------------------------------------------------------------
@@ -794,11 +796,10 @@ def salvar_baixa_operacional(base_path, nova_baixa):
     chave_nova = df_novo["CHAVE_OPERACAO"].iloc[0]
 
     # ------------------------------------------------------------
-    # 🔥 VALIDAÇÃO INTELIGENTE (SUPORTA BAIXA PARCIAL)
+    # 🔥 VALIDAÇÃO INTELIGENTE (SUPORTA PARCIAL)
     # ------------------------------------------------------------
     if not df_existente.empty:
 
-        # 🔒 normaliza tipos
         df_existente["Horas"] = pd.to_numeric(
             df_existente.get("Horas", 0),
             errors="coerce"
@@ -811,13 +812,11 @@ def salvar_baixa_operacional(base_path, nova_baixa):
             .str.upper()
         )
 
-        # 🔥 histórico acumulado da operação
         total_baixado = df_existente[
             (df_existente["CHAVE_OPERACAO"] == chave_nova) &
             (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
         ]["Horas"].sum()
 
-        # 🔥 nova baixa
         nova_hora = pd.to_numeric(
             df_novo["Horas"].iloc[0],
             errors="coerce"
@@ -826,71 +825,50 @@ def salvar_baixa_operacional(base_path, nova_baixa):
         if pd.isna(nova_hora) or nova_hora <= 0:
             return False, "Quantidade de horas inválida para baixa"
 
-        # ------------------------------------------------------------
-        # 🔒 PROTEÇÃO CONTRA EXCESSO (ANTI-ERRO)
-        # ------------------------------------------------------------
-        LIMITE_MAXIMO = 999999  # não trava operação real, só erro absurdo
+        # 🔒 proteção contra erro absurdo
+        LIMITE_MAXIMO = 999999
 
         if (total_baixado + nova_hora) > LIMITE_MAXIMO:
-            return False, "Baixa excede limite permitido (verifique o saldo)"
+            return False, "Baixa excede limite permitido"
 
     # ------------------------------------------------------------
-    # 🔥 CONCATENA HISTÓRICO (NÃO SOBRESCREVE)
+    # 🔥 CONCATENA HISTÓRICO (SEM PERDER NADA)
     # ------------------------------------------------------------
     df_final = pd.concat([df_existente, df_novo], ignore_index=True)
 
-    # ------------------------------------------------------------
-    # 🔒 BACKUP AUTOMÁTICO
-    # ------------------------------------------------------------
-    try:
-        if os.path.exists(caminho):
-            backup_path = caminho.replace(".xlsx", "_backup.xlsx")
-            shutil.copy2(caminho, backup_path)
-    except:
-        pass
-
-    # ------------------------------------------------------------
-    # 🔥 SALVA HISTÓRICO COMPLETO (RASTREÁVEL)
-    # ------------------------------------------------------------
     df_final = _padronizar_df_baixas(df_final)
 
-    df_final.to_excel(caminho, index=False)
-
     # ------------------------------------------------------------
-    # 🔥 RETORNO PADRÃO
+    # 🔥 SALVA NA SESSÃO (PERSISTÊNCIA DO APP)
     # ------------------------------------------------------------
-    return True, "Baixa registrada com sucesso (histórico atualizado)"
+    st.session_state.df_baixas = df_final
+
+    return True, "Baixa registrada (memória)"
 
 
 
-
-# ============================================================
-# 🔒 CARREGAMENTO (SEM CACHE PROBLEMÁTICO)
-# ============================================================
-def carregar_baixas_operacionais(base_path):
-
-    caminho = garantir_arquivo_baixas(base_path)
-
-    try:
-        df_baixas = pd.read_excel(caminho, dtype=str)
-    except:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-    return _padronizar_df_baixas(df_baixas)
 
 
 # ============================================================
-# 🔥 CARREGA BASE DE BAIXAS
+# 🔥 BASE DE BAIXAS (100% EM MEMÓRIA - FINAL)
 # ============================================================
-df_baixas = carregar_baixas_operacionais(BASE_PATH)
 
+# 🔒 base única vem da sessão
+df_baixas = st.session_state.df_baixas.copy()
+
+df_baixas = _padronizar_df_baixas(df_baixas)
+
+# ------------------------------------------------------------
+# 🔥 BAIXAS ATIVAS (MESMA LÓGICA DE ANTES)
+# ------------------------------------------------------------
 df_baixas_ativas = df_baixas[
     df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
 ].copy()
 
+df_baixas_ativas = df_baixas_ativas.reset_index(drop=True)
+
+# 🔒 mantém compatibilidade com resto do sistema
 st.session_state["df_baixas_ativas"] = df_baixas_ativas
-
-
 
 
 
@@ -983,33 +961,18 @@ df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
     axis=1
 )
 
-# ------------------------------------------------------------
-# 🔥 BASE DE BAIXAS (FONTE REAL = EXCEL)
-# ------------------------------------------------------------
-try:
-    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-    df_baixas_ativas = pd.read_excel(caminho_baixas, dtype=str)
-except:
-    df_baixas_ativas = pd.DataFrame()
+
+
+# ============================================================
+# 🔥 BASE DE BAIXAS ATIVAS (AGORA VIA MEMÓRIA)
+# ============================================================
+
+df_baixas_ativas = st.session_state.df_baixas.copy()
+
+df_baixas_ativas = _padronizar_df_baixas(df_baixas_ativas)
 
 if not df_baixas_ativas.empty:
 
-    # 🔒 GARANTE COLUNAS
-    for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa"]:
-        if col not in df_baixas_ativas.columns:
-            df_baixas_ativas[col] = ""
-
-    # 🔒 NORMALIZA CAMPOS (IGUAL À BASE OPERACIONAL)
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        df_baixas_ativas[col] = (
-            df_baixas_ativas[col]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    # 🔒 STATUS
     df_baixas_ativas["Status_Baixa"] = (
         df_baixas_ativas["Status_Baixa"]
         .fillna("")
@@ -1017,23 +980,12 @@ if not df_baixas_ativas.empty:
         .str.upper()
     )
 
+    # 🔥 mantém apenas baixas válidas
     df_baixas_ativas = df_baixas_ativas[
         df_baixas_ativas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
     ].copy()
 
-    # 🔥 CHAVE PADRÃO
-    df_baixas_ativas["CHAVE_OPERACAO"] = df_baixas_ativas.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
-    )
-
-    chaves_baixadas_ativas = set(df_baixas_ativas["CHAVE_OPERACAO"])
-
-else:
-    chaves_baixadas_ativas = set()
-
+df_baixas_ativas = df_baixas_ativas.reset_index(drop=True)
 
 
 
