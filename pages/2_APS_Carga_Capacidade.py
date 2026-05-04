@@ -1055,6 +1055,24 @@ df_operacional = df_operacional.merge(
 
 df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].fillna(0)
 
+
+
+
+# ------------------------------------------------------------
+# 🔒 GARANTIA DE EXISTÊNCIA DO SALDO
+# ------------------------------------------------------------
+if "Saldo_Horas" not in df_operacional.columns:
+    df_operacional["Saldo_Horas"] = 0
+
+df_operacional["Saldo_Horas"] = pd.to_numeric(
+    df_operacional["Saldo_Horas"],
+    errors="coerce"
+).fillna(0)
+
+
+
+
+
 # ------------------------------------------------------------
 # 🔥 STATUS OPERACIONAL
 # ------------------------------------------------------------
