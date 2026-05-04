@@ -971,6 +971,36 @@ df_operacional = df_operacional.merge(
     how="left"
 )
 
+
+
+
+
+# ============================================================
+# 🔥 BLOQUEIO AUTOMÁTICO DE OPERAÇÕES JÁ BAIXADAS
+# ============================================================
+
+# 🔥 recalcula total por operação
+total_por_operacao = df_operacional.groupby("CHAVE_OPERACAO")["Horas"].transform("sum")
+
+# 🔥 trava operações totalmente baixadas
+df_operacional["TRAVADO"] = np.where(
+    df_operacional["Saldo_Horas"] <= 0,
+    True,
+    False
+)
+
+# 🔥 impede reuso na interface (mesmo que botão esteja errado)
+df_operacional["Horas_Disponiveis"] = np.where(
+    df_operacional["TRAVADO"],
+    0,
+    df_operacional["Saldo_Horas"]
+)
+
+
+
+
+
+
 # ------------------------------------------------------------
 # 🔒 TRATAMENTO SEGURO
 # ------------------------------------------------------------
@@ -1039,6 +1069,26 @@ df_operacional["Status Operacional"] = np.where(
         "⏳ Pendente"
     )
 )
+
+
+st.markdown("### 🔎 DEBUG FINAL")
+
+st.write("BAIXAS AGRUPADAS:")
+st.write(df_baixas_agg.tail(10))
+
+st.write("OPERACIONAL (PV 6980):")
+st.write(df_operacional[
+    df_operacional["PV"] == "6980"
+][[
+    "Processo",
+    "CHAVE_OPERACAO",
+    "Horas",
+    "Horas_Baixadas",
+    "Saldo_Horas"
+]])
+
+
+
 
 # ------------------------------------------------------------
 # 🔥 BASE REAL DO APS
@@ -2737,161 +2787,64 @@ else:
 
 
 # ============================================================
-# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL INTEGRADA APS - SEGURA)
+# 🔥 SALVAR BAIXA (VERSÃO DEFINITIVA - BASEADA NO SALDO REAL)
 # ============================================================
-def salvar_baixa_operacional(base_path, registro_baixa):
-
-    # 🔍 DEBUG (MANTIDO)
-    st.warning("🔥 FUNÇÃO DE SALVAR FOI CHAMADA")
-
-    caminho = garantir_arquivo_baixas(base_path)
-
-    # 🔍 DEBUG CAMINHO (MANTIDO)
-    st.write("📁 SALVANDO EM:", caminho)
+def salvar_baixa_operacional(base_path, nova_baixa):
 
     # ------------------------------------------------------------
-    # 🔒 CARREGA BASE COM SEGURANÇA
+    # 🔒 BASES ATUAIS
     # ------------------------------------------------------------
-    if os.path.exists(caminho):
-        try:
-            df_existente = pd.read_excel(caminho, dtype=str)
-        except Exception:
-            df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
-    else:
-        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
+    df_existente = st.session_state.df_baixas.copy()
+    df_existente = _padronizar_df_baixas(df_existente)
 
-    df_existente = df_existente.copy()
+    df_novo = pd.DataFrame([nova_baixa])
+    df_novo = _padronizar_df_baixas(df_novo)
 
-    # 🔒 GARANTE COLUNAS
-    for col in COLUNAS_BAIXAS:
-        if col not in df_existente.columns:
-            df_existente[col] = ""
+    chave = df_novo["CHAVE_OPERACAO"].iloc[0]
+    nova_hora = float(df_novo["Horas"].iloc[0])
 
     # ------------------------------------------------------------
-    # NOVO REGISTRO
+    # 🔥 TOTAL DA OPERAÇÃO (BASE REAL APS)
     # ------------------------------------------------------------
-    novo = pd.DataFrame([registro_baixa])
-
-    for col in COLUNAS_BAIXAS:
-        if col not in novo.columns:
-            novo[col] = ""
+    total_operacao = df_operacional[
+        df_operacional["CHAVE_OPERACAO"] == chave
+    ]["Horas"].astype(float).sum()
 
     # ------------------------------------------------------------
-    # PADRONIZAÇÃO (MANTIDA)
+    # 🔥 TOTAL JÁ BAIXADO
     # ------------------------------------------------------------
-    for col in ["PV", "CODIGO_PV", "Processo"]:
-        novo[col] = (
-            novo[col]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    novo["Cliente"] = novo["Cliente"].fillna("").astype(str).str.strip()
-
-    novo["Status_Baixa"] = (
-        novo["Status_Baixa"]
-        .fillna("ATIVA")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    novo["Horas"] = pd.to_numeric(novo["Horas"], errors="coerce").fillna(0)
-    novo["Data_Baixa"] = pd.to_datetime(novo["Data_Baixa"], errors="coerce")
+    total_baixado = df_existente[
+        (df_existente["CHAVE_OPERACAO"] == chave) &
+        (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
+    ]["Horas"].astype(float).sum()
 
     # ------------------------------------------------------------
-    # 🔥 CHAVE PADRÃO
+    # 🔒 TRAVAS REAIS (SEM GAMBIARRA)
     # ------------------------------------------------------------
-    novo["CHAVE_OPERACAO"] = novo.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
-    )
+    if total_operacao <= 0:
+        return False, "Operação não encontrada ou inválida"
 
-    chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
+    if total_baixado >= total_operacao:
+        return False, "Operação já totalmente baixada"
 
-    # ------------------------------------------------------------
-    # 🔒 VALIDAÇÃO DE DUPLICIDADE
-    # ------------------------------------------------------------
-    if not df_existente.empty:
+    if nova_hora <= 0:
+        return False, "Horas inválidas"
 
-        df_tmp = df_existente.copy()
+    saldo_restante = total_operacao - total_baixado
 
-        df_tmp["CHAVE_OPERACAO"] = df_tmp.apply(
-            lambda r: normalizar_chave_operacao(
-                r.get("PV", ""), r.get("Processo", ""), r.get("CODIGO_PV", "")
-            ),
-            axis=1
-        )
-
-        df_tmp["Status_Baixa"] = (
-            df_tmp["Status_Baixa"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-        registros_ativos = df_tmp[
-            (df_tmp["CHAVE_OPERACAO"] == chave_nova) &
-            (df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-        ]
-
-        if not registros_ativos.empty:
-
-            log = novo.copy()
-            log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
-            log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
-            log["Data_Baixa"] = pd.Timestamp.now()
-
-            df_existente = pd.concat([df_existente, log], ignore_index=True)
-
-            # 🔒 BACKUP ANTES DE SALVAR
-            import shutil
-            if os.path.exists(caminho):
-                try:
-                    shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
-                except:
-                    pass
-
-            df_existente.to_excel(caminho, index=False)
-
-            return {
-                "ok": False,
-                "erro": "Operação já possui baixa ativa",
-                "tipo": "duplicidade"
-            }
+    if nova_hora > saldo_restante:
+        return False, f"Excede saldo restante ({round(saldo_restante,2)}h)"
 
     # ------------------------------------------------------------
-    # 🔥 SALVAMENTO FINAL (SEGURO)
+    # 🔥 SALVA
     # ------------------------------------------------------------
-    df_final = pd.concat([df_existente, novo], ignore_index=True)
+    df_final = pd.concat([df_existente, df_novo], ignore_index=True)
+    df_final = _padronizar_df_baixas(df_final)
 
-    # 🔒 BACKUP ANTES DE SALVAR
-    import shutil
-    if os.path.exists(caminho):
-        try:
-            shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
-        except:
-            pass
+    st.session_state.df_baixas = df_final
 
-    try:
-        df_final.to_excel(caminho, index=False)
+    return True, "Baixa aplicada corretamente"
 
-        # 🔍 DEBUG FINAL (MANTIDO)
-        st.success("✅ BAIXA SALVA NO EXCEL")
-
-        return {"ok": True}
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "erro": str(e),
-            "tipo": "erro_gravacao"
-        }
 
 
 
