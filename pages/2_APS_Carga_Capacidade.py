@@ -2014,13 +2014,15 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
 
     fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
 
-    # 🔥 CHAVE CONSISTENTE (ALINHADA COM APS)
-    fila_tmp["CHAVE"] = (
-        fila_tmp["PV"] + "|" +
-        fila_tmp["Processo"] + "|" +
-        fila_tmp["CODIGO_PV"]
+    # ------------------------------------------------------------
+    # 🔥 CHAVE CONSISTENTE (PADRÃO GLOBAL APS)
+    # ------------------------------------------------------------
+    fila_tmp["CHAVE_OPERACAO"] = fila_tmp.apply(
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
+        axis=1
     )
-
 
 
     # ------------------------------------------------------------
@@ -2039,14 +2041,16 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         baixas_tmp["PV"] = baixas_tmp["PV"].astype(str).str.strip()
         baixas_tmp["CODIGO_PV"] = baixas_tmp["CODIGO_PV"].astype(str).str.strip()
 
-        baixas_tmp["CHAVE"] = (
-            baixas_tmp["PV"] + "|" +
-            baixas_tmp["Processo"] + "|" +
-            baixas_tmp["CODIGO_PV"]
+        # 🔥 CHAVE PADRÃO (IGUAL AO RESTO DO SISTEMA)
+        baixas_tmp["CHAVE_OPERACAO"] = baixas_tmp.apply(
+            lambda r: normalizar_chave_operacao(
+                r["PV"], r["Processo"], r["CODIGO_PV"]
+            ),
+            axis=1
         )
 
         fila_tmp = fila_tmp[
-            ~fila_tmp["CHAVE"].isin(baixas_tmp["CHAVE"])
+            ~fila_tmp["CHAVE_OPERACAO"].isin(baixas_tmp["CHAVE_OPERACAO"])
         ].copy()
 
 
@@ -2134,6 +2138,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Ranking"] = df_dash.index + 1
 
     return df_dash
+
 
 
 
