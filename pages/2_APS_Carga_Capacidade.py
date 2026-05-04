@@ -17,43 +17,81 @@ import os
 import time
 import holidays
 import math
+import shutil
 from datetime import datetime
 
 st.set_page_config(layout="wide")
 
 # ============================================================
-# 🔒 COLUNAS PADRÃO DAS BAIXAS (GARANTIA LOCAL)
+# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
 # ============================================================
-COLUNAS_BAIXAS = [
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "Data_Baixa",
-    "Usuario",
-    "Observacao",
-    "Status_Baixa",
-    "Data_Estorno",
-    "Motivo_Estorno"
-]
 
-# ============================================================
-# 🧠 BASE DE BAIXAS EM MEMÓRIA (OFICIAL)
-# ============================================================
-if "df_baixas" not in st.session_state:
-    st.session_state.df_baixas = pd.DataFrame(
-        columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
-    )
+PASTA_BACKUP_BAIXAS = "backup_baixas"
+ARQUIVO_HISTORICO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
 
-# ============================================================
-# 🔐 UTILITÁRIO DE LIMPEZA (OPCIONAL, NÃO PERDE FUNCIONALIDADE)
-# ============================================================
-def resetar_baixas_sessao():
-    st.session_state.df_baixas = pd.DataFrame(
-        columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
-    )
 
+def _garantir_pasta_backup():
+    os.makedirs(PASTA_BACKUP_BAIXAS, exist_ok=True)
+
+
+def _gerar_nome_backup():
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return f"APS_BAIXAS_OPERACIONAIS_{timestamp}.xlsx"
+
+
+def _criar_backup():
+    try:
+        if not os.path.exists(ARQUIVO_HISTORICO_BAIXAS):
+            return False, "Arquivo ainda não existe (primeira gravação)"
+
+        _garantir_pasta_backup()
+
+        destino = os.path.join(
+            PASTA_BACKUP_BAIXAS,
+            _gerar_nome_backup()
+        )
+
+        shutil.copy2(ARQUIVO_HISTORICO_BAIXAS, destino)
+
+        return True, destino
+
+    except Exception as e:
+        return False, str(e)
+
+
+def salvar_historico_baixas(df):
+    """
+    🔴 ÚNICO PONTO OFICIAL DE GRAVAÇÃO DO HISTÓRICO
+    🔒 COM PROTEÇÃO CONTRA PERDA DE DADOS
+    """
+
+    try:
+        if df is None or df.empty:
+            return {
+                "ok": False,
+                "erro": "DataFrame vazio - gravação cancelada para evitar perda de histórico",
+                "backup_ok": False,
+                "backup_msg": None
+            }
+
+        backup_ok, backup_msg = _criar_backup()
+
+        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
+
+        return {
+            "ok": True,
+            "linhas": len(df),
+            "backup_ok": backup_ok,
+            "backup_msg": backup_msg
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "erro": str(e),
+            "backup_ok": False,
+            "backup_msg": None
+        }
 
 # ===============================
 # FORMATAÇÃO BR (INALTERADO)
@@ -651,20 +689,14 @@ def garantir_arquivo_baixas(base_path):
     return caminho
 
 
+# =============================== 
+# PADRONIZAR BAIXAS OPERACIONAIS APS
+# ===============================
 
-
-
-# ============================================================
-# PADRONIZAR + SALVAR + CARREGAR + INTEGRAÇÃO APS (DEFINITIVO)
-# ============================================================
-
-# ============================================================
-# 🔒 PADRONIZAÇÃO
-# ============================================================
 def _padronizar_df_baixas(df_baixas):
 
     if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
     df_baixas = df_baixas.copy()
 
@@ -684,20 +716,7 @@ def _padronizar_df_baixas(df_baixas):
         df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
     df_baixas["PV"] = df_baixas["PV"].str.upper()
-
-    # 🔥 CORREÇÃO CRÍTICA: NORMALIZAÇÃO FORTE DO CODIGO_PV (ALINHADO COM APS)
-    def _normalizar_codigo_baixa(x):
-        if pd.isna(x):
-            return ""
-        x = str(x)
-        x = x.replace("\xa0", "")
-        x = x.replace(" ", "")
-        x = x.replace(".0", "")
-        x = x.strip()
-        return x.upper()
-
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].apply(_normalizar_codigo_baixa)
-
+    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].str.upper()
     df_baixas["Processo"] = df_baixas["Processo"].str.upper()
     df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
 
@@ -708,13 +727,7 @@ def _padronizar_df_baixas(df_baixas):
     )
 
     df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-
     df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-
-    df_baixas["DATA_ESTIMADA"] = df_baixas["Data_Baixa"].isna()
-
-    df_baixas["Data_Baixa"] = df_baixas["Data_Baixa"].fillna(pd.Timestamp.now())
-
     df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str)
 
     df_baixas["CHAVE_OPERACAO"] = (
@@ -723,150 +736,72 @@ def _padronizar_df_baixas(df_baixas):
         df_baixas["CODIGO_PV"]
     )
 
+    df_baixas = df_baixas.sort_values(
+        by=["Data_Baixa", "PV", "Processo"],
+        ascending=[False, True, True]
+    ).reset_index(drop=True)
+
     return df_baixas
 
 
-
 # ============================================================
-# 🔥 SALVAR BAIXA (AGORA EM MEMÓRIA - SEM EXCEL)
+# FUNÇÃO DE CARREGAMENTO
 # ============================================================
-def salvar_baixa_operacional(base_path, nova_baixa):
+@st.cache_data(ttl=0)
+def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
-    # ------------------------------------------------------------
-    # 🔒 BASE ATUAL EM MEMÓRIA
-    # ------------------------------------------------------------
-    df_existente = st.session_state.df_baixas.copy()
-    df_existente = _padronizar_df_baixas(df_existente)
+    caminho = garantir_arquivo_baixas(base_path)
 
-    # ------------------------------------------------------------
-    # 🔥 NOVO REGISTRO (PADRONIZADO)
-    # ------------------------------------------------------------
-    df_novo = pd.DataFrame([nova_baixa])
-    df_novo = _padronizar_df_baixas(df_novo)
-
-    chave_nova = df_novo["CHAVE_OPERACAO"].iloc[0]
-
-    # ------------------------------------------------------------
-    # 🔥 VALIDAÇÃO INTELIGENTE (SUPORTA PARCIAL)
-    # ------------------------------------------------------------
-    if not df_existente.empty:
-
-        df_existente["Horas"] = pd.to_numeric(
-            df_existente.get("Horas", 0),
-            errors="coerce"
-        ).fillna(0)
-
-        df_existente["Status_Baixa"] = (
-            df_existente.get("Status_Baixa", "")
-            .fillna("")
-            .astype(str)
-            .str.upper()
-        )
-
-        total_baixado = df_existente[
-            (df_existente["CHAVE_OPERACAO"] == chave_nova) &
-            (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-        ]["Horas"].sum()
-
-        nova_hora = pd.to_numeric(
-            df_novo["Horas"].iloc[0],
-            errors="coerce"
-        )
-
-        if pd.isna(nova_hora) or nova_hora <= 0:
-            return False, "Quantidade de horas inválida para baixa"
-
-        # 🔒 proteção contra erro absurdo
-        LIMITE_MAXIMO = 999999
-
-        if (total_baixado + nova_hora) > LIMITE_MAXIMO:
-            return False, "Baixa excede limite permitido"
-
-    # ------------------------------------------------------------
-    # 🔥 CONCATENA HISTÓRICO (SEM PERDER NADA)
-    # ------------------------------------------------------------
-    df_final = pd.concat([df_existente, df_novo], ignore_index=True)
-
-    df_final = _padronizar_df_baixas(df_final)
-
-    # ------------------------------------------------------------
-    # 🔥 SALVA NA SESSÃO (PERSISTÊNCIA DO APP)
-    # ------------------------------------------------------------
-    st.session_state.df_baixas = df_final
-
-    return True, "Baixa registrada (memória)"
-
-
-
+    try:
+        df_baixas = pd.read_excel(caminho, dtype=str)
+        return _padronizar_df_baixas(df_baixas)
+    except Exception as e:
+        st.warning(f"Erro ao ler baixas: {e}")
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 
 # ============================================================
-# 🔥 BASE DE BAIXAS (100% EM MEMÓRIA - FINAL)
+# 🔥 CARREGAMENTO DAS BAIXAS (TEM QUE VIR AQUI)
 # ============================================================
 
-# 🔒 base única vem da sessão
-df_baixas = st.session_state.df_baixas.copy()
+caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
 
-df_baixas = _padronizar_df_baixas(df_baixas)
+try:
+    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+except:
+    file_mtime_baixas = 0
 
-# ------------------------------------------------------------
-# 🔥 BAIXAS ATIVAS (MESMA LÓGICA DE ANTES)
-# ------------------------------------------------------------
+df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
 df_baixas_ativas = df_baixas[
     df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
 ].copy()
 
-df_baixas_ativas = df_baixas_ativas.reset_index(drop=True)
-
-# 🔒 mantém compatibilidade com resto do sistema
 st.session_state["df_baixas_ativas"] = df_baixas_ativas
 
 
-
 # ============================================================
-# 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (SUPORTA HISTÓRICO DIÁRIO)
+# BASE OPERACIONAL VISUAL
 # ============================================================
 
-df_baixas_full = df_baixas.copy()
+# 🔒 GARANTIA DA BASE PRINCIPAL
+if "df" not in locals() or df is None:
+    df = df_original.copy()
 
-if not df_baixas_full.empty:
-
-    df_baixas_full["Horas"] = pd.to_numeric(
-        df_baixas_full["Horas"], errors="coerce"
-    ).fillna(0)
-
-    # 🔒 apenas baixas ativas contam
-    df_baixas_validas = df_baixas_full[
-        df_baixas_full["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    # 🔥 AGREGA POR OPERAÇÃO (CHAVE)
-    df_baixas_agg = (
-        df_baixas_validas.groupby("CHAVE_OPERACAO", as_index=False)
-        .agg(
-            Horas_Baixadas=("Horas", "sum"),
-            Qtde_Baixas=("Horas", "count"),
-            Ultima_Baixa=("Data_Baixa", "max")
-        )
-    )
-
-else:
-    df_baixas_agg = pd.DataFrame(
-        columns=["CHAVE_OPERACAO", "Horas_Baixadas", "Qtde_Baixas", "Ultima_Baixa"]
-    )
+# 🔒 BASE OPERACIONAL
+df_operacional = df_original.copy()
 
 
 
-
-
-# ============================================================
-# 🔧 NORMALIZAÇÃO DE CHAVE (APS x BAIXAS)
-# ============================================================
+# --------------------------------------------
+# FUNÇÃO DE NORMALIZAÇÃO (CORRIGIDA)
+# --------------------------------------------
 def normalizar_chave_operacao(pv, processo, codigo):
 
     def limpar(valor):
         if pd.isna(valor):
             return ""
+
         return (
             str(valor)
             .strip()
@@ -877,258 +812,94 @@ def normalizar_chave_operacao(pv, processo, codigo):
             .replace(" -", "-")
         )
 
-    return f"{limpar(pv)}||{limpar(processo)}||{limpar(codigo)}"
+    pv = limpar(pv)
+    processo = limpar(processo)
+    codigo = limpar(codigo)
+
+    return f"{pv}||{processo}||{codigo}"
 
 
-# ============================================================
-# 🔥 BASE OPERACIONAL APS (VERSÃO FINAL CONSOLIDADA)
-# ============================================================
+# --------------------------------------------
+# GARANTE CHAVE PADRÃO NA BASE OPERACIONAL
+# --------------------------------------------
+if not df_operacional.empty:
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col not in df_operacional.columns:
+            df_operacional[col] = ""
 
-# 🔒 BASE ORIGINAL
-df_operacional = df_original.copy()
+        df_operacional[col] = (
+            df_operacional[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
-# ------------------------------------------------------------
-# 🔒 NORMALIZA CAMPOS (PADRÃO ÚNICO DO SISTEMA)
-# ------------------------------------------------------------
-def _normalizar_codigo(x):
-    if pd.isna(x):
-        return ""
-    x = str(x)
-    x = x.replace("\xa0", "")
-    x = x.replace(" ", "")
-    x = x.replace(".0", "")
-    x = x.strip()
-    return x.upper()
-
-for col in ["PV", "Processo"]:
-    if col not in df_operacional.columns:
-        df_operacional[col] = ""
-
-    df_operacional[col] = (
-        df_operacional[col]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-# 🔥 NORMALIZAÇÃO FORTE DO CODIGO
-df_operacional["CODIGO_PV"] = df_operacional["CODIGO_PV"].apply(_normalizar_codigo)
-
-# ------------------------------------------------------------
-# 🔥 CHAVE OPERACIONAL (ÚNICA E CONSISTENTE)
-# ------------------------------------------------------------
-df_operacional["CHAVE_OPERACAO"] = (
-    df_operacional["PV"] + "||" +
-    df_operacional["Processo"] + "||" +
-    df_operacional["CODIGO_PV"]
-)
-
-# ============================================================
-# 🔥 BASE DE BAIXAS ATIVAS (MEMÓRIA)
-# ============================================================
-df_baixas_ativas = st.session_state.df_baixas.copy()
-df_baixas_ativas = _padronizar_df_baixas(df_baixas_ativas)
-
-if not df_baixas_ativas.empty:
-    df_baixas_ativas["Status_Baixa"] = (
-        df_baixas_ativas["Status_Baixa"]
-        .fillna("")
-        .astype(str)
-        .str.upper()
-    )
-
-    df_baixas_ativas = df_baixas_ativas[
-        df_baixas_ativas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-df_baixas_ativas = df_baixas_ativas.reset_index(drop=True)
-
-# ============================================================
-# 🔥 AGREGAÇÃO REAL DAS BAIXAS (CRÍTICO)
-# ============================================================
-if df_baixas_ativas.empty:
-    df_baixas_agg = pd.DataFrame(
-        columns=["CHAVE_OPERACAO", "Horas_Baixadas", "Qtde_Baixas", "Ultima_Baixa"]
+    df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
+        axis=1
     )
 else:
-    df_baixas_agg = (
-        df_baixas_ativas
-        .groupby("CHAVE_OPERACAO", as_index=False)
-        .agg(
-            Horas_Baixadas=("Horas", "sum"),
-            Qtde_Baixas=("Horas", "count"),
-            Ultima_Baixa=("Data_Baixa", "max")
+    df_operacional["CHAVE_OPERACAO"] = ""
+
+
+# --------------------------------------------
+# BASE OFICIAL PARA TIRAR DA FILA (CORRIGIDO)
+# --------------------------------------------
+df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+
+if not df_baixas_ativas.empty:
+
+    df_baixas_tmp = df_baixas_ativas.copy()
+
+    # NORMALIZA IGUAL À BASE OPERACIONAL
+    for col in ["PV", "Processo", "CODIGO_PV"]:
+        if col not in df_baixas_tmp.columns:
+            df_baixas_tmp[col] = ""
+
+        df_baixas_tmp[col] = (
+            df_baixas_tmp[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
         )
+
+    # 🔥 CHAVE USANDO A MESMA FUNÇÃO
+    df_baixas_tmp["CHAVE_OPERACAO"] = df_baixas_tmp.apply(
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
+        axis=1
     )
 
-# ------------------------------------------------------------
-# 🔥 MERGE COM BASE OPERACIONAL
-# ------------------------------------------------------------
-df_operacional = df_operacional.merge(
-    df_baixas_agg,
-    on="CHAVE_OPERACAO",
-    how="left"
+    # 🔥 SET DE CHAVES (SIMPLES E CONFIÁVEL)
+    chaves_baixadas_ativas = set(df_baixas_tmp["CHAVE_OPERACAO"])
+
+else:
+    chaves_baixadas_ativas = set()
+
+
+# --------------------------------------------
+# APLICA STATUS OPERACIONAL (SIMPLIFICADO E CORRETO)
+# --------------------------------------------
+df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
+    lambda chave: "✅ Baixado" if chave in chaves_baixadas_ativas else "⏳ Pendente"
 )
-
-
-
-
 
 # ============================================================
-# 🔥 BLOQUEIO AUTOMÁTICO DE OPERAÇÕES JÁ BAIXADAS
+# BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
 # ============================================================
-
-# 🔥 recalcula total por operação
-total_por_operacao = df_operacional.groupby("CHAVE_OPERACAO")["Horas"].transform("sum")
-
-# 🔥 trava operações totalmente baixadas
-df_operacional["TRAVADO"] = np.where(
-    df_operacional["Saldo_Horas"] <= 0,
-    True,
-    False
-)
-
-# 🔥 impede reuso na interface (mesmo que botão esteja errado)
-df_operacional["Horas_Disponiveis"] = np.where(
-    df_operacional["TRAVADO"],
-    0,
-    df_operacional["Saldo_Horas"]
-)
-
-
-
-
-
-
-# ------------------------------------------------------------
-# 🔒 TRATAMENTO SEGURO
-# ------------------------------------------------------------
-df_operacional["Horas_Baixadas"] = pd.to_numeric(
-    df_operacional.get("Horas_Baixadas", 0),
-    errors="coerce"
-).fillna(0)
-
-df_operacional["Qtde_Baixas"] = pd.to_numeric(
-    df_operacional.get("Qtde_Baixas", 0),
-    errors="coerce"
-).fillna(0)
-
-# ------------------------------------------------------------
-# 🔥 CÁLCULO DE SALDO CORRETO (POR OPERAÇÃO REAL)
-# ------------------------------------------------------------
-df_operacional["Horas"] = pd.to_numeric(
-    df_operacional["Horas"], errors="coerce"
-).fillna(0)
-
-# 🔥 TOTAL POR OPERAÇÃO
-base_total = (
-    df_operacional.groupby("CHAVE_OPERACAO", as_index=False)
-    .agg(Horas_Total=("Horas", "sum"))
-)
-
-# 🔥 MERGE SALDO
-base_saldo = base_total.merge(
-    df_baixas_agg,
-    on="CHAVE_OPERACAO",
-    how="left"
-)
-
-base_saldo["Horas_Baixadas"] = base_saldo["Horas_Baixadas"].fillna(0)
-
-base_saldo["Saldo_Horas"] = (
-    base_saldo["Horas_Total"] - base_saldo["Horas_Baixadas"]
-)
-
-base_saldo["Saldo_Horas"] = base_saldo["Saldo_Horas"].clip(lower=0)
-
-# ------------------------------------------------------------
-# 🔥 TRAZ SALDO PARA BASE OPERACIONAL
-# ------------------------------------------------------------
-df_operacional = df_operacional.drop(columns=["Saldo_Horas"], errors="ignore")
-
-df_operacional = df_operacional.merge(
-    base_saldo[["CHAVE_OPERACAO", "Saldo_Horas"]],
-    on="CHAVE_OPERACAO",
-    how="left"
-)
-
-df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].fillna(0)
-
-
-
-
-# ------------------------------------------------------------
-# 🔒 GARANTIA DE EXISTÊNCIA DO SALDO
-# ------------------------------------------------------------
-if "Saldo_Horas" not in df_operacional.columns:
-    df_operacional["Saldo_Horas"] = 0
-
-df_operacional["Saldo_Horas"] = pd.to_numeric(
-    df_operacional["Saldo_Horas"],
-    errors="coerce"
-).fillna(0)
-
-
-
-
-
-# ------------------------------------------------------------
-# 🔥 STATUS OPERACIONAL
-# ------------------------------------------------------------
-total_por_operacao = df_operacional.groupby("CHAVE_OPERACAO")["Horas"].transform("sum")
-
-df_operacional["Status Operacional"] = np.where(
-    df_operacional["Saldo_Horas"] <= 0,
-    "✅ Baixado",
-    np.where(
-        df_operacional["Saldo_Horas"] < total_por_operacao,
-        "🟡 Parcial",
-        "⏳ Pendente"
-    )
-)
-
-
-st.markdown("### 🔎 DEBUG FINAL")
-
-st.write("BAIXAS AGRUPADAS:")
-st.write(df_baixas_agg.tail(10))
-
-st.write("OPERACIONAL (PV 6980):")
-st.write(df_operacional[
-    df_operacional["PV"] == "6980"
-][[
-    "Processo",
-    "CHAVE_OPERACAO",
-    "Horas",
-    "Horas_Baixadas",
-    "Saldo_Horas"
-]])
-
-
-
-
-# ------------------------------------------------------------
-# 🔥 BASE REAL DO APS
-# ------------------------------------------------------------
-df = df_operacional[
-    df_operacional["Saldo_Horas"] > 0
-].copy()
-
+df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
 df = df.reset_index(drop=True)
-
-
-
-# ------------------------------------------------------------
-# DATAFRAMES AUXILIARES (MANTIDOS INTACTOS)
-# ------------------------------------------------------------
+# DataFrames auxiliares
 df_excluidas = pd.DataFrame(pvs_excluidas)
 df_sem_carga = pd.DataFrame(pvs_sem_carga)
 df_auditoria_pv = pd.DataFrame(auditoria_pv)
 
-# ------------------------------------------------------------
-# BLINDAGEM DOS AUXILIARES
-# ------------------------------------------------------------
+# Blindagem dos auxiliares
 for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
     if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
         _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
@@ -1137,9 +908,9 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
             dayfirst=True
         )
 
-# ------------------------------------------------------------
-# GARANTIA DE RASTREABILIDADE
-# ------------------------------------------------------------
+# -------------------------------
+# Garantia de rastreabilidade
+# -------------------------------
 pvs_auditadas_set = set(df_auditoria_pv["PV"].astype(str).str.strip().unique()) if not df_auditoria_pv.empty else set()
 pvs_nao_auditadas = pvs_excel_set - pvs_auditadas_set
 
@@ -1186,9 +957,6 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
             dayfirst=True
         )
 
-# ------------------------------------------------------------
-# TRAVA FINAL (DIAGNÓSTICO)
-# ------------------------------------------------------------
 if df.empty:
     st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
 
@@ -1207,8 +975,6 @@ if df.empty:
     st.dataframe(df_pv.head(20), use_container_width=True)
 
     st.stop()
-
-
 
 
 
@@ -1267,109 +1033,6 @@ df["Fila (dias)"] = np.where(
     df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
     0
 )
-
-
-
-
-
-# ============================================================
-# 🎯 PRIORIDADE INTELIGENTE APS (BASE ÚNICA DE DECISÃO)
-# ============================================================
-
-df_prioridade = df.copy()
-
-if not df_prioridade.empty:
-
-    # ------------------------------------------------------------
-    # 🔒 SEGURANÇA NUMÉRICA
-    # ------------------------------------------------------------
-    for col in ["Horas", "Fila (dias)"]:
-        if col not in df_prioridade.columns:
-            df_prioridade[col] = 0
-
-        df_prioridade[col] = pd.to_numeric(
-            df_prioridade[col],
-            errors="coerce"
-        ).fillna(0)
-
-    # ------------------------------------------------------------
-    # 📅 PRAZO (URGÊNCIA)
-    # ------------------------------------------------------------
-    if "ENTREGA" in df_prioridade.columns:
-        hoje = pd.Timestamp.now().normalize()
-
-        df_prioridade["Dias_Restantes"] = (
-            pd.to_datetime(df_prioridade["ENTREGA"], errors="coerce") - hoje
-        ).dt.days
-
-        df_prioridade["Dias_Restantes"] = pd.to_numeric(
-            df_prioridade["Dias_Restantes"], errors="coerce"
-        ).fillna(999)
-
-    else:
-        df_prioridade["Dias_Restantes"] = 999
-
-    # 🔥 NORMALIZAÇÃO PRAZO (quanto menor, mais urgente)
-    max_dias = df_prioridade["Dias_Restantes"].max()
-    df_prioridade["Prazo_norm"] = 1 - (
-        df_prioridade["Dias_Restantes"] / max_dias if max_dias > 0 else 0
-    )
-
-    df_prioridade["Prazo_norm"] = df_prioridade["Prazo_norm"].clip(0, 1)
-
-    # ------------------------------------------------------------
-    # ⏱️ CARGA (HORAS)
-    # ------------------------------------------------------------
-    max_horas = df_prioridade["Horas"].max()
-    df_prioridade["Horas_norm"] = df_prioridade["Horas"] / max_horas if max_horas > 0 else 0
-
-    # ------------------------------------------------------------
-    # 📦 FILA (IMPACTO)
-    # ------------------------------------------------------------
-    max_fila = df_prioridade["Fila (dias)"].max()
-    df_prioridade["Fila_norm"] = df_prioridade["Fila (dias)"] / max_fila if max_fila > 0 else 0
-
-    # ------------------------------------------------------------
-    # 🔥 GARGALO (CRÍTICO)
-    # ------------------------------------------------------------
-    gargalo_ref = None
-
-    if 'gargalo_exec' in locals() and gargalo_exec:
-        gargalo_ref = gargalo_exec
-    elif 'gargalo_raiz' in locals() and gargalo_raiz:
-        gargalo_ref = gargalo_raiz
-
-    df_prioridade["Gargalo_flag"] = np.where(
-        df_prioridade["Processo"] == gargalo_ref,
-        1,
-        0
-    )
-
-    # ------------------------------------------------------------
-    # 🎯 SCORE FINAL APS
-    # ------------------------------------------------------------
-    df_prioridade["Score_APS"] = (
-        df_prioridade["Prazo_norm"] * 0.4 +   # prazo manda
-        df_prioridade["Gargalo_flag"] * 0.3 + # gargalo manda muito
-        df_prioridade["Fila_norm"] * 0.2 +    # impacto
-        df_prioridade["Horas_norm"] * 0.1     # carga
-    )
-
-    # ------------------------------------------------------------
-    # 🔥 ORDENAÇÃO FINAL (APS REAL)
-    # ------------------------------------------------------------
-    df_prioridade = df_prioridade.sort_values(
-        by=["Score_APS", "Dias_Restantes"],
-        ascending=[False, True]
-    ).reset_index(drop=True)
-
-    df_prioridade["Ranking_APS"] = df_prioridade.index + 1
-
-    # 🔒 ENVIO PARA SISTEMA
-    st.session_state["df_prioridade"] = df_prioridade.copy()
-
-
-
 
 
 # ===============================
@@ -1996,7 +1659,7 @@ except:
 
 
 # ============================================================
-# Mini Dashboard por Gargalo (INTELIGENTE E CONSISTENTE)
+# Mini Dashboard por Gargalo (INTELIGENTE)
 # ============================================================
 
 def _normalizar_coluna_processo(df, coluna="Processo"):
@@ -2027,42 +1690,16 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         ])
 
     # ------------------------------------------------------------
-    # 🔥 BASE DA FILA (NORMALIZADA)
+    # BASE DA FILA
     # ------------------------------------------------------------
     fila_tmp = fila.copy()
     fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
-
-    # 🔒 normalização chave
-    fila_tmp["PV"] = fila_tmp["PV"].astype(str).str.strip()
-    fila_tmp["CODIGO_PV"] = fila_tmp["CODIGO_PV"].astype(str).str.strip()
 
     if "Horas" not in fila_tmp.columns:
         fila_tmp["Horas"] = 0
 
     fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
 
-    # ------------------------------------------------------------
-    # 🔥 CHAVE CONSISTENTE (PADRÃO GLOBAL APS)
-    # ------------------------------------------------------------
-    fila_tmp["CHAVE_OPERACAO"] = fila_tmp.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
-    )
-
-    # ------------------------------------------------------------
-    # 🔥 BASE DE FILA JÁ CORRETA (USA SALDO REAL DO APS)
-    # ------------------------------------------------------------
-    # ⚠️ IMPORTANTE:
-    # Não removemos mais por baixa aqui.
-    # A base "fila" já vem do APS filtrada por Saldo_Horas > 0.
-    # Qualquer remoção adicional gera inconsistência.
-
-
-    # ------------------------------------------------------------
-    # BASE DE FILA (AGORA LIMPA E CONFIÁVEL)
-    # ------------------------------------------------------------
     resumo_fila = (
         fila_tmp.groupby("Processo", dropna=False)
         .agg(
@@ -2073,7 +1710,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     # ------------------------------------------------------------
-    # BASE DE BAIXAS ATIVAS (MANTIDA PARA CONTEXTO)
+    # BASE DE BAIXAS ATIVAS (BLINDADO)
     # ------------------------------------------------------------
     if (
         df_baixas_ativas is None
@@ -2106,12 +1743,12 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
 
     # ------------------------------------------------------------
-    # CARGA TOTAL (SEM DISTORÇÃO)
+    # CARGA TOTAL
     # ------------------------------------------------------------
     df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
 
     # ------------------------------------------------------------
-    # SCORE (MANTIDO)
+    # SCORE
     # ------------------------------------------------------------
     df_dash["Score"] = (
         (df_dash["Horas_Fila"] * 1.5) +
@@ -2120,7 +1757,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     # ------------------------------------------------------------
-    # CLASSIFICAÇÃO (MANTIDA)
+    # CLASSIFICAÇÃO
     # ------------------------------------------------------------
     def classificar_gargalo(score):
         if score >= 80:
@@ -2143,7 +1780,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     df_dash["Ranking"] = df_dash.index + 1
 
     return df_dash
-
 
 
 
@@ -2805,83 +2441,151 @@ else:
 
 
 # ============================================================
-# 🔥 SALVAR BAIXA (VERSÃO DEFINITIVA - BASEADA NO SALDO REAL)
+# SALVAR BAIXA OPERACIONAL (VERSÃO FINAL INTEGRADA APS)
 # ============================================================
-def salvar_baixa_operacional(base_path, nova_baixa):
+def salvar_baixa_operacional(base_path, registro_baixa):
+
+    caminho = garantir_arquivo_baixas(base_path)
 
     # ------------------------------------------------------------
-    # 🔒 BASES ATUAIS
+    # CARREGA BASE
     # ------------------------------------------------------------
-    df_existente = st.session_state.df_baixas.copy()
-    df_existente = _padronizar_df_baixas(df_existente)
+    try:
+        df_existente = pd.read_excel(caminho, dtype=str)
+    except Exception:
+        df_existente = pd.DataFrame(columns=COLUNAS_BAIXAS)
 
-    df_novo = pd.DataFrame([nova_baixa])
-    df_novo = _padronizar_df_baixas(df_novo)
-
-    chave = df_novo["CHAVE_OPERACAO"].iloc[0]
-    nova_hora = float(df_novo["Horas"].iloc[0])
+    df_existente = df_existente.copy()
 
     # ------------------------------------------------------------
-    # 🔥 TOTAL DA OPERAÇÃO (BASE REAL APS)
+    # NOVO REGISTRO
     # ------------------------------------------------------------
-    total_operacao = df_operacional[
-        df_operacional["CHAVE_OPERACAO"] == chave
-    ]["Horas"].astype(float).sum()
+    novo = pd.DataFrame([registro_baixa])
 
-    # ------------------------------------------------------------
-    # 🔥 TOTAL JÁ BAIXADO
-    # ------------------------------------------------------------
-    total_baixado = df_existente[
-        (df_existente["CHAVE_OPERACAO"] == chave) &
-        (df_existente["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"]))
-    ]["Horas"].astype(float).sum()
+    for col in COLUNAS_BAIXAS:
+        if col not in novo.columns:
+            novo[col] = ""
 
     # ------------------------------------------------------------
-    # 🔒 TRAVAS REAIS (SEM GAMBIARRA)
+    # PADRONIZAÇÃO
     # ------------------------------------------------------------
-    if total_operacao <= 0:
-        return False, "Operação não encontrada ou inválida"
+    for col in ["PV", "CODIGO_PV", "Processo"]:
+        novo[col] = (
+            novo[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
-    if total_baixado >= total_operacao:
-        return False, "Operação já totalmente baixada"
+    novo["Cliente"] = novo["Cliente"].fillna("").astype(str).str.strip()
 
-    if nova_hora <= 0:
-        return False, "Horas inválidas"
+    novo["Status_Baixa"] = (
+        novo["Status_Baixa"]
+        .fillna("ATIVA")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-    saldo_restante = total_operacao - total_baixado
-
-    if nova_hora > saldo_restante:
-        return False, f"Excede saldo restante ({round(saldo_restante,2)}h)"
+    novo["Horas"] = pd.to_numeric(novo["Horas"], errors="coerce").fillna(0)
+    novo["Data_Baixa"] = pd.to_datetime(novo["Data_Baixa"], errors="coerce")
 
     # ------------------------------------------------------------
-    # 🔥 SALVA
+    # 🔥 CHAVE USANDO FUNÇÃO OFICIAL (CRÍTICO)
     # ------------------------------------------------------------
-    df_final = pd.concat([df_existente, df_novo], ignore_index=True)
-    df_final = _padronizar_df_baixas(df_final)
+    novo["CHAVE_OPERACAO"] = novo.apply(
+        lambda r: normalizar_chave_operacao(
+            r["PV"], r["Processo"], r["CODIGO_PV"]
+        ),
+        axis=1
+    )
 
-    st.session_state.df_baixas = df_final
+    chave_nova = novo["CHAVE_OPERACAO"].iloc[0]
 
-    return True, "Baixa aplicada corretamente"
+    # ------------------------------------------------------------
+    # VALIDAÇÃO
+    # ------------------------------------------------------------
+    if not df_existente.empty:
+
+        df_tmp = df_existente.copy()
+
+        df_tmp["CHAVE_OPERACAO"] = df_tmp.apply(
+            lambda r: normalizar_chave_operacao(
+                r["PV"], r["Processo"], r["CODIGO_PV"]
+            ),
+            axis=1
+        )
+
+        df_tmp["Status_Baixa"] = (
+            df_tmp["Status_Baixa"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        registros = df_tmp[df_tmp["CHAVE_OPERACAO"] == chave_nova]
+
+        if not registros.empty:
+
+            registros_ativos = registros[
+                registros["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+            ]
+
+            if not registros_ativos.empty:
+
+                log = novo.copy()
+                log["Status_Baixa"] = "TENTATIVA_DUPLICADA"
+                log["Motivo_Estorno"] = "Tentativa bloqueada - já existe baixa ativa"
+                log["Data_Baixa"] = pd.Timestamp.now()
+
+                df_existente = pd.concat([df_existente, log], ignore_index=True)
+                df_existente.to_excel(caminho, index=False)
+
+                return {
+                    "ok": False,
+                    "erro": "Operação já possui baixa ativa",
+                    "tipo": "duplicidade"
+                }
+
+    # ------------------------------------------------------------
+    # SALVAMENTO
+    # ------------------------------------------------------------
+    df_final = pd.concat([df_existente, novo], ignore_index=True)
+
+    try:
+        df_final.to_excel(caminho, index=False)
+        return {"ok": True}
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "erro": str(e),
+            "tipo": "erro_gravacao"
+        }
 
 
 
 
 # ============================================================
-# HISTÓRICOS (ALINHADO COM PADRONIZAÇÃO NOVA)
+# HISTÓRICOS
 # ============================================================
 
 def historico_baixas_completo(df_baixas):
-    if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
 
-    return _padronizar_df_baixas(df_baixas.copy())
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    return _padronizar_df_baixas(df_baixas)
 
 
 def historico_baixas_ativas(df_baixas):
-    if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO", "DATA_ESTIMADA"])
 
-    df_tmp = _padronizar_df_baixas(df_baixas.copy())
+    if df_baixas is None or df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    df_tmp = _padronizar_df_baixas(df_baixas)
 
     return df_tmp[
         df_tmp["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
@@ -2889,7 +2593,7 @@ def historico_baixas_ativas(df_baixas):
 
 
 # ============================================================
-# ESTORNO (BLINDADO E CONSISTENTE COM PADRONIZAÇÃO)
+# ESTORNO
 # ============================================================
 
 def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_estorno=""):
@@ -2901,13 +2605,8 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     except Exception as e:
         return False, f"Erro ao abrir histórico: {e}"
 
-    if df_baixas is None or df_baixas.empty:
-        return False, "Arquivo de baixas vazio."
-
-    # 🔥 padroniza antes de qualquer operação
     df_baixas = _padronizar_df_baixas(df_baixas)
 
-    # 🔒 CHAVE CONSISTENTE
     chave = (
         str(pv).strip().upper() + "||" +
         str(processo).strip().upper() + "||" +
@@ -2922,49 +2621,36 @@ def estornar_baixa_operacional(base_path, pv, processo, codigo_pv="", motivo_est
     if not filtro.any():
         return False, "Nenhuma baixa ativa encontrada."
 
-    # 🔥 pega a mais recente
     idx = df_baixas[filtro].index[0]
 
-    # ------------------------------------------------------------
-    # ATUALIZA SEM PERDER HISTÓRICO
-    # ------------------------------------------------------------
     df_baixas.at[idx, "Status_Baixa"] = "ESTORNADA"
-    df_baixas.at[idx, "Data_Estorno"] = datetime.now(
-        ZoneInfo("America/Sao_Paulo")
-    ).strftime("%d/%m/%Y %H:%M")
-
+    df_baixas.at[idx, "Data_Estorno"] = pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")
     df_baixas.at[idx, "Motivo_Estorno"] = str(motivo_estorno).strip()
 
-    # ------------------------------------------------------------
-    # 🔒 GARANTE TODAS AS COLUNAS
-    # ------------------------------------------------------------
-    for col in COLUNAS_BAIXAS:
-        if col not in df_baixas.columns:
-            df_baixas[col] = ""
+    with pd.ExcelWriter(caminho, engine="openpyxl", mode="w") as writer:
+        df_baixas[COLUNAS_BAIXAS].to_excel(writer, index=False)
 
-    df_para_salvar = df_baixas[COLUNAS_BAIXAS].copy()
-
-    # ------------------------------------------------------------
-    # 🔥 BACKUP ANTES DE SALVAR
-    # ------------------------------------------------------------
-    import os
-    import shutil
-
-    if os.path.exists(caminho):
-        try:
-            shutil.copy(caminho, caminho.replace(".xlsx", "_backup.xlsx"))
-        except Exception:
-            pass
-
-    # ------------------------------------------------------------
-    # 🔒 SALVAMENTO SEGURO
-    # ------------------------------------------------------------
     try:
-        df_para_salvar.to_excel(caminho, index=False)
-    except Exception as e:
-        return False, f"Erro ao salvar arquivo: {e}"
+        _criar_backup()
+    except Exception:
+        pass
 
     return True, "Baixa estornada com sucesso."
+
+
+# ============================================================
+# HISTÓRICO (SEM DUPLICAÇÃO DE FUNÇÕES)
+# ============================================================
+
+def historico_baixas_completo(df_baixas):
+    """
+    Retorna o histórico completo consolidado (ativas + terceirizadas + estornadas).
+    """
+    if df_baixas.empty:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+    return _padronizar_df_baixas(df_baixas.copy())
+
 
 
 
@@ -3250,137 +2936,253 @@ risco = pv_carga[
 
 
 
-# ------------------------------------------------------------
-# BASE DE CORTE (COM PRIORIDADE APS + PROTEÇÃO REAL)
-# ------------------------------------------------------------
-base_corte = df_operacional.copy()
+# ============================================================
+# ===================== PAINEL OPERACIONAL ===================
+# ============================================================
+st.markdown("## ⚡ Painel Operacional")
+st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
 
-# 🔒 NORMALIZAÇÃO (CRÍTICA)
-for col in ["PV", "Processo", "CODIGO_PV"]:
-    if col not in base_corte.columns:
-        base_corte[col] = ""
+base_op = df.copy()
+hoje = pd.Timestamp.today().normalize()
 
-    base_corte[col] = (
-        base_corte[col]
-        .astype(str)
-        .str.strip()
-        .str.upper()
+if "DATA_ENTREGA_APS" in base_op.columns:
+    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(
+        base_op["DATA_ENTREGA_APS"], errors="coerce"
     )
 
-# 🔥 CHAVE OFICIAL DO SISTEMA (ALINHADA)
-base_corte["CHAVE_OPERACAO"] = base_corte.apply(
-    lambda r: normalizar_chave_operacao(
-        r["PV"], r["Processo"], r["CODIGO_PV"]
-    ),
-    axis=1
+    base_op["Dias para Entrega"] = (
+        base_op["DATA_ENTREGA_APS"] - hoje
+    ).dt.days
+
+    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
+else:
+    base_op["Dias para Entrega"] = None
+    base_op["ENTREGA"] = pd.NaT
+
+
+
+# ============================================================
+# 📂 CONSULTA DE PVs (SOB DEMANDA)
+# ============================================================
+st.markdown("### 📂 Consultas de PV (sob demanda)")
+
+opcao_visao = st.selectbox(
+    "Selecione o que deseja visualizar",
+    [
+        "Ocultar tudo",
+        "PVs que vencem hoje",
+        "Top 10 PVs críticas",
+        "PVs urgentes da semana"
+    ],
+    index=0,
+    key="select_pv_visao"
 )
 
-# 🔥 FILTRO DE PROCESSOS DE CORTE
+# ============================================================
+# 📅 PVs QUE VENCEM HOJE
+# ============================================================
+if opcao_visao == "PVs que vencem hoje":
+
+    st.subheader("📅 PVs que vencem HOJE")
+
+    pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
+
+    if not pvs_hoje.empty:
+        pvs_hoje["Horas"] = pd.to_numeric(pvs_hoje["Horas"], errors="coerce").fillna(0).round(1)
+        pvs_hoje["ENTREGA"] = pd.to_datetime(
+            pvs_hoje["ENTREGA"], errors="coerce"
+        ).dt.strftime("%d/%m/%Y")
+
+        st.dataframe(
+            pvs_hoje.sort_values("Horas", ascending=False),
+            use_container_width=True
+        )
+    else:
+        st.success("Nenhuma PV vence hoje ✅")
+
+# ============================================================
+# 🔥 TOP 10 PVs MAIS CRÍTICAS
+# ============================================================
+elif opcao_visao == "Top 10 PVs críticas":
+
+    st.subheader("🔥 Top 10 PVs mais críticas")
+
+    criticas = base_op.copy()
+
+    if "Horas" in criticas.columns:
+        criticas["Horas"] = pd.to_numeric(criticas["Horas"], errors="coerce").fillna(0)
+
+    if "Dias para Entrega" not in criticas.columns:
+        criticas["Dias para Entrega"] = None
+
+    criticas = criticas.sort_values(
+        ["Dias para Entrega", "Horas"],
+        ascending=[True, False]
+    ).head(10)
+
+    criticas["Horas"] = criticas["Horas"].round(1)
+
+    if "ENTREGA" in criticas.columns:
+        criticas["ENTREGA"] = pd.to_datetime(
+            criticas["ENTREGA"], errors="coerce"
+        ).dt.strftime("%d/%m/%Y")
+
+    st.dataframe(criticas, use_container_width=True)
+
+# ============================================================
+# 🚨 PVs URGENTES DA SEMANA
+# ============================================================
+elif opcao_visao == "PVs urgentes da semana":
+
+    st.subheader("🚨 PVs Urgentes da Semana")
+
+    pvs_urgentes = base_op.copy()
+
+    if "Dias para Entrega" in pvs_urgentes.columns:
+        pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
+
+        urgentes = pvs_urgentes[
+            pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
+        ].copy()
+
+        if not urgentes.empty:
+            urgentes["Horas"] = pd.to_numeric(urgentes["Horas"], errors="coerce").fillna(0).round(1)
+
+            if "ENTREGA" in urgentes.columns:
+                urgentes["ENTREGA"] = pd.to_datetime(
+                    urgentes["ENTREGA"], errors="coerce"
+                ).dt.strftime("%d/%m/%Y")
+
+            colunas_urgentes = [
+                "Semáforo",
+                "PV",
+                "Cliente",
+                "CODIGO_PV",
+                "Processo",
+                "Horas",
+                "Dias para Entrega",
+                "ENTREGA"
+            ]
+            colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
+
+            st.dataframe(
+                urgentes[colunas_urgentes].sort_values(
+                    ["Dias para Entrega", "Horas"],
+                    ascending=[True, False]
+                ),
+                use_container_width=True
+            )
+        else:
+            st.success("Nenhuma PV urgente para os próximos 7 dias ✅")
+    else:
+        st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
+
+
+
+# ============================================================
+# ===================== FILA POR PROCESSO ====================
+# ============================================================
+st.subheader("📌 Fila por Processo")
+
+fila = df.copy()
+
+if "ENTREGA" in fila.columns:
+    fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
+    fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
+else:
+    fila["Dias para Entrega"] = None
+
+fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
+
+# ---------------------------------------
+# FILTROS
+# ---------------------------------------
+col_f1, col_f2, col_f3 = st.columns(3)
+
+processos_fila = sorted(fila["Processo"].dropna().astype(str).str.strip().unique().tolist())
+processo_fila_sel = col_f1.selectbox("Filtrar por Processo", ["Todos"] + processos_fila)
+
+pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
+pv_fila_sel = col_f2.selectbox("Filtrar por PV específica", ["Todas"] + pvs_fila)
+
+tipo_corte_sel = col_f3.selectbox(
+    "Filtrar por Tipo de Corte",
+    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"]
+)
+
+if processo_fila_sel != "Todos":
+    fila = fila[fila["Processo"].astype(str).str.strip() == processo_fila_sel].copy()
+
+if pv_fila_sel != "Todas":
+    fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
+
+fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
+
+if tipo_corte_sel == "Apenas Corte":
+    fila = fila[fila["Processo"].str.contains("CORTE", na=False)].copy()
+elif tipo_corte_sel == "Apenas Serra":
+    fila = fila[fila["Processo"] == "CORTE - SERRA"].copy()
+elif tipo_corte_sel == "Apenas Laser":
+    fila = fila[fila["Processo"] == "CORTE - LASER"].copy()
+elif tipo_corte_sel == "Apenas Plasma":
+    fila = fila[fila["Processo"] == "CORTE - PLASMA"].copy()
+
+# ---------------------------------------
+# KPIs
+# ---------------------------------------
+col_k1, col_k2, col_k3 = st.columns(3)
+col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
+col_k2.metric("Processos na Fila", fila["Processo"].nunique())
+col_k3.metric("Horas na Fila", f"{pd.to_numeric(fila['Horas'], errors='coerce').fillna(0).sum():.1f} h")
+
+st.markdown("### 📋 PVs na Fila")
+
+fila_detalhe = fila.copy()
+fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
+
+if "ENTREGA" in fila_detalhe.columns:
+    fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
+    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
+
+colunas_fila = ["Semáforo","PV","Cliente","CODIGO_PV","Processo","Horas","Dias para Entrega","ENTREGA"]
+colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+
+fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
+
+st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
+
+
+
+
+
+
+# ============================================================
+# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL)
+# ============================================================
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
+
+# ------------------------------------------------------------
+# BASE DE CORTE
+# ------------------------------------------------------------
+base_corte = df_operacional.copy()
+base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
+
 base_corte = base_corte[
     base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
 ].copy()
-
-# ============================================================
-# 🔥 REMOVE OPERAÇÕES JÁ BAIXADAS (ALINHADO COM EXCEL)
-# ============================================================
-try:
-    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-    df_baixas = pd.read_excel(caminho_baixas, dtype=str)
-except:
-    df_baixas = pd.DataFrame()
-
-if not df_baixas.empty:
-
-    for col in ["PV", "Processo", "CODIGO_PV", "Status_Baixa"]:
-        if col not in df_baixas.columns:
-            df_baixas[col] = ""
-
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        df_baixas[col] = (
-            df_baixas[col]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    df_baixas["Status_Baixa"] = (
-        df_baixas["Status_Baixa"]
-        .fillna("")
-        .astype(str)
-        .str.upper()
-    )
-
-    df_baixas_ativas = df_baixas[
-        df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
-
-    df_baixas_ativas["CHAVE_OPERACAO"] = df_baixas_ativas.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
-    )
-
-    chaves_baixadas = set(df_baixas_ativas["CHAVE_OPERACAO"])
-
-    base_corte = base_corte[
-        ~base_corte["CHAVE_OPERACAO"].isin(chaves_baixadas)
-    ].copy()
-
-# ============================================================
-# 🔥 PRIORIDADE APS (MANTIDO)
-# ============================================================
-df_prioridade = st.session_state.get("df_prioridade", None)
-
-if df_prioridade is not None and not df_prioridade.empty:
-
-    df_prioridade = df_prioridade.copy()
-
-    for col in ["PV", "Processo", "CODIGO_PV"]:
-        df_prioridade[col] = (
-            df_prioridade[col]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
-    df_prioridade_unique = df_prioridade.drop_duplicates(
-        subset=["PV", "Processo", "CODIGO_PV"]
-    )
-
-    base_corte = base_corte.merge(
-        df_prioridade_unique[["PV", "Processo", "CODIGO_PV", "Ranking_APS"]],
-        on=["PV", "Processo", "CODIGO_PV"],
-        how="left"
-    )
-
-    base_corte["Ranking_APS"] = pd.to_numeric(
-        base_corte["Ranking_APS"], errors="coerce"
-    ).fillna(9999)
-
-    base_corte = base_corte.sort_values(
-        by=["Ranking_APS", "Data"],
-        ascending=[True, True]
-    ).reset_index(drop=True)
-
-else:
-    base_corte = base_corte.sort_values(
-        by=["Data"],
-        ascending=[True]
-    ).reset_index(drop=True)
-
-# ============================================================
 
 if base_corte.empty:
     st.info("Nenhuma operação de corte encontrada.")
 else:
 
-    base_corte["Horas"] = pd.to_numeric(
-        base_corte["Horas"], errors="coerce"
-    ).fillna(0).round(1)
+    base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
 
     base_corte = base_corte.reset_index(drop=True)
+    base_corte["ID_UNICO"] = base_corte.index.astype(str)
 
     base_corte["LABEL"] = (
         "PV " + base_corte["PV"].astype(str) +
@@ -3389,45 +3191,150 @@ else:
         " | " + base_corte["Horas"].astype(str) + " h"
     )
 
-    base_corte_pendente = base_corte.copy()
+    base_corte_pendente = base_corte[
+        base_corte["Status Operacional"] == "⏳ Pendente"
+    ].copy()
 
     if base_corte_pendente.empty:
         st.info("Nenhuma operação pendente de corte.")
     else:
 
-        selecionado = st.selectbox(
-            "Selecione a operação de corte",
-            options=base_corte_pendente["LABEL"].tolist(),
-            key="corte_unitario"
-        )
+        opcoes = base_corte_pendente["LABEL"].tolist()
 
-        if selecionado:
+        # ------------------------------------------------------------
+        # CONTROLE DE RESET
+        # ------------------------------------------------------------
+        if "reset_corte_unitario" not in st.session_state:
+            st.session_state["reset_corte_unitario"] = False
 
-            linha = base_corte_pendente[
-                base_corte_pendente["LABEL"] == selecionado
-            ].iloc[0]
+        if "reset_corte_lote" not in st.session_state:
+            st.session_state["reset_corte_lote"] = False
 
-            if st.button("Confirmar Baixa Corte"):
+        if st.session_state["reset_corte_unitario"]:
+            if opcoes:
+                st.session_state["corte_unitario"] = opcoes[0]
+            st.session_state["reset_corte_unitario"] = False
 
-                registro = {
+        if st.session_state["reset_corte_lote"]:
+            st.session_state["corte_lote"] = []
+            st.session_state["reset_corte_lote"] = False
+
+        # ------------------------------------------------------------
+        # 🔹 BAIXA UNITÁRIA
+        # ------------------------------------------------------------
+        st.markdown("#### 🔹 Baixa Unitária")
+
+        escolha = st.selectbox("Operação", opcoes, key="corte_unitario")
+
+        linha_sel = base_corte_pendente[
+            base_corte_pendente["LABEL"] == escolha
+        ]
+
+        if not linha_sel.empty:
+            linha = linha_sel.iloc[0]
+
+            if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
+
+                resultado = salvar_baixa_operacional(BASE_PATH, {
                     "PV": linha["PV"],
                     "Cliente": linha.get("Cliente", ""),
                     "CODIGO_PV": linha["CODIGO_PV"],
                     "Processo": linha["Processo"],
                     "Horas": linha["Horas"],
-                    "Data_Baixa": pd.Timestamp.now(),
-                    "Usuario": "APS",
-                    "Observacao": "Baixa corte",
+                    "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
+                    "Usuario": "Sistema",
+                    "Observacao": "UNITARIO_CORTE",
                     "Status_Baixa": "ATIVA",
                     "Data_Estorno": "",
                     "Motivo_Estorno": ""
-                }
+                })
 
-                salvar_baixa_operacional(BASE_PATH, registro)
+                if resultado.get("ok"):
 
-                st.success("Baixa realizada com sucesso")
-                st.rerun()
+                    st.cache_data.clear()
 
+                    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+                    file_mtime_baixas = os.path.getmtime(caminho_baixas)
+
+                    df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+                    df_baixas_ativas = df_baixas[
+                        df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+                    ].copy()
+
+                    st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+                    st.session_state["reset_corte_unitario"] = True
+
+                    st.success("Baixa registrada com sucesso")
+
+                    st.rerun()
+
+                else:
+                    st.error(resultado.get("erro", "Erro ao registrar baixa"))
+
+        st.divider()
+
+        # ------------------------------------------------------------
+        # 📦 BAIXA EM LOTE
+        # ------------------------------------------------------------
+        st.markdown("#### 📦 Baixa em Lote")
+
+        selecao = st.multiselect("Selecionar operações", opcoes, key="corte_lote")
+
+        if selecao:
+            if st.button("📦 Baixar Corte em Lote", key="btn_corte_lote"):
+
+                sucessos = 0
+                erros = 0
+
+                for label in selecao:
+                    linha = base_corte_pendente[
+                        base_corte_pendente["LABEL"] == label
+                    ].iloc[0]
+
+                    resultado = salvar_baixa_operacional(BASE_PATH, {
+                        "PV": linha["PV"],
+                        "Cliente": linha.get("Cliente", ""),
+                        "CODIGO_PV": linha["CODIGO_PV"],
+                        "Processo": linha["Processo"],
+                        "Horas": linha["Horas"],
+                        "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
+                        "Usuario": "Sistema",
+                        "Observacao": "LOTE_CORTE",
+                        "Status_Baixa": "ATIVA",
+                        "Data_Estorno": "",
+                        "Motivo_Estorno": ""
+                    })
+
+                    if resultado.get("ok"):
+                        sucessos += 1
+                    else:
+                        erros += 1
+
+                # 🔥 RECARREGA BASE
+                st.cache_data.clear()
+
+                caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
+                file_mtime_baixas = os.path.getmtime(caminho_baixas)
+
+                df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+
+                df_baixas_ativas = df_baixas[
+                    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+                ].copy()
+
+                st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+                if sucessos:
+                    st.session_state["reset_corte_lote"] = True
+
+                    st.success(f"{sucessos} operações baixadas")
+
+                    st.rerun()
+
+                if erros:
+                    st.warning(f"{erros} não foram baixadas")
 
 
 
@@ -3851,320 +3758,6 @@ with st.expander("🎯 Controle dos 3 Principais Gargalos", expanded=True):
         st.divider()
 
 
-
-
-
-# ============================================================
-# ===================== FILA POR PROCESSO ====================
-# ============================================================
-st.subheader("📌 Fila por Processo")
-
-# 🔥 USA PRIORIDADE APS (SE EXISTIR)
-fila = st.session_state.get("df_prioridade", df).copy()
-
-if "ENTREGA" in fila.columns:
-    fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
-    fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
-else:
-    fila["Dias para Entrega"] = None
-
-fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
-
-# ============================================================
-# 🔥 GARGALO VISUAL
-# ============================================================
-gargalo_ref = None
-if 'gargalo_exec' in locals() and gargalo_exec:
-    gargalo_ref = gargalo_exec
-elif 'gargalo_raiz' in locals() and gargalo_raiz:
-    gargalo_ref = gargalo_raiz
-
-fila["Gargalo"] = np.where(fila["Processo"] == gargalo_ref, "🔥", "")
-
-# ============================================================
-# 🔥 PRIORIDADE VISUAL (SEMÁFORO APS)
-# ============================================================
-def prioridade_visual(row):
-    dias = row.get("Dias para Entrega", 999)
-    score = row.get("Score_APS", 0)
-    gargalo = row.get("Gargalo", "")
-
-    if dias < 0 or score > 0.8:
-        return "🔴"
-    elif dias <= 3 or gargalo == "🔥":
-        return "🟠"
-    elif dias <= 7:
-        return "🟡"
-    else:
-        return "🟢"
-
-fila["Prioridade"] = fila.apply(prioridade_visual, axis=1)
-
-# ---------------------------------------
-# FILTROS
-# ---------------------------------------
-col_f1, col_f2, col_f3 = st.columns(3)
-
-processos_fila = sorted(fila["Processo"].dropna().astype(str).str.strip().unique().tolist())
-processo_fila_sel = col_f1.selectbox("Filtrar por Processo", ["Todos"] + processos_fila)
-
-pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
-pv_fila_sel = col_f2.selectbox("Filtrar por PV específica", ["Todas"] + pvs_fila)
-
-tipo_corte_sel = col_f3.selectbox(
-    "Filtrar por Tipo de Corte",
-    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"]
-)
-
-if processo_fila_sel != "Todos":
-    fila = fila[fila["Processo"].astype(str).str.strip() == processo_fila_sel].copy()
-
-if pv_fila_sel != "Todas":
-    fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
-
-fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
-
-if tipo_corte_sel == "Apenas Corte":
-    fila = fila[fila["Processo"].str.contains("CORTE", na=False)].copy()
-elif tipo_corte_sel == "Apenas Serra":
-    fila = fila[fila["Processo"] == "CORTE - SERRA"].copy()
-elif tipo_corte_sel == "Apenas Laser":
-    fila = fila[fila["Processo"] == "CORTE - LASER"].copy()
-elif tipo_corte_sel == "Apenas Plasma":
-    fila = fila[fila["Processo"] == "CORTE - PLASMA"].copy()
-
-# ---------------------------------------
-# KPIs
-# ---------------------------------------
-col_k1, col_k2, col_k3 = st.columns(3)
-col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
-col_k2.metric("Processos na Fila", fila["Processo"].nunique())
-col_k3.metric("Horas na Fila", f"{pd.to_numeric(fila['Horas'], errors='coerce').fillna(0).sum():.1f} h")
-
-st.markdown("### 📋 PVs na Fila")
-
-fila_detalhe = fila.copy()
-
-# ------------------------------------------------------------
-# 🔒 TRATAMENTOS
-# ------------------------------------------------------------
-fila_detalhe["Horas"] = pd.to_numeric(
-    fila_detalhe["Horas"], errors="coerce"
-).fillna(0).round(1)
-
-fila_detalhe["Dias para Entrega"] = pd.to_numeric(
-    fila_detalhe["Dias para Entrega"], errors="coerce"
-).fillna(999)
-
-if "ENTREGA" in fila_detalhe.columns:
-    fila_detalhe["ENTREGA"] = pd.to_datetime(
-        fila_detalhe["ENTREGA"], errors="coerce"
-    )
-
-# ------------------------------------------------------------
-# 🔥 ORDENAÇÃO INTELIGENTE (AQUI ESTAVA O ERRO)
-# ------------------------------------------------------------
-fila_detalhe = fila_detalhe.sort_values(
-    by=[
-        "Dias para Entrega",  # menor prazo primeiro
-        "Horas"               # maior carga primeiro
-    ],
-    ascending=[True, False]
-)
-
-# ------------------------------------------------------------
-# 🔒 FORMATAR DATA (DEPOIS DA ORDENAÇÃO)
-# ------------------------------------------------------------
-if "ENTREGA" in fila_detalhe.columns:
-    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
-
-# ------------------------------------------------------------
-# 🔒 COLUNAS
-# ------------------------------------------------------------
-colunas_fila = [
-    "Prioridade",
-    "Gargalo",
-    "Semáforo",
-    "PV",
-    "Cliente",
-    "CODIGO_PV",
-    "Processo",
-    "Horas",
-    "Dias para Entrega",
-    "ENTREGA"
-]
-
-colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
-
-fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
-
-# ------------------------------------------------------------
-# 🔒 EXIBIÇÃO
-# ------------------------------------------------------------
-st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
-
-
-
-st.markdown("### 🔍 DEBUG ACABAMENTO")
-
-st.write(df_operacional[
-    (df_operacional["PV"] == "6980") &
-    (df_operacional["Processo"] == "ACABAMENTO")
-][["PV","Processo","Status Operacional","Saldo_Horas","Horas_Baixadas"]])
-
-
-
-
-
-# ============================================================
-# ===================== PAINEL OPERACIONAL ===================
-# ============================================================
-st.markdown("## ⚡ Painel Operacional")
-st.caption("Prioridades imediatas de produção — foco no que precisa ser feito agora.")
-
-base_op = df.copy()
-hoje = pd.Timestamp.today().normalize()
-
-if "DATA_ENTREGA_APS" in base_op.columns:
-    base_op["DATA_ENTREGA_APS"] = pd.to_datetime(
-        base_op["DATA_ENTREGA_APS"], errors="coerce"
-    )
-
-    base_op["Dias para Entrega"] = (
-        base_op["DATA_ENTREGA_APS"] - hoje
-    ).dt.days
-
-    base_op["ENTREGA"] = base_op["DATA_ENTREGA_APS"]
-else:
-    base_op["Dias para Entrega"] = None
-    base_op["ENTREGA"] = pd.NaT
-
-
-
-# ============================================================
-# 📂 CONSULTA DE PVs (SOB DEMANDA)
-# ============================================================
-st.markdown("### 📂 Consultas de PV (sob demanda)")
-
-opcao_visao = st.selectbox(
-    "Selecione o que deseja visualizar",
-    [
-        "Ocultar tudo",
-        "PVs que vencem hoje",
-        "Top 10 PVs críticas",
-        "PVs urgentes da semana"
-    ],
-    index=0,
-    key="select_pv_visao"
-)
-
-# ============================================================
-# 📅 PVs QUE VENCEM HOJE
-# ============================================================
-if opcao_visao == "PVs que vencem hoje":
-
-    st.subheader("📅 PVs que vencem HOJE")
-
-    pvs_hoje = base_op[base_op["Dias para Entrega"] == 0].copy()
-
-    if not pvs_hoje.empty:
-        pvs_hoje["Horas"] = pd.to_numeric(pvs_hoje["Horas"], errors="coerce").fillna(0).round(1)
-        pvs_hoje["ENTREGA"] = pd.to_datetime(
-            pvs_hoje["ENTREGA"], errors="coerce"
-        ).dt.strftime("%d/%m/%Y")
-
-        st.dataframe(
-            pvs_hoje.sort_values("Horas", ascending=False),
-            use_container_width=True
-        )
-    else:
-        st.success("Nenhuma PV vence hoje ✅")
-
-# ============================================================
-# 🔥 TOP 10 PVs MAIS CRÍTICAS
-# ============================================================
-elif opcao_visao == "Top 10 PVs críticas":
-
-    st.subheader("🔥 Top 10 PVs mais críticas")
-
-    criticas = base_op.copy()
-
-    if "Horas" in criticas.columns:
-        criticas["Horas"] = pd.to_numeric(criticas["Horas"], errors="coerce").fillna(0)
-
-    if "Dias para Entrega" not in criticas.columns:
-        criticas["Dias para Entrega"] = None
-
-    criticas = criticas.sort_values(
-        ["Dias para Entrega", "Horas"],
-        ascending=[True, False]
-    ).head(10)
-
-    criticas["Horas"] = criticas["Horas"].round(1)
-
-    if "ENTREGA" in criticas.columns:
-        criticas["ENTREGA"] = pd.to_datetime(
-            criticas["ENTREGA"], errors="coerce"
-        ).dt.strftime("%d/%m/%Y")
-
-    st.dataframe(criticas, use_container_width=True)
-
-# ============================================================
-# 🚨 PVs URGENTES DA SEMANA
-# ============================================================
-elif opcao_visao == "PVs urgentes da semana":
-
-    st.subheader("🚨 PVs Urgentes da Semana")
-
-    pvs_urgentes = base_op.copy()
-
-    if "Dias para Entrega" in pvs_urgentes.columns:
-        pvs_urgentes["Semáforo"] = pvs_urgentes["Dias para Entrega"].apply(semaforo_entrega)
-
-        urgentes = pvs_urgentes[
-            pvs_urgentes["Dias para Entrega"].between(-9999, 7, inclusive="both")
-        ].copy()
-
-        if not urgentes.empty:
-            urgentes["Horas"] = pd.to_numeric(urgentes["Horas"], errors="coerce").fillna(0).round(1)
-
-            if "ENTREGA" in urgentes.columns:
-                urgentes["ENTREGA"] = pd.to_datetime(
-                    urgentes["ENTREGA"], errors="coerce"
-                ).dt.strftime("%d/%m/%Y")
-
-            colunas_urgentes = [
-                "Semáforo",
-                "PV",
-                "Cliente",
-                "CODIGO_PV",
-                "Processo",
-                "Horas",
-                "Dias para Entrega",
-                "ENTREGA"
-            ]
-            colunas_urgentes = [c for c in colunas_urgentes if c in urgentes.columns]
-
-            st.dataframe(
-                urgentes[colunas_urgentes].sort_values(
-                    ["Dias para Entrega", "Horas"],
-                    ascending=[True, False]
-                ),
-                use_container_width=True
-            )
-        else:
-            st.success("Nenhuma PV urgente para os próximos 7 dias ✅")
-    else:
-        st.info("Não foi possível gerar o painel de urgência porque a coluna DATA_ENTREGA_APS não está disponível.")
-
-
-
-
-
-
-
-
-
 # ============================================================
 # MINI DASHBOARD POR GARGALO 
 # ============================================================
@@ -4583,26 +4176,17 @@ else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
 
 # ============================================================
-# 🚨 DASHBOARD DE ERROS OPERACIONAIS (CONSISTENTE)
+# 🚨 DASHBOARD DE ERROS OPERACIONAIS
 # ============================================================
 
 st.markdown("## 🚨 Inteligência de Erros Operacionais")
 
-# 🔥 usa base já carregada no sistema
-df_baixas_full = st.session_state.get("df_baixas_ativas_full")
-
-if df_baixas_full is None or df_baixas_full.empty:
-
-    try:
-        caminho = garantir_arquivo_baixas(BASE_PATH)
-        df_baixas_full = pd.read_excel(caminho, dtype=str)
-        df_baixas_full = _padronizar_df_baixas(df_baixas_full)
-    except Exception:
-        df_baixas_full = pd.DataFrame()
-
-# 🔒 garante consistência global
-if not df_baixas_full.empty:
+try:
+    caminho = garantir_arquivo_baixas(BASE_PATH)
+    df_baixas_full = pd.read_excel(caminho, dtype=str)
     df_baixas_full = _padronizar_df_baixas(df_baixas_full)
+except Exception:
+    df_baixas_full = pd.DataFrame()
 
 if df_baixas_full.empty:
     st.info("Sem dados para análise de erros.")
@@ -4667,22 +4251,15 @@ else:
         st.divider()
 
         # ------------------------------------------------------------
-        # 🔥 ÚLTIMAS OCORRÊNCIAS (COM CONTROLE DE DATA)
+        # ÚLTIMAS OCORRÊNCIAS
         # ------------------------------------------------------------
         st.markdown("### 🕒 Últimas Tentativas")
 
-        df_view = df_erros.copy()
-
-        # 🔥 separa dados confiáveis
-        if "DATA_ESTIMADA" in df_view.columns:
-            df_view["Data Confiável"] = ~df_view["DATA_ESTIMADA"]
-
         st.dataframe(
-            df_view.sort_values("Data_Baixa", ascending=False).head(20),
+            df_erros.sort_values("Data_Baixa", ascending=False).head(20),
             use_container_width=True,
             hide_index=True
         )
-
 
 
 # ============================================================
@@ -5318,6 +4895,4 @@ with st.expander("🚨 Simulação de Gargalo por Processo", expanded=False):
 # ============================================================
 
 st.session_state["df"] = df.copy()
-
-
 
