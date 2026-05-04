@@ -834,10 +834,15 @@ def normalizar_chave_operacao(pv, processo, codigo):
 
 
 # ============================================================
-# 🔥 BASE OPERACIONAL APS
+# 🔥 BASE OPERACIONAL APS (VERSÃO FINAL CONSOLIDADA)
 # ============================================================
+
+# 🔒 BASE ORIGINAL
 df_operacional = df_original.copy()
 
+# ------------------------------------------------------------
+# 🔒 NORMALIZA CAMPOS (PADRÃO ÚNICO DO SISTEMA)
+# ------------------------------------------------------------
 for col in ["PV", "Processo", "CODIGO_PV"]:
     if col not in df_operacional.columns:
         df_operacional[col] = ""
@@ -850,6 +855,9 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
         .str.upper()
     )
 
+# ------------------------------------------------------------
+# 🔥 CHAVE OPERACIONAL (ÚNICA E CONSISTENTE)
+# ------------------------------------------------------------
 df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
     lambda r: normalizar_chave_operacao(
         r["PV"], r["Processo"], r["CODIGO_PV"]
@@ -857,26 +865,22 @@ df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
     axis=1
 )
 
+# ============================================================
+# 🔥 REMOVE BAIXADOS DA FILA (CONSISTENTE COM MESMA CHAVE)
+# ============================================================
 
-# ============================================================
-# 🔥 REMOVE BAIXADOS DA FILA (AGORA FUNCIONA DE VERDADE)
-# ============================================================
+df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+
 if not df_baixas_ativas.empty:
 
     df_baixas_tmp = df_baixas_ativas.copy()
 
+    # 🔒 garante colunas (SEM NORMALIZAÇÃO DUPLA)
     for col in ["PV", "Processo", "CODIGO_PV"]:
         if col not in df_baixas_tmp.columns:
             df_baixas_tmp[col] = ""
 
-        df_baixas_tmp[col] = (
-            df_baixas_tmp[col]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-
+    # 🔥 CHAVE PADRÃO (MESMA FUNÇÃO DO SISTEMA)
     df_baixas_tmp["CHAVE_OPERACAO"] = df_baixas_tmp.apply(
         lambda r: normalizar_chave_operacao(
             r["PV"], r["Processo"], r["CODIGO_PV"]
@@ -886,46 +890,10 @@ if not df_baixas_ativas.empty:
 
     chaves_baixadas = set(df_baixas_tmp["CHAVE_OPERACAO"])
 
+    # 🔥 REMOVE DA FILA
     df_operacional = df_operacional[
         ~df_operacional["CHAVE_OPERACAO"].isin(chaves_baixadas)
     ].copy()
-
-
-
-
-
-# ============================================================
-# BASE OPERACIONAL (VERSÃO FINAL CORRIGIDA COMPLETA)
-# ============================================================
-
-# 🔒 BASE ORIGINAL
-df_operacional = df_original.copy()
-
-# ------------------------------------------------------------
-# NORMALIZA CAMPOS (GARANTE CONSISTÊNCIA)
-# ------------------------------------------------------------
-for col in ["PV", "Processo", "CODIGO_PV"]:
-    if col not in df_operacional.columns:
-        df_operacional[col] = ""
-
-    df_operacional[col] = (
-        df_operacional[col]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-# ------------------------------------------------------------
-# 🔥 CHAVE OPERACIONAL (ESSENCIAL)
-# ------------------------------------------------------------
-df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
-    lambda r: normalizar_chave_operacao(
-        r["PV"], r["Processo"], r["CODIGO_PV"]
-    ),
-    axis=1
-)
-
 
 
 
