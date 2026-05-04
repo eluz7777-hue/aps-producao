@@ -4150,7 +4150,12 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 
+st.markdown("### 🔍 DEBUG ACABAMENTO")
 
+st.write(df_operacional[
+    (df_operacional["PV"] == "6980") &
+    (df_operacional["Processo"] == "ACABAMENTO")
+][["PV","Processo","Status Operacional","Saldo_Horas","Horas_Baixadas"]])
 
 
 
