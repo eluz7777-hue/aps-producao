@@ -3899,9 +3899,6 @@ else:
 
 if not df_mini_gargalos.empty:
 
-    # ------------------------------------------------------------
-    # 🔒 DETECÇÃO SEGURA DA COLUNA DE UTILIZAÇÃO
-    # ------------------------------------------------------------
     col_util = None
 
     if 'gargalos' in locals() and not gargalos.empty:
@@ -3910,9 +3907,6 @@ if not df_mini_gargalos.empty:
                 col_util = col
                 break
 
-    # ------------------------------------------------------------
-    # 🔥 MERGE SEGURO
-    # ------------------------------------------------------------
     if col_util:
         df_mini_gargalos = df_mini_gargalos.merge(
             gargalos[["Processo", col_util]].rename(columns={col_util: "Utilizacao"}),
@@ -3922,9 +3916,6 @@ if not df_mini_gargalos.empty:
     else:
         df_mini_gargalos["Utilizacao"] = 0
 
-    # ------------------------------------------------------------
-    # 🔒 SEGURANÇA NUMÉRICA
-    # ------------------------------------------------------------
     for col in ["Horas_Fila", "Qtd_Fila", "Utilizacao"]:
         if col not in df_mini_gargalos.columns:
             df_mini_gargalos[col] = 0
@@ -3934,9 +3925,6 @@ if not df_mini_gargalos.empty:
             errors="coerce"
         ).fillna(0)
 
-    # ------------------------------------------------------------
-    # 🔥 NORMALIZAÇÃO (REMOVE VIÉS DE ESCALA)
-    # ------------------------------------------------------------
     max_util = df_mini_gargalos["Utilizacao"].max()
     max_horas = df_mini_gargalos["Horas_Fila"].max()
     max_qtd = df_mini_gargalos["Qtd_Fila"].max()
@@ -3945,18 +3933,12 @@ if not df_mini_gargalos.empty:
     df_mini_gargalos["Fila_norm"] = df_mini_gargalos["Horas_Fila"] / max_horas if max_horas > 0 else 0
     df_mini_gargalos["Qtd_norm"] = df_mini_gargalos["Qtd_Fila"] / max_qtd if max_qtd > 0 else 0
 
-    # ------------------------------------------------------------
-    # 🔥 SCORE FINAL (CAUSA > EFEITO)
-    # ------------------------------------------------------------
     df_mini_gargalos["Score"] = (
         df_mini_gargalos["Util_norm"] * 0.6 +
         df_mini_gargalos["Fila_norm"] * 0.3 +
         df_mini_gargalos["Qtd_norm"] * 0.1
     )
 
-    # ------------------------------------------------------------
-    # 🔥 ORDENAÇÃO FINAL
-    # ------------------------------------------------------------
     df_mini_gargalos = df_mini_gargalos.sort_values(
         by=["Score", "Utilizacao", "Horas_Fila"],
         ascending=[False, False, False]
@@ -3975,10 +3957,6 @@ if df_mini_gargalos.empty:
 
 else:
 
-    # ============================================================
-    # 🚨 ALERTA INTELIGENTE
-    # ============================================================
-
     st.markdown("## 🚨 Alerta Inteligente de Produção")
 
     gargalo_top = df_mini_gargalos.iloc[0]
@@ -3996,9 +3974,6 @@ else:
 
     st.divider()
 
-    # ------------------------------------------------------------
-    # CLASSIFICAÇÃO
-    # ------------------------------------------------------------
     if score >= 0.75:
         st.error("🚨 AÇÃO IMEDIATA: Gargalo crítico impactando diretamente os prazos.")
     elif score >= 0.5:
@@ -4006,32 +3981,23 @@ else:
     else:
         st.info("🟢 Situação controlada.")
 
-    # ------------------------------------------------------------
-    # AÇÃO RECOMENDADA
-    # ------------------------------------------------------------
     st.markdown("### 💡 Ação Recomendada")
 
     if gargalo_top.get("Util_norm", 0) > 0.7:
-        st.markdown(f"➡️ Aumentar capacidade no processo **{processo}** (gargalo real).")
+        st.markdown(f"➡️ Aumentar capacidade no processo **{processo}**.")
     elif horas > 20:
-        st.markdown(f"➡️ Atuar na fila do processo **{processo}** para reduzir acúmulo.")
+        st.markdown(f"➡️ Atuar na fila do processo **{processo}**.")
     else:
         st.markdown(f"➡️ Monitorar o processo **{processo}**.")
 
-    # ------------------------------------------------------------
-    # CARDS PRINCIPAIS
-    # ------------------------------------------------------------
     col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
 
     col_g1.metric("Processos", cards_gargalos.get("total_processos", 0))
     col_g2.metric("Itens na Fila", cards_gargalos.get("total_itens_fila", 0))
     col_g3.metric("Horas na Fila", f"{cards_gargalos.get('total_horas_fila', 0):.1f}h")
     col_g4.metric("Baixas Ativas", cards_gargalos.get("total_baixas_ativas", 0))
-    col_g5.metric("🔥 Gargalo Imediato (Operacional)", f"🔴 {processo}")
+    col_g5.metric("🔥 Gargalo Imediato", f"🔴 {processo}")
 
-    # ------------------------------------------------------------
-    # CLASSIFICAÇÃO
-    # ------------------------------------------------------------
     st.markdown("### 🚨 Classificação dos Gargalos")
 
     col_s1, col_s2, col_s3 = st.columns(3)
@@ -4040,20 +4006,20 @@ else:
     col_s2.metric("🟡 Atenção", cards_gargalos.get("qtd_atencao", 0))
     col_s3.metric("🟢 Controlados", cards_gargalos.get("qtd_controlados", 0))
 
-    # ------------------------------------------------------------
-    # TOP 3
-    # ------------------------------------------------------------
-    st.markdown("### 🔥 Top 3 Gargalos Prioritários")
+    # ============================================================
+    # 🔥 TOP 5 (AJUSTE PRINCIPAL)
+    # ============================================================
+    st.markdown("### 🔥 Top 5 Gargalos Prioritários")
 
-    top3 = df_mini_gargalos.head(3)
-    top3_cols = st.columns(3)
+    top5 = df_mini_gargalos.head(5)
+    top5_cols = st.columns(5)
 
-    for i in range(3):
-        with top3_cols[i]:
-            if i < len(top3):
-                row = top3.iloc[i]
+    for i in range(5):
+        with top5_cols[i]:
+            if i < len(top5):
+                row = top5.iloc[i]
                 st.metric(
-                    label=row["Processo"],
+                    label=f"{row['Ranking']}º - {row['Processo']}",
                     value=f"{int(row['Qtd_Fila'])} itens",
                     delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.2f}"
                 )
@@ -4074,6 +4040,8 @@ else:
     )
 
     st.divider()
+
+
 
 
 
