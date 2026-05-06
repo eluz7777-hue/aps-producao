@@ -3451,6 +3451,26 @@ else:
 
 
 
+
+
+# =========================================================
+# 🔥 FUNÇÃO LOCAL - CARREGAR BAIXAS SQLITE (GARANTIA TOTAL)
+# =========================================================
+def carregar_baixas_sqlite_local():
+    try:
+        conn = get_connection()
+        df = pd.read_sql_query("SELECT * FROM baixas", conn)
+        conn.close()
+
+        if df is None or df.empty:
+            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+        return _padronizar_df_baixas(df)
+
+    except Exception as e:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+
 # =========================================================
 # 🔥 BASE REAL DO DASHBOARD DE CORTE (CORRIGIDA - SQLITE)
 # =========================================================
@@ -3470,7 +3490,7 @@ fila_corte_dash["Horas"] = pd.to_numeric(
     fila_corte_dash["Horas"], errors="coerce"
 ).fillna(0)
 
-# 🔥 CHAVE PADRONIZADA (CRÍTICO)
+# 🔥 CHAVE PADRONIZADA
 fila_corte_dash["CHAVE_OPERACAO"] = (
     fila_corte_dash["PV"].astype(str).str.strip().str.upper() + "||" +
     fila_corte_dash["Processo"].astype(str).str.strip().str.upper() + "||" +
@@ -3480,7 +3500,7 @@ fila_corte_dash["CHAVE_OPERACAO"] = (
 # =========================================================
 # 🔥 HISTÓRICO REAL (SQLITE)
 # =========================================================
-df_baixas = carregar_baixas_sqlite()
+df_baixas = carregar_baixas_sqlite_local()
 
 hist_corte_dash = df_baixas.copy()
 
@@ -3497,7 +3517,7 @@ if not hist_corte_dash.empty:
         hist_corte_dash["Horas"], errors="coerce"
     ).fillna(0)
 
-    # 🔥 GARANTE CHAVE IGUAL À DO OPERACIONAL
+    # 🔥 CHAVE PADRONIZADA
     hist_corte_dash["CHAVE_OPERACAO"] = (
         hist_corte_dash["PV"].astype(str).str.strip().str.upper() + "||" +
         hist_corte_dash["Processo"].astype(str).str.strip().str.upper() + "||" +
@@ -3511,7 +3531,7 @@ if not hist_corte_dash.empty:
 
     chaves_baixadas = set(baixas_validas["CHAVE_OPERACAO"])
 
-    # 🔥 REMOVE DA FILA (100% CONSISTENTE)
+    # 🔥 REMOVE DA FILA
     fila_corte_dash = fila_corte_dash[
         ~fila_corte_dash["CHAVE_OPERACAO"].isin(chaves_baixadas)
     ].copy()
@@ -3519,7 +3539,6 @@ if not hist_corte_dash.empty:
 # =========================================================
 # 📊 KPIs
 # =========================================================
-
 ops_fila_corte = len(fila_corte_dash)
 horas_fila_corte = fila_corte_dash["Horas"].sum()
 
@@ -3545,7 +3564,6 @@ else:
 # =========================================================
 # 📊 RENDER KPIs
 # =========================================================
-
 col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
 
 col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
@@ -3555,7 +3573,7 @@ col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
 col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 
 # ------------------------------------------------------------
-# 🧾 FILA ATUAL DE CORTE (ORDENADA + SEMÁFORO)
+# 🧾 FILA ATUAL DE CORTE
 # ------------------------------------------------------------
 st.markdown("### 🧾 Fila Atual de Corte")
 
@@ -3603,9 +3621,7 @@ if not fila_corte_dash.empty:
         "ENTREGA_DT"
     ]
 
-    colunas_corte_fila = [
-        c for c in colunas_corte_fila if c in fila_corte_exib.columns
-    ]
+    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
 
     df_exib = fila_corte_exib[colunas_corte_fila].copy()
 
@@ -3629,6 +3645,8 @@ else:
     st.success("Nenhuma operação de corte pendente no momento. 🎯")
 
 st.divider()
+
+
 
 
 
