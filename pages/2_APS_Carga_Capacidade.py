@@ -73,7 +73,10 @@ else:
     st.error("Banco NÃO foi criado")
 
 
+import os
 
+st.write("Arquivos no servidor:")
+st.write(os.listdir())
 
 
 
