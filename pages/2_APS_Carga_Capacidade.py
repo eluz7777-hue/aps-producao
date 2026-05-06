@@ -73,10 +73,46 @@ else:
     st.error("Banco NÃO foi criado")
 
 
-import os
+# ============================================================
+# 🔥 SALVAR BAIXA NO SQLITE (PERSISTÊNCIA REAL)
+# ============================================================
+def salvar_baixa_sqlite(nova_baixa):
 
-st.write("Arquivos no servidor:")
-st.write(os.listdir())
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO baixas (
+                PV, Cliente, CODIGO_PV, Processo, Horas,
+                Data_Baixa, Usuario, Observacao,
+                Status_Baixa, Data_Estorno, Motivo_Estorno,
+                CHAVE_OPERACAO
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            nova_baixa["PV"],
+            nova_baixa.get("Cliente", ""),
+            nova_baixa["CODIGO_PV"],
+            nova_baixa["Processo"],
+            float(nova_baixa["Horas"]),
+            str(nova_baixa["Data_Baixa"]),
+            nova_baixa.get("Usuario", ""),
+            nova_baixa.get("Observacao", ""),
+            nova_baixa["Status_Baixa"],
+            nova_baixa.get("Data_Estorno", ""),
+            nova_baixa.get("Motivo_Estorno", ""),
+            nova_baixa["CHAVE_OPERACAO"]
+        ))
+
+        conn.commit()
+        conn.close()
+
+        return {"ok": True}
+
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}
+
 
 
 
@@ -3259,7 +3295,7 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 # ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL CORRIGIDA)
+# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL - SQLITE)
 # ============================================================
 
 from datetime import datetime
@@ -3302,6 +3338,24 @@ else:
         opcoes = base_corte_pendente["LABEL"].tolist()
 
         # ------------------------------------------------------------
+        # CONTROLE DE RESET (MANTIDO)
+        # ------------------------------------------------------------
+        if "reset_corte_unitario" not in st.session_state:
+            st.session_state["reset_corte_unitario"] = False
+
+        if "reset_corte_lote" not in st.session_state:
+            st.session_state["reset_corte_lote"] = False
+
+        if st.session_state["reset_corte_unitario"]:
+            if opcoes:
+                st.session_state["corte_unitario"] = opcoes[0]
+            st.session_state["reset_corte_unitario"] = False
+
+        if st.session_state["reset_corte_lote"]:
+            st.session_state["corte_lote"] = []
+            st.session_state["reset_corte_lote"] = False
+
+        # ------------------------------------------------------------
         # 🔹 BAIXA UNITÁRIA
         # ------------------------------------------------------------
         st.markdown("#### 🔹 Baixa Unitária")
@@ -3328,17 +3382,15 @@ else:
                     "Observacao": "UNITARIO_CORTE",
                     "Status_Baixa": "ATIVA",
                     "Data_Estorno": "",
-                    "Motivo_Estorno": ""
+                    "Motivo_Estorno": "",
+                    "CHAVE_OPERACAO": f"{linha['PV']}||{linha['Processo']}||{linha['CODIGO_PV']}"
                 }
 
-                resultado = salvar_baixa_operacional(BASE_PATH, nova_baixa)
+                resultado = salvar_baixa_sqlite(nova_baixa)
 
                 if resultado.get("ok"):
 
-                    # 🔥 SALVA HISTÓRICO (CORREÇÃO)
-                    salvar_historico_baixas(
-                        pd.DataFrame([nova_baixa])
-                    )
+                    st.session_state["reset_corte_unitario"] = True
 
                     st.success("Baixa registrada com sucesso")
                     st.rerun()
@@ -3377,30 +3429,25 @@ else:
                         "Observacao": "LOTE_CORTE",
                         "Status_Baixa": "ATIVA",
                         "Data_Estorno": "",
-                        "Motivo_Estorno": ""
+                        "Motivo_Estorno": "",
+                        "CHAVE_OPERACAO": f"{linha['PV']}||{linha['Processo']}||{linha['CODIGO_PV']}"
                     }
 
-                    resultado = salvar_baixa_operacional(BASE_PATH, nova_baixa)
+                    resultado = salvar_baixa_sqlite(nova_baixa)
 
                     if resultado.get("ok"):
                         sucessos.append(nova_baixa)
                     else:
                         erros.append(label)
 
-                # 🔥 SALVA HISTÓRICO (CORREÇÃO)
                 if sucessos:
-                    salvar_historico_baixas(
-                        pd.DataFrame(sucessos)
-                    )
-
-                if sucessos:
+                    st.session_state["reset_corte_lote"] = True
                     st.success(f"{len(sucessos)} operações baixadas")
 
                 if erros:
                     st.warning(f"{len(erros)} não foram baixadas")
 
                 st.rerun()
-
 
 
 
