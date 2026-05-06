@@ -22,6 +22,50 @@ from datetime import datetime
 
 st.set_page_config(layout="wide")
 
+
+
+# ============================================================
+# 🔥 SQLITE - INICIALIZAÇÃO DO BANCO APS
+# ============================================================
+import sqlite3
+
+DB_PATH = "aps_baixas.db"
+
+def get_connection():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+def inicializar_banco():
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS baixas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            PV TEXT,
+            Cliente TEXT,
+            CODIGO_PV TEXT,
+            Processo TEXT,
+            Horas REAL,
+            Data_Baixa TEXT,
+            Usuario TEXT,
+            Observacao TEXT,
+            Status_Baixa TEXT,
+            Data_Estorno TEXT,
+            Motivo_Estorno TEXT,
+            CHAVE_OPERACAO TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+# 🔥 EXECUTA NA INICIALIZAÇÃO
+inicializar_banco()
+
+
+
+
 # ============================================================
 # 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
 # ============================================================
