@@ -3885,15 +3885,51 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
 
 
 # ============================================================
-# MINI DASHBOARD POR GARGALO 
+# MINI DASHBOARD POR GARGALO (SQLITE REAL)
 # ============================================================
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
-# 🔒 GARANTIA ABSOLUTA DA BASE DE BAIXAS
-df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+# ============================================================
+# 🔥 FUNÇÃO LOCAL SQLITE (GARANTIA TOTAL)
+# ============================================================
+def carregar_baixas_sqlite_local():
+    try:
+        conn = get_connection()
+        df_sql = pd.read_sql_query("SELECT * FROM baixas", conn)
+        conn.close()
 
+        if df_sql is None or df_sql.empty:
+            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+        return _padronizar_df_baixas(df_sql)
+
+    except Exception:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+
+# ============================================================
+# 🔥 BASE REAL DAS BAIXAS (SQLITE)
+# ============================================================
+df_baixas_ativas = carregar_baixas_sqlite_local()
+
+if not df_baixas_ativas.empty:
+
+    df_baixas_ativas["Status_Baixa"] = (
+        df_baixas_ativas["Status_Baixa"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    df_baixas_ativas = df_baixas_ativas[
+        df_baixas_ativas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+
+# ============================================================
 # 🔒 GARANTIA DA FILA (USA df — BASE REAL DO APS)
+# ============================================================
 if df is None or df.empty:
     df_mini_gargalos = pd.DataFrame()
 else:
@@ -3902,10 +3938,10 @@ else:
         df_baixas_ativas=df_baixas_ativas
     )
 
+
 # ============================================================
 # 🔥 CORREÇÃO DE SCORE (ROBUSTA + NORMALIZADA)
 # ============================================================
-
 if not df_mini_gargalos.empty:
 
     col_util = None
@@ -3955,10 +3991,10 @@ if not df_mini_gargalos.empty:
 
     df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
 
+
 # ============================================================
 # 🔒 CARDS
 # ============================================================
-
 cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
 
 if df_mini_gargalos.empty:
@@ -4015,9 +4051,6 @@ else:
     col_s2.metric("🟡 Atenção", cards_gargalos.get("qtd_atencao", 0))
     col_s3.metric("🟢 Controlados", cards_gargalos.get("qtd_controlados", 0))
 
-    # ============================================================
-    # 🔥 TOP 5 (AJUSTE PRINCIPAL)
-    # ============================================================
     st.markdown("### 🔥 Top 5 Gargalos Prioritários")
 
     top5 = df_mini_gargalos.head(5)
@@ -4035,9 +4068,6 @@ else:
             else:
                 st.metric(label="-", value="-", delta="-")
 
-    # ------------------------------------------------------------
-    # TABELA
-    # ------------------------------------------------------------
     st.markdown("### 📊 Ranking Inteligente de Gargalos")
 
     st.dataframe(
@@ -4108,13 +4138,32 @@ st.divider()
 
 
 # --------------------------------------------------------
-# HISTÓRICO PREMIUM DE BAIXA (CORRIGIDO)
+# HISTÓRICO PREMIUM DE BAIXA (SQLITE REAL)
 # --------------------------------------------------------
+
 st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
 st.caption("Rastreabilidade completa das baixas operacionais, terceirizações e estornos.")
 
-# 🔥 FONTE REAL DOS DADOS
-df_baixas_exib = df_baixas.copy()
+# ============================================================
+# 🔥 FUNÇÃO SQLITE LOCAL
+# ============================================================
+def carregar_baixas_sqlite_local():
+    try:
+        conn = get_connection()
+        df_sql = pd.read_sql_query("SELECT * FROM baixas", conn)
+        conn.close()
+
+        if df_sql is None or df_sql.empty:
+            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+        return _padronizar_df_baixas(df_sql)
+
+    except Exception:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+
+# 🔥 BASE REAL
+df_baixas_exib = carregar_baixas_sqlite_local()
 
 if not df_baixas_exib.empty:
 
@@ -4130,28 +4179,16 @@ if not df_baixas_exib.empty:
                 .str.strip()
             )
 
-    if "Status_Baixa" in df_baixas_exib.columns:
-        df_baixas_exib["Status_Baixa"] = (
-            df_baixas_exib["Status_Baixa"]
-            .replace("", "ATIVA")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-    else:
-        df_baixas_exib["Status_Baixa"] = "ATIVA"
+    df_baixas_exib["Status_Baixa"] = (
+        df_baixas_exib["Status_Baixa"]
+        .replace("", "ATIVA")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-    if "Data_Baixa" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Baixa"] = pd.to_datetime(
-            df_baixas_exib["Data_Baixa"],
-            errors="coerce"
-        )
-
-    if "Data_Estorno" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Estorno"] = pd.to_datetime(
-            df_baixas_exib["Data_Estorno"],
-            errors="coerce"
-        )
+    df_baixas_exib["Data_Baixa"] = pd.to_datetime(df_baixas_exib["Data_Baixa"], errors="coerce")
+    df_baixas_exib["Data_Estorno"] = pd.to_datetime(df_baixas_exib["Data_Estorno"], errors="coerce")
 
     col_hist1, col_hist2, col_hist3 = st.columns([2, 2, 2])
 
@@ -4164,12 +4201,7 @@ if not df_baixas_exib.empty:
     processo_hist_sel = col_hist2.selectbox(
         "Filtrar por processo",
         ["Todos"] + sorted(
-            df_baixas_exib["Processo"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-            .tolist()
+            df_baixas_exib["Processo"].dropna().astype(str).str.strip().unique().tolist()
         ),
         key="filtro_processo_historico_baixas"
     )
@@ -4177,41 +4209,32 @@ if not df_baixas_exib.empty:
     cliente_hist_sel = col_hist3.selectbox(
         "Filtrar por cliente",
         ["Todos"] + sorted(
-            df_baixas_exib["Cliente"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-            .tolist()
+            df_baixas_exib["Cliente"].dropna().astype(str).str.strip().unique().tolist()
         ),
         key="filtro_cliente_historico_baixas"
     )
 
     if status_hist_sel != "Todos":
-        df_baixas_exib = df_baixas_exib[
-            df_baixas_exib["Status_Baixa"] == status_hist_sel
-        ].copy()
+        df_baixas_exib = df_baixas_exib[df_baixas_exib["Status_Baixa"] == status_hist_sel]
 
     if processo_hist_sel != "Todos":
         df_baixas_exib = df_baixas_exib[
             df_baixas_exib["Processo"].astype(str).str.strip() == processo_hist_sel
-        ].copy()
+        ]
 
     if cliente_hist_sel != "Todos":
         df_baixas_exib = df_baixas_exib[
             df_baixas_exib["Cliente"].astype(str).str.strip() == cliente_hist_sel
-        ].copy()
+        ]
 
     col_hk1, col_hk2, col_hk3, col_hk4 = st.columns(4)
+
     col_hk1.metric("Total de Registros", fmt_br_int(len(df_baixas_exib)))
     col_hk2.metric("Baixas Ativas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "ATIVA").sum()))
     col_hk3.metric("Terceirizadas", fmt_br_int((df_baixas_exib["Status_Baixa"] == "TERCEIRIZADA").sum()))
     col_hk4.metric(
         "Horas Registradas",
-        fmt_br_num(
-            pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(),
-            1
-        ) + " h"
+        fmt_br_num(pd.to_numeric(df_baixas_exib["Horas"], errors="coerce").fillna(0).sum(), 1) + " h"
     )
 
     def status_historico_label(x):
@@ -4226,17 +4249,10 @@ if not df_baixas_exib.empty:
 
     df_baixas_exib["Status Exibição"] = df_baixas_exib["Status_Baixa"].apply(status_historico_label)
 
-    if "Data_Baixa" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+    df_baixas_exib["Data_Baixa"] = df_baixas_exib["Data_Baixa"].dt.strftime("%d/%m/%Y %H:%M")
+    df_baixas_exib["Data_Estorno"] = df_baixas_exib["Data_Estorno"].dt.strftime("%d/%m/%Y %H:%M")
 
-    if "Data_Estorno" in df_baixas_exib.columns:
-        df_baixas_exib["Data_Estorno"] = df_baixas_exib["Data_Estorno"].dt.strftime("%d/%m/%Y %H:%M")
-
-    df_baixas_exib = df_baixas_exib.sort_values(
-        by=["Data_Baixa"],
-        ascending=False,
-        na_position="last"
-    ).copy()
+    df_baixas_exib = df_baixas_exib.sort_values(by=["Data_Baixa"], ascending=False)
 
     colunas_exibir = [
         "Status Exibição",
@@ -4251,6 +4267,7 @@ if not df_baixas_exib.empty:
         "Data_Estorno",
         "Motivo_Estorno"
     ]
+
     colunas_exibir = [c for c in colunas_exibir if c in df_baixas_exib.columns]
 
     st.dataframe(
@@ -4266,8 +4283,14 @@ if not df_baixas_exib.empty:
         hide_index=True,
         height=340
     )
+
 else:
     st.info("Nenhuma baixa operacional registrada até o momento.")
+
+
+
+
+
 
 # ============================================================
 # 🚨 DASHBOARD DE ERROS OPERACIONAIS
