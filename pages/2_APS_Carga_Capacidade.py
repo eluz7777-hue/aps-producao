@@ -18,22 +18,20 @@ import time
 import holidays
 import math
 import shutil
+import sqlite3
 from datetime import datetime
 
 st.set_page_config(layout="wide")
 
 
-
 # ============================================================
 # 🔥 SQLITE - INICIALIZAÇÃO DO BANCO APS
 # ============================================================
-import sqlite3
-import os
-
 DB_PATH = "aps_baixas.db"
 
 def get_connection():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
+
 
 def inicializar_banco():
 
@@ -61,16 +59,28 @@ def inicializar_banco():
     conn.commit()
     conn.close()
 
+
 # 🔥 EXECUTA NA INICIALIZAÇÃO
 inicializar_banco()
 
-# ------------------------------------------------------------
-# 🔎 TESTE DE CRIAÇÃO DO BANCO
-# ------------------------------------------------------------
-if os.path.exists(DB_PATH):
-    st.success(f"Banco criado: {DB_PATH}")
-else:
-    st.error("Banco NÃO foi criado")
+
+# ============================================================
+# 🔥 FUNÇÃO GLOBAL SQLITE (AGORA CORRETA)
+# ============================================================
+def carregar_baixas_sqlite():
+
+    try:
+        conn = get_connection()
+        df = pd.read_sql_query("SELECT * FROM baixas", conn)
+        conn.close()
+
+        if df is None or df.empty:
+            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+
+        return _padronizar_df_baixas(df)
+
+    except Exception:
+        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 
 # ============================================================
@@ -112,6 +122,7 @@ def salvar_baixa_sqlite(nova_baixa):
 
     except Exception as e:
         return {"ok": False, "erro": str(e)}
+
 
 
 
