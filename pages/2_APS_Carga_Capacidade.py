@@ -3452,7 +3452,7 @@ else:
 
 
 # =========================================================
-# 🔥 BASE REAL DO DASHBOARD DE CORTE (CORRIGIDA)
+# 🔥 BASE REAL DO DASHBOARD DE CORTE (CORRIGIDA - SQLITE)
 # =========================================================
 st.markdown("## 📊 Dashboard do Corte")
 st.caption("Indicadores operacionais e gerenciais do setor de corte.")
@@ -3470,7 +3470,18 @@ fila_corte_dash["Horas"] = pd.to_numeric(
     fila_corte_dash["Horas"], errors="coerce"
 ).fillna(0)
 
-# 🔹 HISTÓRICO DE BAIXAS
+# 🔥 CHAVE PADRONIZADA (CRÍTICO)
+fila_corte_dash["CHAVE_OPERACAO"] = (
+    fila_corte_dash["PV"].astype(str).str.strip().str.upper() + "||" +
+    fila_corte_dash["Processo"].astype(str).str.strip().str.upper() + "||" +
+    fila_corte_dash["CODIGO_PV"].astype(str).str.strip().str.upper()
+)
+
+# =========================================================
+# 🔥 HISTÓRICO REAL (SQLITE)
+# =========================================================
+df_baixas = carregar_baixas_sqlite()
+
 hist_corte_dash = df_baixas.copy()
 
 if not hist_corte_dash.empty:
@@ -3486,32 +3497,24 @@ if not hist_corte_dash.empty:
         hist_corte_dash["Horas"], errors="coerce"
     ).fillna(0)
 
-    # 🔥 REMOVE BAIXADAS DA FILA
+    # 🔥 GARANTE CHAVE IGUAL À DO OPERACIONAL
+    hist_corte_dash["CHAVE_OPERACAO"] = (
+        hist_corte_dash["PV"].astype(str).str.strip().str.upper() + "||" +
+        hist_corte_dash["Processo"].astype(str).str.strip().str.upper() + "||" +
+        hist_corte_dash["CODIGO_PV"].astype(str).str.strip().str.upper()
+    )
+
+    # 🔥 BAIXAS VÁLIDAS
     baixas_validas = hist_corte_dash[
         hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
     ]
 
-    chaves_baixadas = set(
-        zip(
-            baixas_validas["PV"],
-            baixas_validas["CODIGO_PV"],
-            baixas_validas["Processo"]
-        )
-    )
+    chaves_baixadas = set(baixas_validas["CHAVE_OPERACAO"])
 
-    fila_corte_dash["CHAVE"] = list(zip(
-        fila_corte_dash["PV"],
-        fila_corte_dash["CODIGO_PV"],
-        fila_corte_dash["Processo"]
-    ))
-
+    # 🔥 REMOVE DA FILA (100% CONSISTENTE)
     fila_corte_dash = fila_corte_dash[
-        ~fila_corte_dash["CHAVE"].isin(chaves_baixadas)
+        ~fila_corte_dash["CHAVE_OPERACAO"].isin(chaves_baixadas)
     ].copy()
-
-# 🔥 LIMPEZA FINAL (IMPORTANTE)
-fila_corte_dash = fila_corte_dash.drop(columns=["CHAVE"], errors="ignore")
-
 
 # =========================================================
 # 📊 KPIs
@@ -3539,7 +3542,6 @@ else:
     horas_baixadas_corte = 0
     qtd_estornadas_corte = 0
 
-
 # =========================================================
 # 📊 RENDER KPIs
 # =========================================================
@@ -3552,7 +3554,6 @@ col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
 col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
 col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
 
-
 # ------------------------------------------------------------
 # 🧾 FILA ATUAL DE CORTE (ORDENADA + SEMÁFORO)
 # ------------------------------------------------------------
@@ -3562,25 +3563,21 @@ if not fila_corte_dash.empty:
 
     fila_corte_exib = fila_corte_dash.copy()
 
-    # 🔹 DATA REAL (PARA ORDENAR)
     if "ENTREGA" in fila_corte_exib.columns:
         fila_corte_exib["ENTREGA_DT"] = pd.to_datetime(
             fila_corte_exib["ENTREGA"], errors="coerce"
         )
 
-    # 🔹 HORAS
     fila_corte_exib["Horas"] = pd.to_numeric(
         fila_corte_exib["Horas"], errors="coerce"
     ).fillna(0).round(1)
 
-    # 🔹 DIAS PARA ENTREGA (SE NÃO EXISTIR)
     if "ENTREGA_DT" in fila_corte_exib.columns:
         hoje = pd.Timestamp.today().normalize()
         fila_corte_exib["Dias para Entrega"] = (
             fila_corte_exib["ENTREGA_DT"] - hoje
         ).dt.days
 
-    # 🔹 SEMÁFORO
     def classificar(dias):
         if pd.isna(dias):
             return "⚪"
@@ -3594,7 +3591,6 @@ if not fila_corte_dash.empty:
     if "Dias para Entrega" in fila_corte_exib.columns:
         fila_corte_exib["Status"] = fila_corte_exib["Dias para Entrega"].apply(classificar)
 
-    # 🔹 COLUNAS
     colunas_corte_fila = [
         "Status",
         "PV",
@@ -3613,21 +3609,15 @@ if not fila_corte_dash.empty:
 
     df_exib = fila_corte_exib[colunas_corte_fila].copy()
 
-    # 🔥 ORDENAÇÃO INTELIGENTE
     if "ENTREGA_DT" in df_exib.columns:
-        df_exib = df_exib.sort_values(
-            ["ENTREGA_DT"],
-            ascending=[True]
-        )
+        df_exib = df_exib.sort_values(["ENTREGA_DT"], ascending=[True])
 
     df_exib = df_exib.reset_index(drop=True)
 
-    # 🔹 FORMATA DATA
     if "ENTREGA_DT" in df_exib.columns:
         df_exib["ENTREGA"] = df_exib["ENTREGA_DT"].dt.strftime("%d/%m/%Y")
         df_exib = df_exib.drop(columns=["ENTREGA_DT"], errors="ignore")
 
-    # 🔹 EXIBE
     st.dataframe(
         df_exib,
         use_container_width=True,
@@ -3639,6 +3629,7 @@ else:
     st.success("Nenhuma operação de corte pendente no momento. 🎯")
 
 st.divider()
+
 
 
 
