@@ -762,23 +762,30 @@ def _padronizar_df_baixas(df_baixas):
 
 
 # ============================================================
-# FUNÇÃO DE CARREGAMENTO
+# FUNÇÃO DE CARREGAMENTO (SEM CACHE - PERSISTÊNCIA REAL)
 # ============================================================
-@st.cache_data(ttl=0)
 def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
     caminho = garantir_arquivo_baixas(base_path)
 
     try:
         df_baixas = pd.read_excel(caminho, dtype=str)
-        return _padronizar_df_baixas(df_baixas)
+
+        if df_baixas is None:
+            df_baixas = pd.DataFrame(columns=COLUNAS_BAIXAS)
+
+        df_baixas = _padronizar_df_baixas(df_baixas)
+
+        return df_baixas
+
     except Exception as e:
         st.warning(f"Erro ao ler baixas: {e}")
         return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
 
+
 # ============================================================
-# 🔥 CARREGAMENTO DAS BAIXAS (TEM QUE VIR AQUI)
+# 🔥 CARREGAMENTO DAS BAIXAS (PERSISTÊNCIA REAL - SEM CACHE)
 # ============================================================
 
 caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
@@ -788,13 +795,32 @@ try:
 except:
     file_mtime_baixas = 0
 
+# ------------------------------------------------------------
+# 🔥 LEITURA REAL DO EXCEL (FONTE DA VERDADE)
+# ------------------------------------------------------------
 df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
 
+# 🔒 GARANTE PADRÃO
+df_baixas = _padronizar_df_baixas(df_baixas)
+
+# ------------------------------------------------------------
+# 🔥 SINCRONIZA SESSION STATE (NÃO É MAIS FONTE PRINCIPAL)
+# ------------------------------------------------------------
+st.session_state["df_baixas"] = df_baixas.copy()
+
+# ------------------------------------------------------------
+# 🔥 FILTRA BAIXAS ATIVAS
+# ------------------------------------------------------------
 df_baixas_ativas = df_baixas[
     df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
 ].copy()
 
+# 🔒 GARANTE PADRÃO NAS ATIVAS
+df_baixas_ativas = _padronizar_df_baixas(df_baixas_ativas)
+
 st.session_state["df_baixas_ativas"] = df_baixas_ativas
+
+
 
 
 # ============================================================
