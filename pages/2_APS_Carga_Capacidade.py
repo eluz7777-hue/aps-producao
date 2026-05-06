@@ -74,8 +74,26 @@ def salvar_historico_baixas(df):
                 "backup_msg": None
             }
 
+        # ------------------------------------------------------------
+        # 🔥 REMOVE TIMEZONE (CRÍTICO PARA EXCEL)
+        # ------------------------------------------------------------
+        df = df.copy()
+
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                try:
+                    df[col] = df[col].dt.tz_localize(None)
+                except:
+                    pass
+
+        # ------------------------------------------------------------
+        # BACKUP
+        # ------------------------------------------------------------
         backup_ok, backup_msg = _criar_backup()
 
+        # ------------------------------------------------------------
+        # SALVA
+        # ------------------------------------------------------------
         df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
 
         return {
@@ -92,7 +110,6 @@ def salvar_historico_baixas(df):
             "backup_ok": False,
             "backup_msg": None
         }
-
 # ===============================
 # FORMATAÇÃO BR (INALTERADO)
 # ===============================
