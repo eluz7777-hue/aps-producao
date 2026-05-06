@@ -3293,6 +3293,96 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 
+# ============================================================
+# 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (SQLITE → OPERACIONAL)
+# ============================================================
+
+df_baixas = carregar_baixas_sqlite_local()
+
+if not df_baixas.empty:
+
+    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
+
+    df_baixas["Status_Baixa"] = (
+        df_baixas["Status_Baixa"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    # 🔒 SOMENTE BAIXAS VÁLIDAS
+    df_baixas_validas = df_baixas[
+        df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+    ].copy()
+
+    # 🔥 AGREGA POR OPERAÇÃO
+    df_baixas_agg = (
+        df_baixas_validas.groupby("CHAVE_OPERACAO", as_index=False)
+        .agg(
+            Horas_Baixadas=("Horas", "sum"),
+            Qtde_Baixas=("Horas", "count")
+        )
+    )
+
+else:
+    df_baixas_agg = pd.DataFrame(
+        columns=["CHAVE_OPERACAO", "Horas_Baixadas", "Qtde_Baixas"]
+    )
+
+
+# ============================================================
+# 🔥 INTEGRA COM BASE OPERACIONAL
+# ============================================================
+
+if "CHAVE_OPERACAO" not in df_operacional.columns:
+
+    df_operacional["CHAVE_OPERACAO"] = (
+        df_operacional["PV"].astype(str).str.strip().str.upper() + "||" +
+        df_operacional["Processo"].astype(str).str.strip().str.upper() + "||" +
+        df_operacional["CODIGO_PV"].astype(str).str.strip().str.upper()
+    )
+
+
+df_operacional = df_operacional.merge(
+    df_baixas_agg,
+    on="CHAVE_OPERACAO",
+    how="left"
+)
+
+df_operacional["Horas_Baixadas"] = pd.to_numeric(
+    df_operacional["Horas_Baixadas"],
+    errors="coerce"
+).fillna(0)
+
+
+# ============================================================
+# 🔥 SALDO REAL (AGORA FUNCIONA)
+# ============================================================
+
+df_operacional["Saldo_Horas"] = (
+    df_operacional["Horas"] - df_operacional["Horas_Baixadas"]
+)
+
+df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].clip(lower=0)
+
+
+# ============================================================
+# 🔥 STATUS OPERACIONAL CORRETO
+# ============================================================
+
+df_operacional["Status Operacional"] = np.where(
+    df_operacional["Saldo_Horas"] <= 0,
+    "✅ Baixado",
+    np.where(
+        df_operacional["Horas_Baixadas"] > 0,
+        "🟡 Parcial",
+        "⏳ Pendente"
+    )
+)
+
+
+
+
 
 # ============================================================
 # ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL - SQLITE)
