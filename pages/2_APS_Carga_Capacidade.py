@@ -3200,7 +3200,7 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 
 
 # ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL)
+# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL CORRIGIDA)
 # ============================================================
 
 from datetime import datetime
@@ -3223,9 +3223,7 @@ if base_corte.empty:
 else:
 
     base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
-
     base_corte = base_corte.reset_index(drop=True)
-    base_corte["ID_UNICO"] = base_corte.index.astype(str)
 
     base_corte["LABEL"] = (
         "PV " + base_corte["PV"].astype(str) +
@@ -3245,24 +3243,6 @@ else:
         opcoes = base_corte_pendente["LABEL"].tolist()
 
         # ------------------------------------------------------------
-        # CONTROLE DE RESET
-        # ------------------------------------------------------------
-        if "reset_corte_unitario" not in st.session_state:
-            st.session_state["reset_corte_unitario"] = False
-
-        if "reset_corte_lote" not in st.session_state:
-            st.session_state["reset_corte_lote"] = False
-
-        if st.session_state["reset_corte_unitario"]:
-            if opcoes:
-                st.session_state["corte_unitario"] = opcoes[0]
-            st.session_state["reset_corte_unitario"] = False
-
-        if st.session_state["reset_corte_lote"]:
-            st.session_state["corte_lote"] = []
-            st.session_state["reset_corte_lote"] = False
-
-        # ------------------------------------------------------------
         # 🔹 BAIXA UNITÁRIA
         # ------------------------------------------------------------
         st.markdown("#### 🔹 Baixa Unitária")
@@ -3278,7 +3258,7 @@ else:
 
             if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
 
-                resultado = salvar_baixa_operacional(BASE_PATH, {
+                nova_baixa = {
                     "PV": linha["PV"],
                     "Cliente": linha.get("Cliente", ""),
                     "CODIGO_PV": linha["CODIGO_PV"],
@@ -3290,27 +3270,18 @@ else:
                     "Status_Baixa": "ATIVA",
                     "Data_Estorno": "",
                     "Motivo_Estorno": ""
-                })
+                }
+
+                resultado = salvar_baixa_operacional(BASE_PATH, nova_baixa)
 
                 if resultado.get("ok"):
 
-                    st.cache_data.clear()
-
-                    caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-                    file_mtime_baixas = os.path.getmtime(caminho_baixas)
-
-                    df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
-
-                    df_baixas_ativas = df_baixas[
-                        df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-                    ].copy()
-
-                    st.session_state["df_baixas_ativas"] = df_baixas_ativas
-
-                    st.session_state["reset_corte_unitario"] = True
+                    # 🔥 SALVA HISTÓRICO (CORREÇÃO)
+                    salvar_historico_baixas(
+                        pd.DataFrame([nova_baixa])
+                    )
 
                     st.success("Baixa registrada com sucesso")
-
                     st.rerun()
 
                 else:
@@ -3328,15 +3299,15 @@ else:
         if selecao:
             if st.button("📦 Baixar Corte em Lote", key="btn_corte_lote"):
 
-                sucessos = 0
-                erros = 0
+                sucessos = []
+                erros = []
 
                 for label in selecao:
                     linha = base_corte_pendente[
                         base_corte_pendente["LABEL"] == label
                     ].iloc[0]
 
-                    resultado = salvar_baixa_operacional(BASE_PATH, {
+                    nova_baixa = {
                         "PV": linha["PV"],
                         "Cliente": linha.get("Cliente", ""),
                         "CODIGO_PV": linha["CODIGO_PV"],
@@ -3348,36 +3319,29 @@ else:
                         "Status_Baixa": "ATIVA",
                         "Data_Estorno": "",
                         "Motivo_Estorno": ""
-                    })
+                    }
+
+                    resultado = salvar_baixa_operacional(BASE_PATH, nova_baixa)
 
                     if resultado.get("ok"):
-                        sucessos += 1
+                        sucessos.append(nova_baixa)
                     else:
-                        erros += 1
+                        erros.append(label)
 
-                # 🔥 RECARREGA BASE
-                st.cache_data.clear()
-
-                caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-                file_mtime_baixas = os.path.getmtime(caminho_baixas)
-
-                df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
-
-                df_baixas_ativas = df_baixas[
-                    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-                ].copy()
-
-                st.session_state["df_baixas_ativas"] = df_baixas_ativas
+                # 🔥 SALVA HISTÓRICO (CORREÇÃO)
+                if sucessos:
+                    salvar_historico_baixas(
+                        pd.DataFrame(sucessos)
+                    )
 
                 if sucessos:
-                    st.session_state["reset_corte_lote"] = True
-
-                    st.success(f"{sucessos} operações baixadas")
-
-                    st.rerun()
+                    st.success(f"{len(sucessos)} operações baixadas")
 
                 if erros:
-                    st.warning(f"{erros} não foram baixadas")
+                    st.warning(f"{len(erros)} não foram baixadas")
+
+                st.rerun()
+
 
 
 
