@@ -3308,7 +3308,7 @@ st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
 # 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (SQLITE → OPERACIONAL)
 # ============================================================
 
-df_baixas = carregar_baixas_sqlite_local()
+df_baixas = carregar_baixas_sqlite()
 
 if not df_baixas.empty:
 
@@ -3390,6 +3390,7 @@ df_operacional["Status Operacional"] = np.where(
         "⏳ Pendente"
     )
 )
+
 
 
 
