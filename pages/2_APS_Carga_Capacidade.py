@@ -28,6 +28,7 @@ st.set_page_config(layout="wide")
 # 🔥 SQLITE - INICIALIZAÇÃO DO BANCO APS
 # ============================================================
 import sqlite3
+import os
 
 DB_PATH = "aps_baixas.db"
 
@@ -62,6 +63,17 @@ def inicializar_banco():
 
 # 🔥 EXECUTA NA INICIALIZAÇÃO
 inicializar_banco()
+
+# ------------------------------------------------------------
+# 🔎 TESTE DE CRIAÇÃO DO BANCO
+# ------------------------------------------------------------
+if os.path.exists(DB_PATH):
+    st.success(f"Banco criado: {DB_PATH}")
+else:
+    st.error("Banco NÃO foi criado")
+
+
+
 
 
 
