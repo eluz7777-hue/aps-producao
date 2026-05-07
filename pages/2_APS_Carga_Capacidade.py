@@ -2952,24 +2952,122 @@ st.plotly_chart(fig_status, use_container_width=True)
 # ===============================
 st.subheader("📊 Carga x Capacidade por Processo")
 
-base = dem_proc.copy()
+# ============================================================
+# 🔥 BASE OPERACIONAL REAL
+# ============================================================
+base = df_operacional.copy()
 
-# segurança numérica
-for col in ["Horas", "Capacidade Processo"]:
+# ------------------------------------------------------------
+# 🔒 GARANTE COLUNAS
+# ------------------------------------------------------------
+for col in [
+    "Horas",
+    "Horas_Baixadas",
+    "Saldo_Horas",
+    "Processo"
+]:
+
     if col not in base.columns:
         base[col] = 0
 
-    base[col] = pd.to_numeric(base[col], errors="coerce").fillna(0)
+# ------------------------------------------------------------
+# 🔥 NUMÉRICOS
+# ------------------------------------------------------------
+base["Horas"] = pd.to_numeric(
+    base["Horas"],
+    errors="coerce"
+).fillna(0)
 
-fig_comp = px.bar(
-    base.sort_values("Horas", ascending=False),
-    x="Processo",
-    y=["Horas", "Capacidade Processo"],
-    barmode="group",
-    text_auto=".1f"  # 🔥 1 casa decimal
+base["Horas_Baixadas"] = pd.to_numeric(
+    base["Horas_Baixadas"],
+    errors="coerce"
+).fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 SALDO REAL
+# ------------------------------------------------------------
+base["Saldo_Horas"] = (
+    base["Horas"]
+    -
+    base["Horas_Baixadas"]
 )
 
-# cores corretas
+base["Saldo_Horas"] = (
+    base["Saldo_Horas"]
+    .clip(lower=0)
+)
+
+# ------------------------------------------------------------
+# 🔥 AGRUPAMENTO REAL
+# ------------------------------------------------------------
+base = (
+    base.groupby(
+        "Processo",
+        as_index=False
+    )
+    .agg({
+        "Saldo_Horas": "sum"
+    })
+)
+
+base = base.rename(columns={
+    "Saldo_Horas": "Horas"
+})
+
+# ============================================================
+# 🔥 CAPACIDADE REAL
+# ============================================================
+capacidade_proc = (
+    dem.groupby(
+        "Processo",
+        as_index=False
+    )["Capacidade"]
+    .sum()
+)
+
+capacidade_proc = capacidade_proc.rename(columns={
+    "Capacidade": "Capacidade Processo"
+})
+
+# ------------------------------------------------------------
+# 🔥 MERGE
+# ------------------------------------------------------------
+base = base.merge(
+    capacidade_proc,
+    on="Processo",
+    how="left"
+)
+
+base["Capacidade Processo"] = pd.to_numeric(
+    base["Capacidade Processo"],
+    errors="coerce"
+).fillna(0)
+
+# ============================================================
+# 🔥 GRÁFICO
+# ============================================================
+fig_comp = px.bar(
+
+    base.sort_values(
+        "Horas",
+        ascending=False
+    ),
+
+    x="Processo",
+
+    y=[
+        "Horas",
+        "Capacidade Processo"
+    ],
+
+    barmode="group",
+
+    text_auto=".1f"
+)
+
+# ------------------------------------------------------------
+# 🔥 CORES
+# ------------------------------------------------------------
 fig_comp.update_traces(
     selector=dict(name="Horas"),
     marker_color="#FF7A00"
@@ -2980,12 +3078,17 @@ fig_comp.update_traces(
     marker_color="#1f77b4"
 )
 
-# rótulos em cima com formatação fixa
+# ------------------------------------------------------------
+# 🔥 LABELS
+# ------------------------------------------------------------
 fig_comp.update_traces(
-    texttemplate='%{y:.1f}',  # 🔥 garante 1 casa decimal
+    texttemplate="%{y:.1f}",
     textposition="outside"
 )
 
+# ------------------------------------------------------------
+# 🔥 LAYOUT
+# ------------------------------------------------------------
 fig_comp.update_layout(
     yaxis_title="Horas",
     height=550,
@@ -2994,8 +3097,10 @@ fig_comp.update_layout(
     uniformtext_mode="hide"
 )
 
-st.plotly_chart(fig_comp, use_container_width=True)
-
+st.plotly_chart(
+    fig_comp,
+    use_container_width=True
+)
 
 
 # ============================================================
