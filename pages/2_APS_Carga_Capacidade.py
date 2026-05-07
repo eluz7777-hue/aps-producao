@@ -2953,95 +2953,96 @@ st.plotly_chart(fig_status, use_container_width=True)
 st.subheader("📊 Carga x Capacidade por Processo")
 
 # ============================================================
-# 🔥 BASE OPERACIONAL REAL
+# 🔥 BASE ORIGINAL
 # ============================================================
-base = df_operacional.copy()
+base = dem_proc.copy()
 
-# ------------------------------------------------------------
-# 🔒 GARANTE COLUNAS
-# ------------------------------------------------------------
+# ============================================================
+# 🔒 SEGURANÇA
+# ============================================================
 for col in [
     "Horas",
-    "Horas_Baixadas",
-    "Saldo_Horas",
-    "Processo"
+    "Capacidade Processo"
 ]:
 
     if col not in base.columns:
         base[col] = 0
 
-# ------------------------------------------------------------
-# 🔥 NUMÉRICOS
-# ------------------------------------------------------------
-base["Horas"] = pd.to_numeric(
-    base["Horas"],
-    errors="coerce"
-).fillna(0)
+    base[col] = pd.to_numeric(
+        base[col],
+        errors="coerce"
+    ).fillna(0)
 
-base["Horas_Baixadas"] = pd.to_numeric(
-    base["Horas_Baixadas"],
-    errors="coerce"
-).fillna(0)
+
+# ============================================================
+# 🔥 RECONSTRÓI CARGA REAL
+# ============================================================
+base_oper = df_operacional.copy()
+
+for col in [
+    "Horas",
+    "Horas_Baixadas",
+    "Saldo_Horas"
+]:
+
+    if col not in base_oper.columns:
+        base_oper[col] = 0
+
+    base_oper[col] = pd.to_numeric(
+        base_oper[col],
+        errors="coerce"
+    ).fillna(0)
 
 # ------------------------------------------------------------
 # 🔥 SALDO REAL
 # ------------------------------------------------------------
-base["Saldo_Horas"] = (
-    base["Horas"]
+base_oper["Saldo_Horas"] = (
+    base_oper["Horas"]
     -
-    base["Horas_Baixadas"]
+    base_oper["Horas_Baixadas"]
 )
 
-base["Saldo_Horas"] = (
-    base["Saldo_Horas"]
+base_oper["Saldo_Horas"] = (
+    base_oper["Saldo_Horas"]
     .clip(lower=0)
 )
 
 # ------------------------------------------------------------
-# 🔥 AGRUPAMENTO REAL
+# 🔥 CARGA REAL POR PROCESSO
 # ------------------------------------------------------------
-base = (
-    base.groupby(
+carga_real = (
+    base_oper
+    .groupby(
         "Processo",
         as_index=False
-    )
-    .agg({
-        "Saldo_Horas": "sum"
-    })
-)
-
-base = base.rename(columns={
-    "Saldo_Horas": "Horas"
-})
-
-# ============================================================
-# 🔥 CAPACIDADE REAL
-# ============================================================
-capacidade_proc = (
-    dem.groupby(
-        "Processo",
-        as_index=False
-    )["Capacidade"]
+    )["Saldo_Horas"]
     .sum()
 )
 
-capacidade_proc = capacidade_proc.rename(columns={
-    "Capacidade": "Capacidade Processo"
+carga_real = carga_real.rename(columns={
+    "Saldo_Horas": "Horas_Reais"
 })
 
 # ------------------------------------------------------------
-# 🔥 MERGE
+# 🔥 ATUALIZA SOMENTE A CARGA
 # ------------------------------------------------------------
 base = base.merge(
-    capacidade_proc,
+    carga_real,
     on="Processo",
     how="left"
 )
 
-base["Capacidade Processo"] = pd.to_numeric(
-    base["Capacidade Processo"],
+base["Horas_Reais"] = pd.to_numeric(
+    base["Horas_Reais"],
     errors="coerce"
-).fillna(0)
+).fillna(base["Horas"])
+
+base["Horas"] = base["Horas_Reais"]
+
+base = base.drop(
+    columns=["Horas_Reais"],
+    errors="ignore"
+)
 
 # ============================================================
 # 🔥 GRÁFICO
@@ -3065,9 +3066,9 @@ fig_comp = px.bar(
     text_auto=".1f"
 )
 
-# ------------------------------------------------------------
+# ============================================================
 # 🔥 CORES
-# ------------------------------------------------------------
+# ============================================================
 fig_comp.update_traces(
     selector=dict(name="Horas"),
     marker_color="#FF7A00"
@@ -3078,17 +3079,17 @@ fig_comp.update_traces(
     marker_color="#1f77b4"
 )
 
-# ------------------------------------------------------------
+# ============================================================
 # 🔥 LABELS
-# ------------------------------------------------------------
+# ============================================================
 fig_comp.update_traces(
     texttemplate="%{y:.1f}",
     textposition="outside"
 )
 
-# ------------------------------------------------------------
+# ============================================================
 # 🔥 LAYOUT
-# ------------------------------------------------------------
+# ============================================================
 fig_comp.update_layout(
     yaxis_title="Horas",
     height=550,
@@ -3101,6 +3102,8 @@ st.plotly_chart(
     fig_comp,
     use_container_width=True
 )
+
+
 
 
 # ============================================================
