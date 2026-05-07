@@ -3549,74 +3549,336 @@ elif opcao_visao == "PVs urgentes da semana":
 # ============================================================
 # ===================== FILA POR PROCESSO ====================
 # ============================================================
+
 st.subheader("📌 Fila por Processo")
 
-fila = df.copy()
 
+# ============================================================
+# 🔥 BASE REAL
+# ============================================================
+fila = df_operacional.copy()
+
+
+# ============================================================
+# 🔒 GARANTE COLUNAS
+# ============================================================
+for col in [
+    "Horas",
+    "Horas_Baixadas",
+    "Saldo_Horas"
+]:
+
+    if col not in fila.columns:
+        fila[col] = 0
+
+
+# ============================================================
+# 🔥 NUMÉRICOS
+# ============================================================
+fila["Horas"] = pd.to_numeric(
+    fila["Horas"],
+    errors="coerce"
+).fillna(0)
+
+fila["Horas_Baixadas"] = pd.to_numeric(
+    fila["Horas_Baixadas"],
+    errors="coerce"
+).fillna(0)
+
+
+# ============================================================
+# 🔥 SALDO REAL
+# ============================================================
+fila["Saldo_Horas"] = (
+    fila["Horas"]
+    -
+    fila["Horas_Baixadas"]
+)
+
+fila["Saldo_Horas"] = (
+    fila["Saldo_Horas"]
+    .clip(lower=0)
+    .round(4)
+)
+
+
+# ============================================================
+# 🔥 SOMENTE PENDENTES
+# ============================================================
+fila = fila[
+    fila["Saldo_Horas"] > 0
+].copy()
+
+fila = fila.reset_index(drop=True)
+
+
+# ============================================================
+# 🔥 REMOVE DUPLICIDADE
+# ============================================================
+if "CHAVE_OPERACAO" in fila.columns:
+
+    fila = (
+        fila
+        .drop_duplicates(
+            subset=["CHAVE_OPERACAO"],
+            keep="first"
+        )
+        .reset_index(drop=True)
+    )
+
+
+# ============================================================
+# 🔥 ENTREGA
+# ============================================================
 if "ENTREGA" in fila.columns:
-    fila["ENTREGA"] = pd.to_datetime(fila["ENTREGA"], errors="coerce")
-    fila["Dias para Entrega"] = (fila["ENTREGA"] - hoje).dt.days
+
+    fila["ENTREGA"] = pd.to_datetime(
+        fila["ENTREGA"],
+        errors="coerce"
+    )
+
+    fila["Dias para Entrega"] = (
+        fila["ENTREGA"]
+        -
+        hoje
+    ).dt.days
+
 else:
+
     fila["Dias para Entrega"] = None
 
-fila["Semáforo"] = fila["Dias para Entrega"].apply(semaforo_entrega)
 
-# ---------------------------------------
-# FILTROS
-# ---------------------------------------
+# ============================================================
+# 🔥 SEMÁFORO
+# ============================================================
+fila["Semáforo"] = (
+    fila["Dias para Entrega"]
+    .apply(semaforo_entrega)
+)
+
+
+# ============================================================
+# 🔍 FILTROS
+# ============================================================
 col_f1, col_f2, col_f3 = st.columns(3)
 
-processos_fila = sorted(fila["Processo"].dropna().astype(str).str.strip().unique().tolist())
-processo_fila_sel = col_f1.selectbox("Filtrar por Processo", ["Todos"] + processos_fila)
 
-pvs_fila = sorted(fila["PV"].dropna().astype(str).str.strip().unique().tolist())
-pv_fila_sel = col_f2.selectbox("Filtrar por PV específica", ["Todas"] + pvs_fila)
+processos_fila = sorted(
+
+    fila["Processo"]
+    .dropna()
+    .astype(str)
+    .str.strip()
+    .unique()
+    .tolist()
+)
+
+processo_fila_sel = col_f1.selectbox(
+    "Filtrar por Processo",
+    ["Todos"] + processos_fila
+)
+
+
+pvs_fila = sorted(
+
+    fila["PV"]
+    .dropna()
+    .astype(str)
+    .str.strip()
+    .unique()
+    .tolist()
+)
+
+pv_fila_sel = col_f2.selectbox(
+    "Filtrar por PV específica",
+    ["Todas"] + pvs_fila
+)
+
 
 tipo_corte_sel = col_f3.selectbox(
     "Filtrar por Tipo de Corte",
-    ["Todos", "Apenas Corte", "Apenas Serra", "Apenas Laser", "Apenas Plasma"]
+    [
+        "Todos",
+        "Apenas Corte",
+        "Apenas Serra",
+        "Apenas Laser",
+        "Apenas Plasma"
+    ]
 )
 
+
+# ============================================================
+# 🔥 FILTROS PROCESSO/PV
+# ============================================================
 if processo_fila_sel != "Todos":
-    fila = fila[fila["Processo"].astype(str).str.strip() == processo_fila_sel].copy()
+
+    fila = fila[
+        fila["Processo"]
+        .astype(str)
+        .str.strip()
+        == processo_fila_sel
+    ].copy()
+
 
 if pv_fila_sel != "Todas":
-    fila = fila[fila["PV"].astype(str).str.strip() == pv_fila_sel].copy()
 
-fila["Processo"] = fila["Processo"].astype(str).str.strip().str.upper()
+    fila = fila[
+        fila["PV"]
+        .astype(str)
+        .str.strip()
+        == pv_fila_sel
+    ].copy()
 
+
+# ============================================================
+# 🔥 NORMALIZA PROCESSO
+# ============================================================
+fila["Processo"] = (
+    fila["Processo"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
+
+
+# ============================================================
+# 🔥 FILTROS CORTE
+# ============================================================
 if tipo_corte_sel == "Apenas Corte":
-    fila = fila[fila["Processo"].str.contains("CORTE", na=False)].copy()
+
+    fila = fila[
+        fila["Processo"]
+        .str.contains("CORTE", na=False)
+    ].copy()
+
 elif tipo_corte_sel == "Apenas Serra":
-    fila = fila[fila["Processo"] == "CORTE - SERRA"].copy()
+
+    fila = fila[
+        fila["Processo"]
+        == "CORTE-SERRA"
+    ].copy()
+
 elif tipo_corte_sel == "Apenas Laser":
-    fila = fila[fila["Processo"] == "CORTE - LASER"].copy()
+
+    fila = fila[
+        fila["Processo"]
+        == "CORTE-LASER"
+    ].copy()
+
 elif tipo_corte_sel == "Apenas Plasma":
-    fila = fila[fila["Processo"] == "CORTE - PLASMA"].copy()
 
-# ---------------------------------------
-# KPIs
-# ---------------------------------------
+    fila = fila[
+        fila["Processo"]
+        == "CORTE-PLASMA"
+    ].copy()
+
+
+# ============================================================
+# 📊 KPIs
+# ============================================================
 col_k1, col_k2, col_k3 = st.columns(3)
-col_k1.metric("PVs na Fila", fila["PV"].astype(str).str.strip().nunique())
-col_k2.metric("Processos na Fila", fila["Processo"].nunique())
-col_k3.metric("Horas na Fila", f"{pd.to_numeric(fila['Horas'], errors='coerce').fillna(0).sum():.1f} h")
 
+col_k1.metric(
+    "PVs na Fila",
+    fila["PV"]
+    .astype(str)
+    .str.strip()
+    .nunique()
+)
+
+col_k2.metric(
+    "Processos na Fila",
+    fila["Processo"]
+    .nunique()
+)
+
+col_k3.metric(
+    "Horas na Fila",
+    f"{fila['Saldo_Horas'].sum():.1f} h"
+)
+
+
+# ============================================================
+# 📋 PVs NA FILA
+# ============================================================
 st.markdown("### 📋 PVs na Fila")
 
+
 fila_detalhe = fila.copy()
-fila_detalhe["Horas"] = pd.to_numeric(fila_detalhe["Horas"], errors="coerce").fillna(0).round(1)
 
+
+# ============================================================
+# 🔥 USA SALDO REAL
+# ============================================================
+fila_detalhe["Saldo_Horas"] = pd.to_numeric(
+    fila_detalhe["Saldo_Horas"],
+    errors="coerce"
+).fillna(0).round(1)
+
+
+# ============================================================
+# 🔥 ENTREGA FORMATADA
+# ============================================================
 if "ENTREGA" in fila_detalhe.columns:
-    fila_detalhe["ENTREGA"] = pd.to_datetime(fila_detalhe["ENTREGA"], errors="coerce")
-    fila_detalhe["ENTREGA"] = fila_detalhe["ENTREGA"].dt.strftime("%d/%m/%Y")
 
-colunas_fila = ["Semáforo","PV","Cliente","CODIGO_PV","Processo","Horas","Dias para Entrega","ENTREGA"]
-colunas_fila = [c for c in colunas_fila if c in fila_detalhe.columns]
+    fila_detalhe["ENTREGA"] = pd.to_datetime(
+        fila_detalhe["ENTREGA"],
+        errors="coerce"
+    )
 
-fila_detalhe_exib = fila_detalhe[colunas_fila].copy().reset_index(drop=True)
+    fila_detalhe["ENTREGA"] = (
+        fila_detalhe["ENTREGA"]
+        .dt.strftime("%d/%m/%Y")
+    )
 
-st.dataframe(fila_detalhe_exib, use_container_width=True, hide_index=True)
+
+# ============================================================
+# 🔥 COLUNAS
+# ============================================================
+colunas_fila = [
+
+    "Semáforo",
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Saldo_Horas",
+    "Dias para Entrega",
+    "ENTREGA"
+]
+
+colunas_fila = [
+    c for c in colunas_fila
+    if c in fila_detalhe.columns
+]
+
+
+# ============================================================
+# 🔥 DATAFRAME FINAL
+# ============================================================
+fila_detalhe_exib = (
+    fila_detalhe[colunas_fila]
+    .copy()
+    .reset_index(drop=True)
+)
+
+
+fila_detalhe_exib = fila_detalhe_exib.rename(
+    columns={
+        "Saldo_Horas": "Horas"
+    }
+)
+
+
+# ============================================================
+# 🔥 EXIBIÇÃO
+# ============================================================
+st.dataframe(
+    fila_detalhe_exib,
+    use_container_width=True,
+    hide_index=True
+)
+
 
 
 
