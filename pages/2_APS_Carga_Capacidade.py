@@ -1424,17 +1424,6 @@ else:
 
 
 
-# ============================================================
-# 🔥 REMOVE DUPLICIDADES OPERACIONAIS
-# ============================================================
-df_operacional = (
-    df_operacional
-    .drop_duplicates(
-        subset=["CHAVE_OPERACAO"],
-        keep="first"
-    )
-    .reset_index(drop=True)
-)
 
 
 # --------------------------------------------
