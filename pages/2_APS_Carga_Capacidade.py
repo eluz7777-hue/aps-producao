@@ -3454,7 +3454,7 @@ df_operacional["Status Operacional"] = np.where(
 
 
 # ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO FINAL ESTÁVEL - SQLITE)
+# ✂️ BAIXAS DE CORTE (VERSÃO BLINDADA - SQLITE)
 # ============================================================
 
 from datetime import datetime
@@ -3463,10 +3463,29 @@ from zoneinfo import ZoneInfo
 st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
 
 # ------------------------------------------------------------
-# BASE DE CORTE
+# 🔥 FUNÇÃO DE NORMALIZAÇÃO (PADRÃO GLOBAL)
 # ------------------------------------------------------------
-base_corte = df_operacional.copy()
-base_corte["Processo"] = base_corte["Processo"].astype(str).str.upper().str.strip()
+def _norm(x):
+    if pd.isna(x):
+        return ""
+    x = str(x)
+    x = x.replace("\xa0", "")
+    x = x.replace(" ", "")
+    x = x.replace(".0", "")
+    return x.strip().upper()
+
+
+# ------------------------------------------------------------
+# 🔥 BASE REAL DO APS (JÁ FILTRADA PELO SALDO)
+# ------------------------------------------------------------
+base_corte = df.copy()
+
+base_corte["Processo"] = (
+    base_corte["Processo"]
+    .astype(str)
+    .str.upper()
+    .str.strip()
+)
 
 base_corte = base_corte[
     base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
@@ -3474,30 +3493,44 @@ base_corte = base_corte[
 
 if base_corte.empty:
     st.info("Nenhuma operação de corte encontrada.")
+
 else:
 
-    base_corte["Horas"] = pd.to_numeric(base_corte["Horas"], errors="coerce").fillna(0).round(1)
+    base_corte["Horas"] = pd.to_numeric(
+        base_corte["Horas"],
+        errors="coerce"
+    ).fillna(0).round(4)
+
+    base_corte["Saldo_Horas"] = pd.to_numeric(
+        base_corte["Saldo_Horas"],
+        errors="coerce"
+    ).fillna(0).round(4)
+
+    base_corte = base_corte[
+        base_corte["Saldo_Horas"] > 0
+    ].copy()
+
     base_corte = base_corte.reset_index(drop=True)
 
+    # ------------------------------------------------------------
+    # 🔥 LABEL REAL COM SALDO
+    # ------------------------------------------------------------
     base_corte["LABEL"] = (
         "PV " + base_corte["PV"].astype(str) +
         " | " + base_corte["Processo"].astype(str) +
         " | " + base_corte["CODIGO_PV"].astype(str) +
-        " | " + base_corte["Horas"].astype(str) + " h"
+        " | SALDO: " + base_corte["Saldo_Horas"].round(2).astype(str) + " h"
     )
 
-    base_corte_pendente = base_corte[
-        base_corte["Status Operacional"] == "⏳ Pendente"
-    ].copy()
-
-    if base_corte_pendente.empty:
+    if base_corte.empty:
         st.info("Nenhuma operação pendente de corte.")
+
     else:
 
-        opcoes = base_corte_pendente["LABEL"].tolist()
+        opcoes = base_corte["LABEL"].tolist()
 
         # ------------------------------------------------------------
-        # CONTROLE DE RESET (MANTIDO)
+        # CONTROLE DE RESET
         # ------------------------------------------------------------
         if "reset_corte_unitario" not in st.session_state:
             st.session_state["reset_corte_unitario"] = False
@@ -3514,35 +3547,55 @@ else:
             st.session_state["corte_lote"] = []
             st.session_state["reset_corte_lote"] = False
 
-        # ------------------------------------------------------------
+        # ============================================================
         # 🔹 BAIXA UNITÁRIA
-        # ------------------------------------------------------------
+        # ============================================================
         st.markdown("#### 🔹 Baixa Unitária")
 
-        escolha = st.selectbox("Operação", opcoes, key="corte_unitario")
+        escolha = st.selectbox(
+            "Operação",
+            opcoes,
+            key="corte_unitario"
+        )
 
-        linha_sel = base_corte_pendente[
-            base_corte_pendente["LABEL"] == escolha
+        linha_sel = base_corte[
+            base_corte["LABEL"] == escolha
         ]
 
         if not linha_sel.empty:
+
             linha = linha_sel.iloc[0]
+
+            saldo_real = float(linha["Saldo_Horas"])
 
             if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
 
+                # 🔒 BLOQUEIO TOTAL
+                if saldo_real <= 0:
+                    st.warning("⚠️ Operação já baixada")
+                    st.stop()
+
+                chave = (
+                    _norm(linha["PV"]) + "||" +
+                    _norm(linha["Processo"]) + "||" +
+                    _norm(linha["CODIGO_PV"])
+                )
+
                 nova_baixa = {
-                    "PV": linha["PV"],
+                    "PV": _norm(linha["PV"]),
                     "Cliente": linha.get("Cliente", ""),
-                    "CODIGO_PV": linha["CODIGO_PV"],
-                    "Processo": linha["Processo"],
-                    "Horas": linha["Horas"],
-                    "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
+                    "CODIGO_PV": _norm(linha["CODIGO_PV"]),
+                    "Processo": _norm(linha["Processo"]),
+                    "Horas": saldo_real,
+                    "Data_Baixa": datetime.now(
+                        ZoneInfo("America/Sao_Paulo")
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                     "Usuario": "Sistema",
                     "Observacao": "UNITARIO_CORTE",
                     "Status_Baixa": "ATIVA",
                     "Data_Estorno": "",
                     "Motivo_Estorno": "",
-                    "CHAVE_OPERACAO": f"{linha['PV']}||{linha['Processo']}||{linha['CODIGO_PV']}"
+                    "CHAVE_OPERACAO": chave
                 }
 
                 resultado = salvar_baixa_sqlite(nova_baixa)
@@ -3551,45 +3604,77 @@ else:
 
                     st.session_state["reset_corte_unitario"] = True
 
-                    st.success("Baixa registrada com sucesso")
+                    st.success(
+                        f"✅ Baixa registrada ({saldo_real:.2f}h)"
+                    )
+
                     st.rerun()
 
                 else:
-                    st.error(resultado.get("erro", "Erro ao registrar baixa"))
+                    st.error(
+                        resultado.get(
+                            "erro",
+                            "Erro ao registrar baixa"
+                        )
+                    )
 
         st.divider()
 
-        # ------------------------------------------------------------
-        # 📦 BAIXA EM LOTE
-        # ------------------------------------------------------------
+        # ============================================================
+        # 📦 BAIXA EM LOTE (BLINDADA)
+        # ============================================================
         st.markdown("#### 📦 Baixa em Lote")
 
-        selecao = st.multiselect("Selecionar operações", opcoes, key="corte_lote")
+        selecao = st.multiselect(
+            "Selecionar operações",
+            opcoes,
+            key="corte_lote"
+        )
 
         if selecao:
-            if st.button("📦 Baixar Corte em Lote", key="btn_corte_lote"):
+
+            if st.button(
+                "📦 Baixar Corte em Lote",
+                key="btn_corte_lote"
+            ):
 
                 sucessos = []
                 erros = []
 
                 for label in selecao:
-                    linha = base_corte_pendente[
-                        base_corte_pendente["LABEL"] == label
+
+                    linha = base_corte[
+                        base_corte["LABEL"] == label
                     ].iloc[0]
 
+                    saldo_real = float(linha["Saldo_Horas"])
+
+                    # 🔒 NÃO BAIXA ZERADOS
+                    if saldo_real <= 0:
+                        erros.append(label)
+                        continue
+
+                    chave = (
+                        _norm(linha["PV"]) + "||" +
+                        _norm(linha["Processo"]) + "||" +
+                        _norm(linha["CODIGO_PV"])
+                    )
+
                     nova_baixa = {
-                        "PV": linha["PV"],
+                        "PV": _norm(linha["PV"]),
                         "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": linha["CODIGO_PV"],
-                        "Processo": linha["Processo"],
-                        "Horas": linha["Horas"],
-                        "Data_Baixa": datetime.now(ZoneInfo("America/Sao_Paulo")),
+                        "CODIGO_PV": _norm(linha["CODIGO_PV"]),
+                        "Processo": _norm(linha["Processo"]),
+                        "Horas": saldo_real,
+                        "Data_Baixa": datetime.now(
+                            ZoneInfo("America/Sao_Paulo")
+                        ).strftime("%Y-%m-%d %H:%M:%S"),
                         "Usuario": "Sistema",
                         "Observacao": "LOTE_CORTE",
                         "Status_Baixa": "ATIVA",
                         "Data_Estorno": "",
                         "Motivo_Estorno": "",
-                        "CHAVE_OPERACAO": f"{linha['PV']}||{linha['Processo']}||{linha['CODIGO_PV']}"
+                        "CHAVE_OPERACAO": chave
                     }
 
                     resultado = salvar_baixa_sqlite(nova_baixa)
@@ -3600,14 +3685,19 @@ else:
                         erros.append(label)
 
                 if sucessos:
+
                     st.session_state["reset_corte_lote"] = True
-                    st.success(f"{len(sucessos)} operações baixadas")
+
+                    st.success(
+                        f"{len(sucessos)} operações baixadas"
+                    )
 
                 if erros:
-                    st.warning(f"{len(erros)} não foram baixadas")
+                    st.warning(
+                        f"{len(erros)} não foram baixadas"
+                    )
 
                 st.rerun()
-
 
 
 
@@ -3812,91 +3902,149 @@ st.divider()
 
 
 # ============================================================
-# =========== CONTROLE DOS GARGALOS (VERSÃO SQLITE) ===========
+# =========== CONTROLE DOS GARGALOS (BLINDADO SQLITE) =========
 # ============================================================
 
 # 🔒 GARANTE COLUNA CRÍTICA
 if "Status Operacional" not in df_operacional.columns:
     df_operacional["Status Operacional"] = "⏳ Pendente"
 
-df_base_aps = df_operacional.copy()
 
-df_base_gargalo = df_base_aps[
-    df_base_aps["Status Operacional"] == "⏳ Pendente"
+# ============================================================
+# 🔥 NORMALIZAÇÃO GLOBAL
+# ============================================================
+def _norm(x):
+    if pd.isna(x):
+        return ""
+    x = str(x)
+    x = x.replace("\xa0", "")
+    x = x.replace(" ", "")
+    x = x.replace(".0", "")
+    return x.strip().upper()
+
+
+# ============================================================
+# 🔥 BASE REAL DO APS (SOMENTE PENDENTES)
+# ============================================================
+df_base_aps = df_operacional[
+    df_operacional["Saldo_Horas"] > 0
 ].copy()
 
-for col in ["PV", "Processo", "CODIGO_PV", "Horas"]:
+df_base_gargalo = df_base_aps.copy()
+
+for col in ["PV", "Processo", "CODIGO_PV", "Horas", "Saldo_Horas"]:
     if col not in df_base_gargalo.columns:
         df_base_gargalo[col] = ""
+
 
 with st.expander("🎯 Controle dos Gargalos", expanded=True):
 
     st.subheader("🏭 Operações mais carregadas do APS")
 
+    # =========================================================
+    # 🔥 TOP 5 GARGALOS
+    # =========================================================
     gargalos_top = (
         df_base_gargalo.groupby("Processo", as_index=False)
-        .agg(Horas_Pendentes=("Horas", "sum"), PVs_Pendentes=("PV", "nunique"))
+        .agg(
+            Horas_Pendentes=("Saldo_Horas", "sum"),
+            PVs_Pendentes=("PV", "nunique")
+        )
         .merge(
-            dem_proc[["Processo", "Capacidade Processo", "Utilização (%)"]],
+            dem_proc[
+                ["Processo", "Capacidade Processo", "Utilização (%)"]
+            ],
             on="Processo",
             how="left"
         )
     )
 
-    gargalos_top["Capacidade Processo"] = pd.to_numeric(gargalos_top["Capacidade Processo"], errors="coerce").fillna(0)
-    gargalos_top["Horas_Pendentes"] = pd.to_numeric(gargalos_top["Horas_Pendentes"], errors="coerce").fillna(0)
+    gargalos_top["Capacidade Processo"] = pd.to_numeric(
+        gargalos_top["Capacidade Processo"],
+        errors="coerce"
+    ).fillna(0)
+
+    gargalos_top["Horas_Pendentes"] = pd.to_numeric(
+        gargalos_top["Horas_Pendentes"],
+        errors="coerce"
+    ).fillna(0)
 
     gargalos_top["Carga_Relativa"] = np.where(
         gargalos_top["Capacidade Processo"] > 0,
-        gargalos_top["Horas_Pendentes"] / gargalos_top["Capacidade Processo"],
+        gargalos_top["Horas_Pendentes"] /
+        gargalos_top["Capacidade Processo"],
         0
     )
 
-    # 🔥 NÃO LIMITADO MAIS A 3 (ajustável)
     gargalos_top = (
         gargalos_top
-        .sort_values(["Carga_Relativa", "Horas_Pendentes"], ascending=[False, False])
+        .sort_values(
+            ["Carga_Relativa", "Horas_Pendentes"],
+            ascending=[False, False]
+        )
         .head(5)
         .reset_index(drop=True)
     )
 
     if gargalos_top.empty:
+
         st.info("Nenhum gargalo pendente encontrado.")
 
     else:
+
         gargalos_top["Ranking"] = gargalos_top.index + 1
 
         st.dataframe(
-            gargalos_top[["Ranking", "Processo", "Horas_Pendentes", "PVs_Pendentes"]],
+            gargalos_top[
+                [
+                    "Ranking",
+                    "Processo",
+                    "Horas_Pendentes",
+                    "PVs_Pendentes"
+                ]
+            ],
             use_container_width=True,
             hide_index=True
         )
 
         st.divider()
 
-        processos_top = gargalos_top["Processo"].astype(str).tolist()
+        # =====================================================
+        # 🔥 FILA REAL DOS GARGALOS
+        # =====================================================
+        processos_top = gargalos_top[
+            "Processo"
+        ].astype(str).tolist()
 
         base_gargalos = df_base_gargalo[
             df_base_gargalo["Processo"].isin(processos_top)
         ].copy()
 
         base_gargalos["CHAVE_OPERACAO"] = (
-            base_gargalos["PV"].astype(str).str.strip().str.upper() + "||" +
-            base_gargalos["Processo"].astype(str).str.strip().str.upper() + "||" +
-            base_gargalos["CODIGO_PV"].astype(str).str.strip().str.upper()
+            base_gargalos["PV"].apply(_norm) + "||" +
+            base_gargalos["Processo"].apply(_norm) + "||" +
+            base_gargalos["CODIGO_PV"].apply(_norm)
         )
 
-        fila = base_gargalos.copy()
+        fila = base_gargalos[
+            base_gargalos["Saldo_Horas"] > 0
+        ].copy()
 
-        st.markdown("### ✅ Dar Baixa em Operação Concluída")
+        fila = fila.reset_index(drop=True)
+
+        st.markdown(
+            "### ✅ Dar Baixa em Operação Concluída"
+        )
 
         if fila.empty:
+
             st.info("Nenhuma operação disponível.")
+
         else:
 
-            # =========================================================
+            # =================================================
             # RESET
-            # =========================================================
+            # =================================================
             if "reset_gargalo_unitario" not in st.session_state:
                 st.session_state["reset_gargalo_unitario"] = False
 
@@ -3904,47 +4052,79 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
                 st.session_state["reset_gargalo_lote"] = False
 
             fila["ROTULO"] = (
-                "PV " + fila["PV"] +
-                " | " + fila["Processo"] +
-                " | " + fila["CODIGO_PV"] +
-                " | " + fila["Horas"].astype(str) + " h"
+                "PV " + fila["PV"].astype(str) +
+                " | " + fila["Processo"].astype(str) +
+                " | " + fila["CODIGO_PV"].astype(str) +
+                " | SALDO: " +
+                fila["Saldo_Horas"].round(2).astype(str) + " h"
             )
 
             opcoes = fila["ROTULO"].tolist()
 
             if st.session_state["reset_gargalo_unitario"]:
+
                 if opcoes:
-                    st.session_state["selectbox_baixa_gargalo"] = opcoes[0]
-                st.session_state["reset_gargalo_unitario"] = False
+                    st.session_state[
+                        "selectbox_baixa_gargalo"
+                    ] = opcoes[0]
+
+                st.session_state[
+                    "reset_gargalo_unitario"
+                ] = False
 
             if st.session_state["reset_gargalo_lote"]:
-                st.session_state["multi_gargalo"] = []
-                st.session_state["reset_gargalo_lote"] = False
 
-            # =========================================================
+                st.session_state["multi_gargalo"] = []
+
+                st.session_state[
+                    "reset_gargalo_lote"
+                ] = False
+
+            # =================================================
             # UNITÁRIO
-            # =========================================================
+            # =================================================
             col1, col2 = st.columns(2)
 
-            escolha = col1.selectbox("Operação", opcoes, key="selectbox_baixa_gargalo")
+            escolha = col1.selectbox(
+                "Operação",
+                opcoes,
+                key="selectbox_baixa_gargalo"
+            )
+
             obs = col2.text_input("Observação")
 
-            linha_sel = fila[fila["ROTULO"] == escolha]
+            linha_sel = fila[
+                fila["ROTULO"] == escolha
+            ]
 
             if not linha_sel.empty:
+
                 linha = linha_sel.iloc[0]
+
+                saldo_real = float(linha["Saldo_Horas"])
 
                 col_btn1, col_btn2 = st.columns(2)
 
+                # =============================================
+                # BAIXA
+                # =============================================
                 if col_btn1.button("💾 Baixar"):
 
+                    if saldo_real <= 0:
+                        st.warning(
+                            "⚠️ Operação já totalmente baixada"
+                        )
+                        st.stop()
+
                     nova_baixa = {
-                        "PV": linha["PV"],
+                        "PV": _norm(linha["PV"]),
                         "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": linha["CODIGO_PV"],
-                        "Processo": linha["Processo"],
-                        "Horas": linha["Horas"],
-                        "Data_Baixa": datetime.now(),
+                        "CODIGO_PV": _norm(linha["CODIGO_PV"]),
+                        "Processo": _norm(linha["Processo"]),
+                        "Horas": saldo_real,
+                        "Data_Baixa": datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
                         "Usuario": "Sistema",
                         "Observacao": obs,
                         "Status_Baixa": "ATIVA",
@@ -3953,24 +4133,45 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
                         "CHAVE_OPERACAO": linha["CHAVE_OPERACAO"]
                     }
 
-                    resultado = salvar_baixa_sqlite(nova_baixa)
+                    resultado = salvar_baixa_sqlite(
+                        nova_baixa
+                    )
 
                     if resultado["ok"]:
-                        st.session_state["reset_gargalo_unitario"] = True
-                        st.success("Baixa registrada")
+
+                        st.session_state[
+                            "reset_gargalo_unitario"
+                        ] = True
+
+                        st.success(
+                            f"Baixa registrada ({saldo_real:.2f}h)"
+                        )
+
                         st.rerun()
+
                     else:
                         st.error(resultado["erro"])
 
+                # =============================================
+                # TERCEIRIZAÇÃO
+                # =============================================
                 if col_btn2.button("🟣 Terceirizar"):
 
+                    if saldo_real <= 0:
+                        st.warning(
+                            "⚠️ Operação já totalmente baixada"
+                        )
+                        st.stop()
+
                     nova_baixa = {
-                        "PV": linha["PV"],
+                        "PV": _norm(linha["PV"]),
                         "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": linha["CODIGO_PV"],
-                        "Processo": linha["Processo"],
-                        "Horas": linha["Horas"],
-                        "Data_Baixa": datetime.now(),
+                        "CODIGO_PV": _norm(linha["CODIGO_PV"]),
+                        "Processo": _norm(linha["Processo"]),
+                        "Horas": saldo_real,
+                        "Data_Baixa": datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
                         "Usuario": "Sistema",
                         "Observacao": obs,
                         "Status_Baixa": "TERCEIRIZADA",
@@ -3979,49 +4180,85 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
                         "CHAVE_OPERACAO": linha["CHAVE_OPERACAO"]
                     }
 
-                    resultado = salvar_baixa_sqlite(nova_baixa)
+                    resultado = salvar_baixa_sqlite(
+                        nova_baixa
+                    )
 
                     if resultado["ok"]:
-                        st.session_state["reset_gargalo_unitario"] = True
-                        st.success("Terceirizado")
+
+                        st.session_state[
+                            "reset_gargalo_unitario"
+                        ] = True
+
+                        st.success(
+                            "Operação terceirizada"
+                        )
+
                         st.rerun()
+
                     else:
                         st.error(resultado["erro"])
 
             st.divider()
 
-            # =========================================================
-            # LOTE (AGORA GLOBAL)
-            # =========================================================
+            # =================================================
+            # 📦 LOTE BLINDADO
+            # =================================================
             st.markdown("#### 📦 Baixa em Lote")
 
-            selecao = st.multiselect("Selecionar operações", opcoes, key="multi_gargalo")
+            selecao = st.multiselect(
+                "Selecionar operações",
+                opcoes,
+                key="multi_gargalo"
+            )
 
             if selecao:
+
                 if st.button("📦 Baixar Lote"):
 
                     sucessos = 0
                     erros = 0
 
                     for label in selecao:
-                        linha = fila[fila["ROTULO"] == label].iloc[0]
+
+                        linha = fila[
+                            fila["ROTULO"] == label
+                        ].iloc[0]
+
+                        saldo_real = float(
+                            linha["Saldo_Horas"]
+                        )
+
+                        if saldo_real <= 0:
+                            erros += 1
+                            continue
 
                         nova_baixa = {
-                            "PV": linha["PV"],
+                            "PV": _norm(linha["PV"]),
                             "Cliente": linha.get("Cliente", ""),
-                            "CODIGO_PV": linha["CODIGO_PV"],
-                            "Processo": linha["Processo"],
-                            "Horas": linha["Horas"],
-                            "Data_Baixa": datetime.now(),
+                            "CODIGO_PV": _norm(
+                                linha["CODIGO_PV"]
+                            ),
+                            "Processo": _norm(
+                                linha["Processo"]
+                            ),
+                            "Horas": saldo_real,
+                            "Data_Baixa": datetime.now().strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            ),
                             "Usuario": "Sistema",
                             "Observacao": "",
                             "Status_Baixa": "ATIVA",
                             "Data_Estorno": "",
                             "Motivo_Estorno": "",
-                            "CHAVE_OPERACAO": linha["CHAVE_OPERACAO"]
+                            "CHAVE_OPERACAO": linha[
+                                "CHAVE_OPERACAO"
+                            ]
                         }
 
-                        resultado = salvar_baixa_sqlite(nova_baixa)
+                        resultado = salvar_baixa_sqlite(
+                            nova_baixa
+                        )
 
                         if resultado["ok"]:
                             sucessos += 1
@@ -4029,16 +4266,23 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
                             erros += 1
 
                     if sucessos:
-                        st.session_state["reset_gargalo_lote"] = True
-                        st.success(f"{sucessos} baixadas")
+
+                        st.session_state[
+                            "reset_gargalo_lote"
+                        ] = True
+
+                        st.success(
+                            f"{sucessos} operações baixadas"
+                        )
 
                     if erros:
-                        st.warning(f"{erros} falharam")
+                        st.warning(
+                            f"{erros} operações falharam"
+                        )
 
                     st.rerun()
 
         st.divider()
-
 
 
 
