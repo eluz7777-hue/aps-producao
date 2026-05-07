@@ -1809,57 +1809,6 @@ dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
 
 
 
-# ===============================
-# RECÁLCULO REAL DAS HORAS (COM BAIXAS)
-# ===============================
-
-# --- consolida horas baixadas por PV + Processo
-if not df_baixas.empty:
-
-    baixas_proc = (
-        df_baixas
-        .groupby(["PV", "Processo"], as_index=False)
-        .agg({
-            "Horas_Baixadas": "sum"
-        })
-    )
-
-else:
-
-    baixas_proc = pd.DataFrame(
-        columns=["PV", "Processo", "Horas_Baixadas"]
-    )
-
-# --- junta baixas na base operacional
-df_saldo = df.merge(
-    baixas_proc,
-    on=["PV", "Processo"],
-    how="left"
-)
-
-# --- evita nulos
-df_saldo["Horas_Baixadas"] = (
-    pd.to_numeric(
-        df_saldo["Horas_Baixadas"],
-        errors="coerce"
-    )
-    .fillna(0)
-)
-
-# --- garante horas originais válidas
-df_saldo["Horas"] = (
-    pd.to_numeric(
-        df_saldo["Horas"],
-        errors="coerce"
-    )
-    .fillna(0)
-)
-
-# --- recalcula saldo real
-df_saldo["Horas_Restantes"] = (
-    df_saldo["Horas"]
-    - df_saldo["Horas_Baixadas"]
-).clip(lower=0)
 
 # ===============================
 # AGRUPAMENTO POR PROCESSO
