@@ -6078,6 +6078,9 @@ if df_hist is None:
     df_hist = pd.DataFrame()
 
 
+# ============================================================
+# 🔥 BASE VAZIA
+# ============================================================
 if df_hist.empty:
 
     st.info(
@@ -6086,14 +6089,27 @@ if df_hist.empty:
 
 else:
 
-    # --------------------------------------------------------
-    # 🔥 REMOVE COLUNAS DUPLICADAS
-    # --------------------------------------------------------
+    # ========================================================
+    # 🔥 CÓPIA SEGURA
+    # ========================================================
+    df_hist = df_hist.copy()
+
+
+    # ========================================================
+    # 🔥 REMOVE CONTAMINAÇÕES
+    # ========================================================
     cols_invalidas = [
 
         c for c in df_hist.columns
         if c.endswith("_x")
         or c.endswith("_y")
+        or c in [
+            "PROC_UPPER",
+            "STATUS_UPPER",
+            "ENTREGA_DT",
+            "Data_Baixa_DT_x",
+            "Data_Baixa_DT_y"
+        ]
     ]
 
     if cols_invalidas:
@@ -6104,9 +6120,9 @@ else:
         )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # 🔥 GARANTE COLUNAS
-    # --------------------------------------------------------
+    # ========================================================
     colunas_necessarias = [
 
         "PV",
@@ -6129,42 +6145,60 @@ else:
             df_hist[col] = ""
 
 
-    # --------------------------------------------------------
-    # 🔥 NORMALIZA STATUS
-    # --------------------------------------------------------
+    # ========================================================
+    # 🔥 NORMALIZAÇÕES GLOBAIS
+    # ========================================================
+    for col in [
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Usuario",
+        "Observacao",
+        "Status_Baixa"
+    ]:
+
+        df_hist[col] = (
+
+            df_hist[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+
+    # ========================================================
+    # 🔥 STATUS PADRONIZADO
+    # ========================================================
     df_hist["Status_Baixa"] = (
 
         df_hist["Status_Baixa"]
-        .astype(str)
-        .str.strip()
         .str.upper()
     )
 
 
-    # --------------------------------------------------------
-    # 🔥 NORMALIZA PROCESSO
-    # --------------------------------------------------------
+    # ========================================================
+    # 🔥 PROCESSO PADRONIZADO
+    # ========================================================
     df_hist["Processo"] = (
 
         df_hist["Processo"]
-        .astype(str)
-        .str.strip()
         .str.upper()
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # 🔥 HORAS NUMÉRICAS
-    # --------------------------------------------------------
+    # ========================================================
     df_hist["Horas"] = pd.to_numeric(
         df_hist["Horas"],
         errors="coerce"
     ).fillna(0)
 
 
-    # --------------------------------------------------------
-    # 🔥 DATAS
-    # --------------------------------------------------------
+    # ========================================================
+    # 🔥 DATAS SEGURAS
+    # ========================================================
     df_hist["Data_Baixa_DT"] = pd.to_datetime(
         df_hist["Data_Baixa"],
         errors="coerce"
@@ -6176,13 +6210,23 @@ else:
     )
 
 
-    # --------------------------------------------------------
+    # ========================================================
+    # 🔥 GARANTE EXIBIÇÃO TOTAL
+    # ========================================================
+    df_hist = df_hist.reset_index(drop=True)
+
+
+    # ========================================================
     # 🔥 ORDENAÇÃO
-    # --------------------------------------------------------
-    df_hist = df_hist.sort_values(
-        by="Data_Baixa_DT",
-        ascending=False
-    )
+    # ========================================================
+    if "Data_Baixa_DT" in df_hist.columns:
+
+        df_hist = df_hist.sort_values(
+            by="Data_Baixa_DT",
+            ascending=False,
+            na_position="last"
+        )
+
 
     df_hist = df_hist.reset_index(drop=True)
 
@@ -6192,52 +6236,73 @@ else:
     # ========================================================
     col_f1, col_f2, col_f3 = st.columns(3)
 
+
     status_opcoes = ["Todos"] + sorted(
 
-        df_hist["Status_Baixa"]
-        .dropna()
-        .unique()
-        .tolist()
+        [
+            s for s in
+            df_hist["Status_Baixa"]
+            .dropna()
+            .unique()
+            .tolist()
+
+            if str(s).strip() != ""
+        ]
     )
+
 
     processo_opcoes = ["Todos"] + sorted(
 
-        df_hist["Processo"]
-        .dropna()
-        .unique()
-        .tolist()
+        [
+            p for p in
+            df_hist["Processo"]
+            .dropna()
+            .unique()
+            .tolist()
+
+            if str(p).strip() != ""
+        ]
     )
+
 
     cliente_opcoes = ["Todos"] + sorted(
 
-        df_hist["Cliente"]
-        .astype(str)
-        .dropna()
-        .unique()
-        .tolist()
+        [
+            c for c in
+            df_hist["Cliente"]
+            .dropna()
+            .unique()
+            .tolist()
+
+            if str(c).strip() != ""
+        ]
     )
 
 
     filtro_status = col_f1.selectbox(
         "Filtrar por status",
-        status_opcoes
+        status_opcoes,
+        key="filtro_hist_status"
     )
 
     filtro_processo = col_f2.selectbox(
         "Filtrar por processo",
-        processo_opcoes
+        processo_opcoes,
+        key="filtro_hist_processo"
     )
 
     filtro_cliente = col_f3.selectbox(
         "Filtrar por cliente",
-        cliente_opcoes
+        cliente_opcoes,
+        key="filtro_hist_cliente"
     )
 
 
     # ========================================================
-    # 🔥 FILTRAGEM
+    # 🔥 FILTRAGEM SEGURA
     # ========================================================
     hist_filtrado = df_hist.copy()
+
 
     if filtro_status != "Todos":
 
@@ -6246,6 +6311,7 @@ else:
             == filtro_status
         ]
 
+
     if filtro_processo != "Todos":
 
         hist_filtrado = hist_filtrado[
@@ -6253,12 +6319,19 @@ else:
             == filtro_processo
         ]
 
+
     if filtro_cliente != "Todos":
 
         hist_filtrado = hist_filtrado[
             hist_filtrado["Cliente"]
             == filtro_cliente
         ]
+
+
+    hist_filtrado = (
+        hist_filtrado
+        .reset_index(drop=True)
+    )
 
 
     # ========================================================
@@ -6271,30 +6344,37 @@ else:
     total_ativas = len(
         hist_filtrado[
             hist_filtrado["Status_Baixa"]
-            .isin(["ATIVA"])
+            == "ATIVA"
         ]
     )
 
     total_terceirizadas = len(
         hist_filtrado[
             hist_filtrado["Status_Baixa"]
-            .isin(["TERCEIRIZADA"])
+            == "TERCEIRIZADA"
         ]
     )
 
     total_estornos = len(
         hist_filtrado[
             hist_filtrado["Status_Baixa"]
-            .isin(["ESTORNADA"])
+            == "ESTORNADA"
         ]
     )
 
     horas_registradas = (
-        hist_filtrado["Horas"]
+        pd.to_numeric(
+            hist_filtrado["Horas"],
+            errors="coerce"
+        )
+        .fillna(0)
         .sum()
     )
 
 
+    # ========================================================
+    # 📊 CARDS
+    # ========================================================
     col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
 
     col_k1.metric(
@@ -6349,28 +6429,46 @@ else:
 
 
     # ========================================================
-    # 🔥 FORMATAÇÃO VISUAL
+    # 🔥 FORMATAÇÃO DE DATAS
     # ========================================================
-    if "Data_Baixa_DT" in hist_filtrado.columns:
+    hist_filtrado["Data da Baixa"] = np.where(
 
-        hist_filtrado["Data da Baixa"] = (
+        hist_filtrado["Data_Baixa_DT"].notna(),
 
-            hist_filtrado["Data_Baixa_DT"]
-            .dt.strftime("%d/%m/%Y %H:%M")
-        )
+        hist_filtrado["Data_Baixa_DT"]
+        .dt.strftime("%d/%m/%Y %H:%M"),
 
-    if "Data_Estorno_DT" in hist_filtrado.columns:
-
-        hist_filtrado["Data do Estorno"] = (
-
-            hist_filtrado["Data_Estorno_DT"]
-            .dt.strftime("%d/%m/%Y %H:%M")
-        )
+        ""
+    )
 
 
+    hist_filtrado["Data do Estorno"] = np.where(
+
+        hist_filtrado["Data_Estorno_DT"].notna(),
+
+        hist_filtrado["Data_Estorno_DT"]
+        .dt.strftime("%d/%m/%Y %H:%M"),
+
+        ""
+    )
+
+
+    # ========================================================
+    # 🔥 HORAS FORMATADAS
+    # ========================================================
     hist_filtrado["Horas"] = (
         hist_filtrado["Horas"]
         .round(2)
+    )
+
+
+    # ========================================================
+    # 🔥 REMOVE DUPLICIDADES VISUAIS
+    # ========================================================
+    hist_filtrado = (
+        hist_filtrado
+        .drop_duplicates()
+        .reset_index(drop=True)
     )
 
 
@@ -6392,19 +6490,23 @@ else:
         "Motivo_Estorno"
     ]
 
+
     colunas_exibir = [
         c for c in colunas_exibir
         if c in hist_filtrado.columns
     ]
 
 
+    # ========================================================
+    # 🔥 EXIBIÇÃO FINAL
+    # ========================================================
     st.dataframe(
         hist_filtrado[
             colunas_exibir
         ],
         use_container_width=True,
         hide_index=True,
-        height=450
+        height=500
     )
 
 st.divider()
