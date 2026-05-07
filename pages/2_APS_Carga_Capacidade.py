@@ -84,7 +84,7 @@ def carregar_baixas_sqlite():
 
 
 # ============================================================
-# 🔥 SALVAR BAIXA SQLITE (BLINDAGEM TOTAL)
+# 🔥 SALVAR BAIXA SQLITE (VERSÃO DEFINITIVA BLINDADA)
 # ============================================================
 def salvar_baixa_sqlite(nova_baixa):
 
@@ -93,200 +93,241 @@ def salvar_baixa_sqlite(nova_baixa):
     try:
 
         conn = get_connection()
+
         cursor = conn.cursor()
 
 
         # ====================================================
-        # 🔥 NORMALIZAÇÃO FORTE
-        # ====================================================
-        def _norm(x):
-
-            if pd.isna(x):
-                return ""
-
-            x = str(x)
-
-            x = (
-                x.replace("\xa0", "")
-                .replace(" ", "")
-                .replace(".0", "")
-            )
-
-            return x.strip().upper()
-
-
-        # ====================================================
-        # 🔥 NORMALIZA DADOS
+        # 🔥 NORMALIZAÇÃO TOTAL
         # ====================================================
         pv = _norm(
             nova_baixa.get("PV", "")
+        )
+
+        cliente = str(
+            nova_baixa.get("Cliente", "")
+        ).strip()
+
+        codigo_pv = _norm(
+            nova_baixa.get("CODIGO_PV", "")
         )
 
         processo = _norm(
             nova_baixa.get("Processo", "")
         )
 
-        codigo_pv = _norm(
-            nova_baixa.get("CODIGO_PV", "")
+        usuario = str(
+            nova_baixa.get("Usuario", "Sistema")
+        ).strip()
+
+        observacao = str(
+            nova_baixa.get("Observacao", "")
+        ).strip()
+
+        status_baixa = str(
+            nova_baixa.get("Status_Baixa", "ATIVA")
+        ).strip().upper()
+
+        motivo_estorno = str(
+            nova_baixa.get("Motivo_Estorno", "")
+        ).strip()
+
+        chave_operacao = str(
+            nova_baixa.get("CHAVE_OPERACAO", "")
+        ).strip()
+
+
+        # ====================================================
+        # 🔥 HORAS SEGURAS
+        # ====================================================
+        horas = pd.to_numeric(
+            nova_baixa.get("Horas", 0),
+            errors="coerce"
         )
 
-        chave = _norm(
-            nova_baixa.get(
-                "CHAVE_OPERACAO",
-                ""
-            )
-        )
+        if pd.isna(horas):
+            horas = 0
 
-        status = _norm(
-            nova_baixa.get(
-                "Status_Baixa",
-                "ATIVA"
-            )
-        )
+        horas = float(horas)
 
 
         # ====================================================
-        # 🔥 RECONSTRÓI CHAVE SE NECESSÁRIO
-        # ====================================================
-        if chave == "":
-
-            chave = (
-                pv
-                + "||"
-                + processo
-                + "||"
-                + codigo_pv
-            )
-
-
-        # ====================================================
-        # 🔥 HORAS DA NOVA BAIXA
-        # ====================================================
-        horas_novas = float(
-
-            pd.to_numeric(
-                nova_baixa.get("Horas", 0),
-                errors="coerce"
-            )
-        )
-
-        horas_novas = max(
-            horas_novas,
-            0
-        )
-
-
-        # ====================================================
-        # 🔒 PROTEÇÃO HORAS INVÁLIDAS
-        # ====================================================
-        if horas_novas <= 0:
-
-            conn.close()
-
-            return {
-                "ok": False,
-                "erro": (
-                    "Horas inválidas para baixa."
-                )
-            }
-
-
-        # ====================================================
-        # 🔥 DATA REAL DA BAIXA
+        # 🔥 DATA BAIXA REAL
         # ====================================================
         data_baixa = nova_baixa.get(
-            "Data_Baixa",
-            None
+            "Data_Baixa"
+        )
+
+
+        # ----------------------------------------------------
+        # datetime
+        # ----------------------------------------------------
+        if isinstance(
+            data_baixa,
+            datetime
+        ):
+
+            data_baixa = data_baixa.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        # ----------------------------------------------------
+        # vazio
+        # ----------------------------------------------------
+        elif (
+            data_baixa is None
+            or str(data_baixa).strip() == ""
+            or str(data_baixa).strip().upper() == "NONE"
+            or str(data_baixa).strip().upper() == "NAT"
+        ):
+
+            data_baixa = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        else:
+
+            try:
+
+                data_baixa = pd.to_datetime(
+                    data_baixa,
+                    errors="coerce"
+                )
+
+                if pd.isna(data_baixa):
+
+                    data_baixa = datetime.now(
+                        ZoneInfo("America/Sao_Paulo")
+                    )
+
+                data_baixa = data_baixa.strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+            except:
+
+                data_baixa = datetime.now(
+                    ZoneInfo("America/Sao_Paulo")
+                ).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+
+        # ====================================================
+        # 🔥 DATA ESTORNO
+        # ====================================================
+        data_estorno = nova_baixa.get(
+            "Data_Estorno",
+            ""
         )
 
         if (
-            data_baixa is None
-            or pd.isna(data_baixa)
-            or str(data_baixa).strip().upper() in [
+            data_estorno is None
+            or str(data_estorno).strip().upper() in [
                 "",
                 "NONE",
-                "NAN",
                 "NAT"
             ]
         ):
 
-            data_baixa = datetime.now()
+            data_estorno = ""
 
         else:
 
-            data_baixa = pd.to_datetime(
-                data_baixa,
-                errors="coerce"
-            )
+            try:
 
-            if pd.isna(data_baixa):
+                data_estorno = pd.to_datetime(
+                    data_estorno,
+                    errors="coerce"
+                )
 
-                data_baixa = datetime.now()
+                if pd.isna(data_estorno):
 
+                    data_estorno = ""
 
-        data_baixa = data_baixa.strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+                else:
+
+                    data_estorno = (
+                        data_estorno.strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                    )
+
+            except:
+
+                data_estorno = ""
 
 
         # ====================================================
-        # 🔥 BUSCA BAIXAS ATIVAS
+        # 🔒 BLOQUEIO DUPLICIDADE
         # ====================================================
-        cursor.execute(
-            """
+        cursor.execute("""
+
             SELECT
                 COALESCE(SUM(Horas), 0)
+
             FROM baixas
-            WHERE
-                UPPER(TRIM(CHAVE_OPERACAO)) = ?
-            AND
-                UPPER(TRIM(Status_Baixa))
-                IN ('ATIVA', 'TERCEIRIZADA')
-            """,
-            (chave,)
-        )
 
-        total_baixado = (
-            cursor.fetchone()[0] or 0
-        )
+            WHERE CHAVE_OPERACAO = ?
 
-        total_baixado = float(
-            total_baixado
+            AND UPPER(Status_Baixa)
+            IN ('ATIVA', 'TERCEIRIZADA')
+
+        """, (chave_operacao,))
+
+        horas_existentes = cursor.fetchone()[0]
+
+        if horas_existentes is None:
+            horas_existentes = 0
+
+        horas_existentes = float(
+            horas_existentes
         )
 
 
         # ====================================================
-        # 🔥 BLOQUEIA SOMENTE OPERAÇÃO 100% BAIXADA
+        # 🔥 BASE OPERACIONAL
         # ====================================================
-        if total_baixado >= horas_novas:
+        horas_planejadas = 0
 
-            conn.close()
+        try:
 
-            return {
-                "ok": False,
-                "erro": (
-                    "Operação já totalmente baixada."
+            base_oper = df_operacional[
+                df_operacional[
+                    "CHAVE_OPERACAO"
+                ] == chave_operacao
+            ]
+
+            if not base_oper.empty:
+
+                horas_planejadas = pd.to_numeric(
+                    base_oper.iloc[0]["Horas"],
+                    errors="coerce"
                 )
-            }
 
+                if pd.isna(horas_planejadas):
+                    horas_planejadas = 0
 
-        # ====================================================
-        # 🔥 EVITA EXTRAPOLAR HORAS
-        # ====================================================
-        saldo_restante = (
-            horas_novas
-            -
-            total_baixado
-        )
+                horas_planejadas = float(
+                    horas_planejadas
+                )
+
+        except:
+
+            horas_planejadas = 0
+
 
         saldo_restante = max(
-            saldo_restante,
+            horas_planejadas -
+            horas_existentes,
             0
         )
 
 
         # ====================================================
-        # 🔒 NÃO INSERE ZERADO
+        # 🔒 EVITA DUPLICIDADE
         # ====================================================
         if saldo_restante <= 0:
 
@@ -294,17 +335,24 @@ def salvar_baixa_sqlite(nova_baixa):
 
             return {
                 "ok": False,
-                "erro": (
-                    "Saldo restante zerado."
-                )
+                "erro": "Operação já totalmente baixada"
             }
 
 
         # ====================================================
-        # 🔥 INSERT REAL
+        # 🔥 AJUSTA HORAS
         # ====================================================
-        cursor.execute(
-            """
+        horas = min(
+            horas,
+            saldo_restante
+        )
+
+
+        # ====================================================
+        # 💾 INSERT SQLITE
+        # ====================================================
+        cursor.execute("""
+
             INSERT INTO baixas (
 
                 PV,
@@ -321,111 +369,48 @@ def salvar_baixa_sqlite(nova_baixa):
                 CHAVE_OPERACAO
 
             )
+
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
 
-            (
-                pv,
+        """, (
 
-                nova_baixa.get(
-                    "Cliente",
-                    ""
-                ),
+            pv,
+            cliente,
+            codigo_pv,
+            processo,
+            horas,
+            data_baixa,
+            usuario,
+            observacao,
+            status_baixa,
+            data_estorno,
+            motivo_estorno,
+            chave_operacao
 
-                codigo_pv,
-
-                processo,
-
-                saldo_restante,
-
-                data_baixa,
-
-                nova_baixa.get(
-                    "Usuario",
-                    "Sistema"
-                ),
-
-                nova_baixa.get(
-                    "Observacao",
-                    ""
-                ),
-
-                status,
-
-                nova_baixa.get(
-                    "Data_Estorno",
-                    ""
-                ),
-
-                nova_baixa.get(
-                    "Motivo_Estorno",
-                    ""
-                ),
-
-                chave
-            )
-        )
+        ))
 
 
-        # ====================================================
-        # 🔥 COMMIT REAL
-        # ====================================================
         conn.commit()
-
-
-        # ====================================================
-        # 🔥 VALIDA INSERT
-        # ====================================================
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM baixas
-            WHERE CHAVE_OPERACAO = ?
-            """,
-            (chave,)
-        )
-
-        validacao = (
-            cursor.fetchone()[0] or 0
-        )
 
         conn.close()
 
 
-        # ====================================================
-        # 🔥 RETORNO FINAL
-        # ====================================================
         return {
-
-            "ok": True,
-
-            "linhas_operacao": validacao,
-
-            "saldo_restante": saldo_restante,
-
-            "data_baixa": data_baixa
+            "ok": True
         }
 
 
     except Exception as e:
 
         try:
-
-            if conn:
-
-                conn.rollback()
-                conn.close()
-
+            conn.close()
         except:
             pass
 
         return {
-
             "ok": False,
-
             "erro": str(e)
         }
-
 
 
 
