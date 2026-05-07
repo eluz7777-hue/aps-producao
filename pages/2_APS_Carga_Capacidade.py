@@ -1426,17 +1426,40 @@ else:
 
 
 
-# --------------------------------------------
-# BASE OFICIAL PARA TIRAR DA FILA (CORRIGIDO)
-# --------------------------------------------
-df_baixas_ativas = st.session_state.get("df_baixas_ativas", pd.DataFrame())
+# ============================================================
+# BASE OPERACIONAL REAL (COM SALDO DE BAIXAS)
+# ============================================================
 
-if not df_baixas_ativas.empty:
+df_baixas_ativas = st.session_state.get(
+    "df_baixas_ativas",
+    pd.DataFrame()
+)
+
+# ------------------------------------------------------------
+# BASE ORIGINAL
+# ------------------------------------------------------------
+df = df_operacional.copy()
+
+# ------------------------------------------------------------
+# SEM BAIXAS
+# ------------------------------------------------------------
+if df_baixas_ativas.empty:
+
+    df["Horas_Baixadas"] = 0
+    df["Horas_Restantes"] = df["Horas"]
+
+# ------------------------------------------------------------
+# COM BAIXAS
+# ------------------------------------------------------------
+else:
 
     df_baixas_tmp = df_baixas_ativas.copy()
 
-    # NORMALIZA IGUAL À BASE OPERACIONAL
+    # --------------------------------------------------------
+    # NORMALIZAÇÃO
+    # --------------------------------------------------------
     for col in ["PV", "Processo", "CODIGO_PV"]:
+
         if col not in df_baixas_tmp.columns:
             df_baixas_tmp[col] = ""
 
@@ -1448,46 +1471,102 @@ if not df_baixas_ativas.empty:
             .str.upper()
         )
 
-    # 🔥 CHAVE USANDO A MESMA FUNÇÃO
-    df_baixas_tmp["CHAVE_OPERACAO"] = df_baixas_tmp.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
+    # --------------------------------------------------------
+    # CHAVE PADRÃO
+    # --------------------------------------------------------
+    df_baixas_tmp["CHAVE_OPERACAO"] = (
+        df_baixas_tmp.apply(
+            lambda r: normalizar_chave_operacao(
+                r["PV"],
+                r["Processo"],
+                r["CODIGO_PV"]
+            ),
+            axis=1
+        )
     )
 
-    # 🔥 SET DE CHAVES (SIMPLES E CONFIÁVEL)
-    chaves_baixadas_ativas = set(df_baixas_tmp["CHAVE_OPERACAO"])
+    # --------------------------------------------------------
+    # CONSOLIDA HORAS BAIXADAS
+    # --------------------------------------------------------
+    baixas_consolidadas = (
 
-else:
-    chaves_baixadas_ativas = set()
+        df_baixas_tmp
 
+        .groupby(
+            "CHAVE_OPERACAO",
+            as_index=False
+        )
 
-# --------------------------------------------
-# APLICA STATUS OPERACIONAL (SIMPLIFICADO E CORRETO)
-# --------------------------------------------
-df_operacional["Status Operacional"] = df_operacional["CHAVE_OPERACAO"].apply(
-    lambda chave: "✅ Baixado" if chave in chaves_baixadas_ativas else "⏳ Pendente"
+        .agg({
+            "Horas": "sum"
+        })
+
+        .rename(columns={
+            "Horas": "Horas_Baixadas"
+        })
+    )
+
+    # --------------------------------------------------------
+    # MERGE COM BASE OPERACIONAL
+    # --------------------------------------------------------
+    df = df.merge(
+        baixas_consolidadas,
+        on="CHAVE_OPERACAO",
+        how="left"
+    )
+
+    # --------------------------------------------------------
+    # TRATAMENTO NUMÉRICO
+    # --------------------------------------------------------
+    df["Horas"] = (
+        pd.to_numeric(
+            df["Horas"],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+
+    df["Horas_Baixadas"] = (
+        pd.to_numeric(
+            df["Horas_Baixadas"],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+
+    # --------------------------------------------------------
+    # SALDO REAL
+    # --------------------------------------------------------
+    df["Horas_Restantes"] = (
+        df["Horas"]
+        - df["Horas_Baixadas"]
+    ).clip(lower=0)
+
+# ------------------------------------------------------------
+# STATUS OPERACIONAL REAL
+# ------------------------------------------------------------
+df["Status Operacional"] = np.where(
+    df["Horas_Restantes"] <= 0.0001,
+    "✅ Baixado",
+    "⏳ Pendente"
 )
 
-# ============================================================
-# BASE PENDENTE REAL (USADA NOS CÁLCULOS DO APS)
-# ============================================================
-df = df_operacional[df_operacional["Status Operacional"] == "⏳ Pendente"].copy()
-df = df.reset_index(drop=True)
-# DataFrames auxiliares
-df_excluidas = pd.DataFrame(pvs_excluidas)
-df_sem_carga = pd.DataFrame(pvs_sem_carga)
-df_auditoria_pv = pd.DataFrame(auditoria_pv)
+# ------------------------------------------------------------
+# APS USA SOMENTE SALDO RESTANTE
+# ------------------------------------------------------------
+df = df[
+    df["Horas_Restantes"] > 0.0001
+].copy()
 
-# Blindagem dos auxiliares
-for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
-    if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
-        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
-            _df_aux["DATA_ENTREGA_APS"],
-            errors="coerce",
-            dayfirst=True
-        )
+# ------------------------------------------------------------
+# HORAS OFICIAIS DO APS
+# ------------------------------------------------------------
+df["Horas_Originais"] = df["Horas"]
+df["Horas"] = df["Horas_Restantes"]
+
+df = df.reset_index(drop=True)
+
+
 
 # -------------------------------
 # Garantia de rastreabilidade
