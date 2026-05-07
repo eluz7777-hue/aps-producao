@@ -88,39 +88,121 @@ def carregar_baixas_sqlite():
 # ============================================================
 def salvar_baixa_sqlite(nova_baixa):
 
+    conn = None
+
     try:
 
         conn = get_connection()
         cursor = conn.cursor()
 
+
         # ====================================================
-        # 🔥 NORMALIZA CHAVE
+        # 🔥 NORMALIZAÇÃO FORTE
         # ====================================================
-        chave = str(
+        def _norm(x):
+
+            if pd.isna(x):
+                return ""
+
+            x = str(x)
+
+            x = (
+                x.replace("\xa0", "")
+                .replace(" ", "")
+                .replace(".0", "")
+            )
+
+            return x.strip().upper()
+
+
+        # ====================================================
+        # 🔥 NORMALIZA DADOS
+        # ====================================================
+        pv = _norm(
+            nova_baixa.get("PV", "")
+        )
+
+        processo = _norm(
+            nova_baixa.get("Processo", "")
+        )
+
+        codigo_pv = _norm(
+            nova_baixa.get("CODIGO_PV", "")
+        )
+
+        chave = _norm(
             nova_baixa.get(
                 "CHAVE_OPERACAO",
                 ""
             )
-        ).strip().upper()
+        )
 
-        status = str(
+        status = _norm(
             nova_baixa.get(
                 "Status_Baixa",
                 ""
             )
-        ).strip().upper()
+        )
 
 
         # ====================================================
-        # 🔥 BUSCA BAIXAS ATIVAS DA OPERAÇÃO
+        # 🔥 RECONSTRÓI CHAVE SE NECESSÁRIO
+        # ====================================================
+        if chave == "":
+
+            chave = (
+                pv
+                + "||"
+                + processo
+                + "||"
+                + codigo_pv
+            )
+
+
+        # ====================================================
+        # 🔥 HORAS DA NOVA BAIXA
+        # ====================================================
+        horas_novas = float(
+
+            pd.to_numeric(
+                nova_baixa.get("Horas", 0),
+                errors="coerce"
+            )
+        )
+
+        horas_novas = max(
+            horas_novas,
+            0
+        )
+
+
+        # ====================================================
+        # 🔒 PROTEÇÃO HORAS INVÁLIDAS
+        # ====================================================
+        if horas_novas <= 0:
+
+            conn.close()
+
+            return {
+                "ok": False,
+                "erro": (
+                    "Horas inválidas para baixa."
+                )
+            }
+
+
+        # ====================================================
+        # 🔥 BUSCA BAIXAS ATIVAS
         # ====================================================
         cursor.execute(
             """
             SELECT
                 COALESCE(SUM(Horas), 0)
             FROM baixas
-            WHERE UPPER(TRIM(CHAVE_OPERACAO)) = ?
-            AND UPPER(TRIM(Status_Baixa))
+            WHERE
+                UPPER(TRIM(CHAVE_OPERACAO)) = ?
+            AND
+                UPPER(TRIM(Status_Baixa))
                 IN ('ATIVA', 'TERCEIRIZADA')
             """,
             (chave,)
@@ -136,27 +218,46 @@ def salvar_baixa_sqlite(nova_baixa):
 
 
         # ====================================================
-        # 🔥 HORAS DA NOVA BAIXA
+        # 🔥 BLOQUEIA SOMENTE OPERAÇÃO 100% BAIXADA
         # ====================================================
-        horas_novas = float(
-            nova_baixa.get(
-                "Horas",
-                0
-            )
-        )
-
-
-        # ====================================================
-        # 🔥 BLOQUEIO ANTI DUPLICIDADE
-        # ====================================================
-        if total_baixado > 0:
+        if total_baixado >= horas_novas:
 
             conn.close()
 
             return {
                 "ok": False,
                 "erro": (
-                    "Operação já possui baixa ativa registrada."
+                    "Operação já totalmente baixada."
+                )
+            }
+
+
+        # ====================================================
+        # 🔥 EVITA EXTRAPOLAR HORAS
+        # ====================================================
+        saldo_restante = (
+            horas_novas
+            -
+            total_baixado
+        )
+
+        saldo_restante = max(
+            saldo_restante,
+            0
+        )
+
+
+        # ====================================================
+        # 🔒 NÃO INSERE ZERADO
+        # ====================================================
+        if saldo_restante <= 0:
+
+            conn.close()
+
+            return {
+                "ok": False,
+                "erro": (
+                    "Saldo restante zerado."
                 )
             }
 
@@ -186,26 +287,31 @@ def salvar_baixa_sqlite(nova_baixa):
             """,
 
             (
-                nova_baixa["PV"],
+                pv,
 
                 nova_baixa.get(
                     "Cliente",
                     ""
                 ),
 
-                nova_baixa["CODIGO_PV"],
+                codigo_pv,
 
-                nova_baixa["Processo"],
+                processo,
 
-                horas_novas,
+                saldo_restante,
 
                 str(
-                    nova_baixa["Data_Baixa"]
+                    nova_baixa.get(
+                        "Data_Baixa",
+                        datetime.now().strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                    )
                 ),
 
                 nova_baixa.get(
                     "Usuario",
-                    ""
+                    "Sistema"
                 ),
 
                 nova_baixa.get(
@@ -229,17 +335,51 @@ def salvar_baixa_sqlite(nova_baixa):
             )
         )
 
+
+        # ====================================================
+        # 🔥 COMMIT REAL
+        # ====================================================
         conn.commit()
+
+
+        # ====================================================
+        # 🔥 VALIDA INSERT
+        # ====================================================
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM baixas
+            WHERE CHAVE_OPERACAO = ?
+            """,
+            (chave,)
+        )
+
+        validacao = (
+            cursor.fetchone()[0] or 0
+        )
+
         conn.close()
 
+
+        # ====================================================
+        # 🔥 RETORNO FINAL
+        # ====================================================
         return {
-            "ok": True
+
+            "ok": True,
+
+            "linhas_operacao": validacao,
+
+            "saldo_restante": saldo_restante
         }
+
 
     except Exception as e:
 
         try:
-            conn.close()
+            if conn:
+                conn.rollback()
+                conn.close()
         except:
             pass
 
@@ -253,93 +393,229 @@ def salvar_baixa_sqlite(nova_baixa):
 
 
 # ============================================================
-# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO (ROBUSTO)
+# 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO
 # ============================================================
 
 PASTA_BACKUP_BAIXAS = "backup_baixas"
-ARQUIVO_HISTORICO_BAIXAS = "APS_BAIXAS_OPERACIONAIS.xlsx"
+
+ARQUIVO_HISTORICO_BAIXAS = (
+    "APS_BAIXAS_OPERACIONAIS.xlsx"
+)
 
 
+# ============================================================
+# 🔥 GARANTE PASTA
+# ============================================================
 def _garantir_pasta_backup():
-    os.makedirs(PASTA_BACKUP_BAIXAS, exist_ok=True)
+
+    os.makedirs(
+        PASTA_BACKUP_BAIXAS,
+        exist_ok=True
+    )
 
 
+# ============================================================
+# 🔥 NOME BACKUP
+# ============================================================
 def _gerar_nome_backup():
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return f"APS_BAIXAS_OPERACIONAIS_{timestamp}.xlsx"
+
+    timestamp = datetime.now().strftime(
+        "%Y-%m-%d_%H-%M-%S"
+    )
+
+    return (
+        f"APS_BAIXAS_OPERACIONAIS_{timestamp}.xlsx"
+    )
 
 
+# ============================================================
+# 🔥 CRIA BACKUP
+# ============================================================
 def _criar_backup():
+
     try:
-        if not os.path.exists(ARQUIVO_HISTORICO_BAIXAS):
-            return False, "Arquivo ainda não existe (primeira gravação)"
+
+        if not os.path.exists(
+            ARQUIVO_HISTORICO_BAIXAS
+        ):
+
+            return (
+                False,
+                "Primeira gravação"
+            )
 
         _garantir_pasta_backup()
 
         destino = os.path.join(
+
             PASTA_BACKUP_BAIXAS,
+
             _gerar_nome_backup()
         )
 
-        shutil.copy2(ARQUIVO_HISTORICO_BAIXAS, destino)
+        shutil.copy2(
+            ARQUIVO_HISTORICO_BAIXAS,
+            destino
+        )
 
-        return True, destino
+        return (
+            True,
+            destino
+        )
 
     except Exception as e:
-        return False, str(e)
+
+        return (
+            False,
+            str(e)
+        )
 
 
+# ============================================================
+# 🔥 SALVA HISTÓRICO
+# ============================================================
 def salvar_historico_baixas(df):
+
     """
-    🔴 ÚNICO PONTO OFICIAL DE GRAVAÇÃO DO HISTÓRICO
-    🔒 COM PROTEÇÃO CONTRA PERDA DE DADOS
+    🔴 ÚNICO PONTO OFICIAL
+    DE GRAVAÇÃO DO HISTÓRICO
     """
 
     try:
+
+        # ====================================================
+        # 🔒 PROTEÇÃO
+        # ====================================================
         if df is None or df.empty:
+
             return {
+
                 "ok": False,
-                "erro": "DataFrame vazio - gravação cancelada para evitar perda de histórico",
+
+                "erro": (
+                    "DataFrame vazio."
+                ),
+
                 "backup_ok": False,
+
                 "backup_msg": None
             }
 
-        # ------------------------------------------------------------
-        # 🔥 REMOVE TIMEZONE (CRÍTICO PARA EXCEL)
-        # ------------------------------------------------------------
+
+        # ====================================================
+        # 🔥 CÓPIA SEGURA
+        # ====================================================
         df = df.copy()
 
+
+        # ====================================================
+        # 🔥 REMOVE TIMEZONE
+        # ====================================================
         for col in df.columns:
-            if pd.api.types.is_datetime64_any_dtype(df[col]):
+
+            if pd.api.types.is_datetime64_any_dtype(
+                df[col]
+            ):
+
                 try:
-                    df[col] = df[col].dt.tz_localize(None)
+
+                    df[col] = (
+                        df[col]
+                        .dt.tz_localize(None)
+                    )
+
                 except:
                     pass
 
-        # ------------------------------------------------------------
-        # BACKUP
-        # ------------------------------------------------------------
-        backup_ok, backup_msg = _criar_backup()
 
-        # ------------------------------------------------------------
-        # SALVA
-        # ------------------------------------------------------------
-        df.to_excel(ARQUIVO_HISTORICO_BAIXAS, index=False)
+        # ====================================================
+        # 🔥 REMOVE COLUNAS INVÁLIDAS
+        # ====================================================
+        cols_invalidas = [
 
+            c for c in df.columns
+
+            if c.endswith("_x")
+            or c.endswith("_y")
+        ]
+
+        if cols_invalidas:
+
+            df = df.drop(
+                columns=cols_invalidas,
+                errors="ignore"
+            )
+
+
+        # ====================================================
+        # 🔥 BACKUP
+        # ====================================================
+        backup_ok, backup_msg = (
+            _criar_backup()
+        )
+
+
+        # ====================================================
+        # 🔥 SALVA EXCEL
+        # ====================================================
+        df.to_excel(
+            ARQUIVO_HISTORICO_BAIXAS,
+            index=False
+        )
+
+
+        # ====================================================
+        # 🔥 VALIDA
+        # ====================================================
+        if not os.path.exists(
+            ARQUIVO_HISTORICO_BAIXAS
+        ):
+
+            return {
+
+                "ok": False,
+
+                "erro": (
+                    "Falha ao salvar arquivo."
+                ),
+
+                "backup_ok": backup_ok,
+
+                "backup_msg": backup_msg
+            }
+
+
+        # ====================================================
+        # 🔥 RETORNO
+        # ====================================================
         return {
+
             "ok": True,
+
             "linhas": len(df),
+
             "backup_ok": backup_ok,
+
             "backup_msg": backup_msg
         }
 
+
     except Exception as e:
+
         return {
+
             "ok": False,
+
             "erro": str(e),
+
             "backup_ok": False,
+
             "backup_msg": None
         }
+
+
+
+
 # ===============================
 # FORMATAÇÃO BR (INALTERADO)
 # ===============================
