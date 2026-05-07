@@ -140,7 +140,7 @@ def salvar_baixa_sqlite(nova_baixa):
         status = _norm(
             nova_baixa.get(
                 "Status_Baixa",
-                ""
+                "ATIVA"
             )
         )
 
@@ -189,6 +189,44 @@ def salvar_baixa_sqlite(nova_baixa):
                     "Horas inválidas para baixa."
                 )
             }
+
+
+        # ====================================================
+        # 🔥 DATA REAL DA BAIXA
+        # ====================================================
+        data_baixa = nova_baixa.get(
+            "Data_Baixa",
+            None
+        )
+
+        if (
+            data_baixa is None
+            or pd.isna(data_baixa)
+            or str(data_baixa).strip().upper() in [
+                "",
+                "NONE",
+                "NAN",
+                "NAT"
+            ]
+        ):
+
+            data_baixa = datetime.now()
+
+        else:
+
+            data_baixa = pd.to_datetime(
+                data_baixa,
+                errors="coerce"
+            )
+
+            if pd.isna(data_baixa):
+
+                data_baixa = datetime.now()
+
+
+        data_baixa = data_baixa.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
 
         # ====================================================
@@ -300,14 +338,7 @@ def salvar_baixa_sqlite(nova_baixa):
 
                 saldo_restante,
 
-                str(
-                    nova_baixa.get(
-                        "Data_Baixa",
-                        datetime.now().strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        )
-                    )
-                ),
+                data_baixa,
 
                 nova_baixa.get(
                     "Usuario",
@@ -370,24 +401,30 @@ def salvar_baixa_sqlite(nova_baixa):
 
             "linhas_operacao": validacao,
 
-            "saldo_restante": saldo_restante
+            "saldo_restante": saldo_restante,
+
+            "data_baixa": data_baixa
         }
 
 
     except Exception as e:
 
         try:
+
             if conn:
+
                 conn.rollback()
                 conn.close()
+
         except:
             pass
 
         return {
+
             "ok": False,
+
             "erro": str(e)
         }
-
 
 
 
