@@ -1814,11 +1814,11 @@ dem["Ocupacao_Label"] = dem["Ocupacao"].round(1).astype(str) + "%"
 # AGRUPAMENTO POR PROCESSO
 # ===============================
 dem_proc = (
-    df_saldo
-    .groupby("Processo", as_index=False)["Horas_Restantes"]
+    df
+    .groupby("Processo", as_index=False)["Horas"]
     .sum()
-    .rename(columns={"Horas_Restantes": "Horas"})
 )
+
 
 
 
