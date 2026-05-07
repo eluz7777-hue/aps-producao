@@ -1813,26 +1813,43 @@ except:
 
 
 
+
 # ============================================================
 # Mini Dashboard por Gargalo (INTELIGENTE)
 # ============================================================
 
 def _normalizar_coluna_processo(df, coluna="Processo"):
+
     if df is None or df.empty or coluna not in df.columns:
         return df
 
     df = df.copy()
-    df[coluna] = df[coluna].fillna("").astype(str).str.strip().str.upper()
+
+    df[coluna] = (
+        df[coluna]
+        .fillna("")
+        .astype(str)
+        .str.replace("\xa0", "", regex=False)
+        .str.strip()
+        .str.upper()
+    )
+
     return df
 
 
 def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
 
-    # 🔒 Proteção total
-    if df_baixas_ativas is None or not isinstance(df_baixas_ativas, pd.DataFrame):
+    # ========================================================
+    # 🔒 PROTEÇÃO TOTAL
+    # ========================================================
+    if (
+        df_baixas_ativas is None
+        or not isinstance(df_baixas_ativas, pd.DataFrame)
+    ):
         df_baixas_ativas = pd.DataFrame()
 
     if fila is None or fila.empty:
+
         return pd.DataFrame(columns=[
             "Processo",
             "Qtd_Fila",
@@ -1844,98 +1861,226 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
             "Ranking"
         ])
 
-    # ------------------------------------------------------------
-    # BASE DA FILA
-    # ------------------------------------------------------------
+    # ========================================================
+    # 🔥 BASE DA FILA (REAL)
+    # ========================================================
     fila_tmp = fila.copy()
-    fila_tmp = _normalizar_coluna_processo(fila_tmp, "Processo")
 
+    fila_tmp = _normalizar_coluna_processo(
+        fila_tmp,
+        "Processo"
+    )
+
+    # --------------------------------------------------------
+    # 🔒 GARANTE COLUNAS
+    # --------------------------------------------------------
     if "Horas" not in fila_tmp.columns:
         fila_tmp["Horas"] = 0
 
-    fila_tmp["Horas"] = pd.to_numeric(fila_tmp["Horas"], errors="coerce").fillna(0)
+    if "Saldo_Horas" not in fila_tmp.columns:
+        fila_tmp["Saldo_Horas"] = fila_tmp["Horas"]
 
+    # --------------------------------------------------------
+    # 🔥 CONVERSÃO NUMÉRICA
+    # --------------------------------------------------------
+    fila_tmp["Horas"] = pd.to_numeric(
+        fila_tmp["Horas"],
+        errors="coerce"
+    ).fillna(0)
+
+    fila_tmp["Saldo_Horas"] = pd.to_numeric(
+        fila_tmp["Saldo_Horas"],
+        errors="coerce"
+    ).fillna(0)
+
+    # --------------------------------------------------------
+    # 🔥 SOMENTE OPERAÇÕES PENDENTES
+    # --------------------------------------------------------
+    fila_tmp = fila_tmp[
+        fila_tmp["Saldo_Horas"] > 0
+    ].copy()
+
+    fila_tmp = fila_tmp.reset_index(drop=True)
+
+    # --------------------------------------------------------
+    # 🔥 RESUMO REAL DA FILA
+    # --------------------------------------------------------
     resumo_fila = (
         fila_tmp.groupby("Processo", dropna=False)
         .agg(
             Qtd_Fila=("Processo", "size"),
-            Horas_Fila=("Horas", "sum")
+            Horas_Fila=("Saldo_Horas", "sum")
         )
         .reset_index()
     )
 
-    # ------------------------------------------------------------
-    # BASE DE BAIXAS ATIVAS (BLINDADO)
-    # ------------------------------------------------------------
+    # ========================================================
+    # 🔥 BASE DE BAIXAS ATIVAS (SQLITE)
+    # ========================================================
     if (
         df_baixas_ativas is None
         or not isinstance(df_baixas_ativas, pd.DataFrame)
         or df_baixas_ativas.empty
         or "Processo" not in df_baixas_ativas.columns
     ):
-        resumo_baixas = pd.DataFrame(columns=["Processo", "Qtd_Baixas_Ativas"])
-    else:
-        baixas_tmp = df_baixas_ativas.copy()
-        baixas_tmp = _normalizar_coluna_processo(baixas_tmp, "Processo")
 
+        resumo_baixas = pd.DataFrame(
+            columns=[
+                "Processo",
+                "Qtd_Baixas_Ativas"
+            ]
+        )
+
+    else:
+
+        baixas_tmp = df_baixas_ativas.copy()
+
+        baixas_tmp = _normalizar_coluna_processo(
+            baixas_tmp,
+            "Processo"
+        )
+
+        # ----------------------------------------------------
+        # 🔒 GARANTE STATUS
+        # ----------------------------------------------------
+        if "Status_Baixa" not in baixas_tmp.columns:
+            baixas_tmp["Status_Baixa"] = "ATIVA"
+
+        baixas_tmp["Status_Baixa"] = (
+            baixas_tmp["Status_Baixa"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        # ----------------------------------------------------
+        # 🔥 SOMENTE BAIXAS VÁLIDAS
+        # ----------------------------------------------------
+        baixas_tmp = baixas_tmp[
+            baixas_tmp["Status_Baixa"].isin([
+                "ATIVA",
+                "TERCEIRIZADA"
+            ])
+        ].copy()
+
+        # ----------------------------------------------------
+        # 🔥 RESUMO DE BAIXAS
+        # ----------------------------------------------------
         resumo_baixas = (
             baixas_tmp.groupby("Processo", dropna=False)
-            .agg(Qtd_Baixas_Ativas=("Processo", "size"))
+            .agg(
+                Qtd_Baixas_Ativas=("Processo", "size")
+            )
             .reset_index()
         )
 
-    # ------------------------------------------------------------
-    # CONSOLIDAÇÃO
-    # ------------------------------------------------------------
+    # ========================================================
+    # 🔥 CONSOLIDAÇÃO FINAL
+    # ========================================================
     df_dash = resumo_fila.merge(
         resumo_baixas,
         on="Processo",
         how="left"
     )
 
-    df_dash["Qtd_Baixas_Ativas"] = df_dash["Qtd_Baixas_Ativas"].fillna(0).astype(int)
-    df_dash["Qtd_Fila"] = df_dash["Qtd_Fila"].fillna(0).astype(int)
-    df_dash["Horas_Fila"] = pd.to_numeric(df_dash["Horas_Fila"], errors="coerce").fillna(0)
+    # --------------------------------------------------------
+    # 🔒 TRATAMENTOS
+    # --------------------------------------------------------
+    df_dash["Qtd_Baixas_Ativas"] = (
+        pd.to_numeric(
+            df_dash["Qtd_Baixas_Ativas"],
+            errors="coerce"
+        )
+        .fillna(0)
+        .astype(int)
+    )
 
-    # ------------------------------------------------------------
-    # CARGA TOTAL
-    # ------------------------------------------------------------
-    df_dash["Carga_Total"] = df_dash["Qtd_Fila"] + df_dash["Qtd_Baixas_Ativas"]
+    df_dash["Qtd_Fila"] = (
+        pd.to_numeric(
+            df_dash["Qtd_Fila"],
+            errors="coerce"
+        )
+        .fillna(0)
+        .astype(int)
+    )
 
-    # ------------------------------------------------------------
-    # SCORE
-    # ------------------------------------------------------------
+    df_dash["Horas_Fila"] = (
+        pd.to_numeric(
+            df_dash["Horas_Fila"],
+            errors="coerce"
+        )
+        .fillna(0)
+        .round(2)
+    )
+
+    # ========================================================
+    # 🔥 CARGA TOTAL
+    # ========================================================
+    df_dash["Carga_Total"] = (
+        df_dash["Qtd_Fila"] +
+        df_dash["Qtd_Baixas_Ativas"]
+    )
+
+    # ========================================================
+    # 🔥 SCORE INTELIGENTE
+    # ========================================================
     df_dash["Score"] = (
         (df_dash["Horas_Fila"] * 1.5) +
         (df_dash["Qtd_Fila"] * 1.0) +
         (df_dash["Qtd_Baixas_Ativas"] * 0.5)
     )
 
-    # ------------------------------------------------------------
-    # CLASSIFICAÇÃO
-    # ------------------------------------------------------------
+    df_dash["Score"] = (
+        pd.to_numeric(
+            df_dash["Score"],
+            errors="coerce"
+        )
+        .fillna(0)
+        .round(2)
+    )
+
+    # ========================================================
+    # 🔥 CLASSIFICAÇÃO
+    # ========================================================
     def classificar_gargalo(score):
+
         if score >= 80:
             return "CRITICO"
+
         elif score >= 30:
             return "ATENCAO"
+
         else:
             return "CONTROLADO"
 
-    df_dash["Status_Gargalo"] = df_dash["Score"].apply(classificar_gargalo)
+    df_dash["Status_Gargalo"] = (
+        df_dash["Score"]
+        .apply(classificar_gargalo)
+    )
 
-    # ------------------------------------------------------------
-    # ORDENAÇÃO
-    # ------------------------------------------------------------
-    df_dash = df_dash.sort_values(
-        by=["Score", "Horas_Fila", "Qtd_Fila"],
-        ascending=[False, False, False]
-    ).reset_index(drop=True)
+    # ========================================================
+    # 🔥 ORDENAÇÃO FINAL
+    # ========================================================
+    df_dash = (
+        df_dash.sort_values(
+            by=[
+                "Score",
+                "Horas_Fila",
+                "Qtd_Fila"
+            ],
+            ascending=[False, False, False]
+        )
+        .reset_index(drop=True)
+    )
 
-    df_dash["Ranking"] = df_dash.index + 1
+    # ========================================================
+    # 🔥 RANKING
+    # ========================================================
+    df_dash["Ranking"] = (
+        df_dash.index + 1
+    )
 
     return df_dash
-
 
 
 # ============================================================
@@ -1945,6 +2090,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
 def resumo_cards_gargalos(df_dash):
 
     if df_dash is None or df_dash.empty:
+
         return {
             "total_processos": 0,
             "total_itens_fila": 0,
@@ -1956,18 +2102,45 @@ def resumo_cards_gargalos(df_dash):
             "qtd_controlados": 0
         }
 
-    gargalo_critico = df_dash.iloc[0]["Processo"]
+    gargalo_critico = (
+        df_dash.iloc[0]["Processo"]
+    )
 
     return {
-        "total_processos": int(df_dash["Processo"].nunique()),
-        "total_itens_fila": int(df_dash["Qtd_Fila"].sum()),
-        "total_horas_fila": float(df_dash["Horas_Fila"].sum()),
-        "total_baixas_ativas": int(df_dash["Qtd_Baixas_Ativas"].sum()),
+
+        "total_processos": int(
+            df_dash["Processo"].nunique()
+        ),
+
+        "total_itens_fila": int(
+            df_dash["Qtd_Fila"].sum()
+        ),
+
+        "total_horas_fila": float(
+            df_dash["Horas_Fila"].sum()
+        ),
+
+        "total_baixas_ativas": int(
+            df_dash["Qtd_Baixas_Ativas"].sum()
+        ),
+
         "gargalo_critico": gargalo_critico,
-        "qtd_criticos": int((df_dash["Status_Gargalo"] == "CRITICO").sum()),
-        "qtd_atencao": int((df_dash["Status_Gargalo"] == "ATENCAO").sum()),
-        "qtd_controlados": int((df_dash["Status_Gargalo"] == "CONTROLADO").sum())
+
+        "qtd_criticos": int(
+            (df_dash["Status_Gargalo"] == "CRITICO").sum()
+        ),
+
+        "qtd_atencao": int(
+            (df_dash["Status_Gargalo"] == "ATENCAO").sum()
+        ),
+
+        "qtd_controlados": int(
+            (df_dash["Status_Gargalo"] == "CONTROLADO").sum()
+        )
     }
+
+
+
 
 # ============================================================
 # ======================= GRÁFICOS ============================
