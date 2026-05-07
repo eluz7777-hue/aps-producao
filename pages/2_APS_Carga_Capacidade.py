@@ -4036,6 +4036,40 @@ st.write(
 )
 
 
+
+st.markdown("## 🔎 DEBUG MATCH 6987")
+
+debug_baixa_6987 = df_baixas_agg[
+    df_baixas_agg["CHAVE_OPERACAO"]
+    .astype(str)
+    .str.contains("6987", na=False)
+]
+
+debug_oper_6987 = df_operacional[
+    df_operacional["CHAVE_OPERACAO"]
+    .astype(str)
+    .str.contains("6987", na=False)
+]
+
+st.write("SQLITE:")
+st.dataframe(debug_baixa_6987)
+
+st.write("OPERACIONAL:")
+st.dataframe(
+    debug_oper_6987[[
+        "PV",
+        "Processo",
+        "CODIGO_PV",
+        "CHAVE_OPERACAO",
+        "Horas",
+        "Horas_Baixadas",
+        "Saldo_Horas"
+    ]]
+)
+
+
+
+
 # ============================================================
 # 📋 PVs NA FILA
 # ============================================================
@@ -4842,17 +4876,101 @@ if "CHAVE_OPERACAO" not in fila_corte_dash.columns:
 
 
 # =========================================================
-# 🔥 REMOVE DUPLICIDADES OPERACIONAIS
+# 🔥 CONSOLIDA OPERAÇÕES REAIS
 # =========================================================
+
+# 🔒 GARANTE COLUNAS NECESSÁRIAS
+for col in [
+    "CHAVE_OPERACAO",
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "PROC_UPPER",
+    "Horas",
+    "Horas_Baixadas",
+    "Saldo_Horas"
+]:
+
+    if col not in fila_corte_dash.columns:
+        fila_corte_dash[col] = ""
+
+
+# =========================================================
+# 🔥 NUMÉRICOS
+# =========================================================
+fila_corte_dash["Horas"] = pd.to_numeric(
+    fila_corte_dash["Horas"],
+    errors="coerce"
+).fillna(0)
+
+fila_corte_dash["Horas_Baixadas"] = pd.to_numeric(
+    fila_corte_dash["Horas_Baixadas"],
+    errors="coerce"
+).fillna(0)
+
+fila_corte_dash["Saldo_Horas"] = pd.to_numeric(
+    fila_corte_dash["Saldo_Horas"],
+    errors="coerce"
+).fillna(0)
+
+
+# =========================================================
+# 🔥 CONSOLIDAÇÃO REAL
+# =========================================================
+agg_dict = {
+
+    "Horas": "sum",
+    "Horas_Baixadas": "sum",
+    "Saldo_Horas": "sum"
+}
+
+# 🔥 ENTREGA
+if "ENTREGA" in fila_corte_dash.columns:
+    agg_dict["ENTREGA"] = "first"
+
+# 🔥 CLIENTE
+if "Cliente" in fila_corte_dash.columns:
+    agg_dict["Cliente"] = "first"
+
+
 fila_corte_dash = (
+
     fila_corte_dash
-    .drop_duplicates(
-        subset=["CHAVE_OPERACAO"],
-        keep="first"
+
+    .groupby(
+        [
+            "CHAVE_OPERACAO",
+            "PV",
+            "CODIGO_PV",
+            "Processo",
+            "PROC_UPPER"
+        ],
+        as_index=False
     )
+
+    .agg(agg_dict)
+
     .reset_index(drop=True)
 )
 
+
+# =========================================================
+# 🔥 RECONSTRÓI SALDO REAL
+# =========================================================
+fila_corte_dash["Saldo_Horas"] = (
+
+    fila_corte_dash["Horas"]
+    -
+    fila_corte_dash["Horas_Baixadas"]
+)
+
+fila_corte_dash["Saldo_Horas"] = (
+
+    fila_corte_dash["Saldo_Horas"]
+    .clip(lower=0)
+    .round(4)
+)
 
 # =========================================================
 # 🔥 SOMENTE CORTE
