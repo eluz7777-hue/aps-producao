@@ -84,45 +84,169 @@ def carregar_baixas_sqlite():
 
 
 # ============================================================
-# 🔥 SALVAR BAIXA NO SQLITE (PERSISTÊNCIA REAL)
+# 🔥 SALVAR BAIXA SQLITE (BLINDAGEM TOTAL)
 # ============================================================
 def salvar_baixa_sqlite(nova_baixa):
 
     try:
+
         conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        # ====================================================
+        # 🔥 NORMALIZA CHAVE
+        # ====================================================
+        chave = str(
+            nova_baixa.get(
+                "CHAVE_OPERACAO",
+                ""
+            )
+        ).strip().upper()
+
+        status = str(
+            nova_baixa.get(
+                "Status_Baixa",
+                ""
+            )
+        ).strip().upper()
+
+
+        # ====================================================
+        # 🔥 BUSCA BAIXAS ATIVAS DA OPERAÇÃO
+        # ====================================================
+        cursor.execute(
+            """
+            SELECT
+                COALESCE(SUM(Horas), 0)
+            FROM baixas
+            WHERE UPPER(TRIM(CHAVE_OPERACAO)) = ?
+            AND UPPER(TRIM(Status_Baixa))
+                IN ('ATIVA', 'TERCEIRIZADA')
+            """,
+            (chave,)
+        )
+
+        total_baixado = (
+            cursor.fetchone()[0] or 0
+        )
+
+        total_baixado = float(
+            total_baixado
+        )
+
+
+        # ====================================================
+        # 🔥 HORAS DA NOVA BAIXA
+        # ====================================================
+        horas_novas = float(
+            nova_baixa.get(
+                "Horas",
+                0
+            )
+        )
+
+
+        # ====================================================
+        # 🔥 BLOQUEIO ANTI DUPLICIDADE
+        # ====================================================
+        if total_baixado > 0:
+
+            conn.close()
+
+            return {
+                "ok": False,
+                "erro": (
+                    "Operação já possui baixa ativa registrada."
+                )
+            }
+
+
+        # ====================================================
+        # 🔥 INSERT REAL
+        # ====================================================
+        cursor.execute(
+            """
             INSERT INTO baixas (
-                PV, Cliente, CODIGO_PV, Processo, Horas,
-                Data_Baixa, Usuario, Observacao,
-                Status_Baixa, Data_Estorno, Motivo_Estorno,
+
+                PV,
+                Cliente,
+                CODIGO_PV,
+                Processo,
+                Horas,
+                Data_Baixa,
+                Usuario,
+                Observacao,
+                Status_Baixa,
+                Data_Estorno,
+                Motivo_Estorno,
                 CHAVE_OPERACAO
+
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            nova_baixa["PV"],
-            nova_baixa.get("Cliente", ""),
-            nova_baixa["CODIGO_PV"],
-            nova_baixa["Processo"],
-            float(nova_baixa["Horas"]),
-            str(nova_baixa["Data_Baixa"]),
-            nova_baixa.get("Usuario", ""),
-            nova_baixa.get("Observacao", ""),
-            nova_baixa["Status_Baixa"],
-            nova_baixa.get("Data_Estorno", ""),
-            nova_baixa.get("Motivo_Estorno", ""),
-            nova_baixa["CHAVE_OPERACAO"]
-        ))
+            """,
+
+            (
+                nova_baixa["PV"],
+
+                nova_baixa.get(
+                    "Cliente",
+                    ""
+                ),
+
+                nova_baixa["CODIGO_PV"],
+
+                nova_baixa["Processo"],
+
+                horas_novas,
+
+                str(
+                    nova_baixa["Data_Baixa"]
+                ),
+
+                nova_baixa.get(
+                    "Usuario",
+                    ""
+                ),
+
+                nova_baixa.get(
+                    "Observacao",
+                    ""
+                ),
+
+                status,
+
+                nova_baixa.get(
+                    "Data_Estorno",
+                    ""
+                ),
+
+                nova_baixa.get(
+                    "Motivo_Estorno",
+                    ""
+                ),
+
+                chave
+            )
+        )
 
         conn.commit()
         conn.close()
 
-        return {"ok": True}
+        return {
+            "ok": True
+        }
 
     except Exception as e:
-        return {"ok": False, "erro": str(e)}
 
+        try:
+            conn.close()
+        except:
+            pass
+
+        return {
+            "ok": False,
+            "erro": str(e)
+        }
 
 
 
