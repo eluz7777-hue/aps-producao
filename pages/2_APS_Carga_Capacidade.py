@@ -3618,10 +3618,10 @@ def historico_baixas_completo(df_baixas):
 # AJUSTES DOS GARGALOS CORRETOS
 # ===============================
 
-df_base_aps = df_operacional.copy()
+df_base_aps = df.copy()
 
 df_base_gargalo = df_base_aps[
-    df_base_aps["Status Operacional"] == "⏳ Pendente"
+    df_base_aps["Horas"] > 0
 ].copy()
 
 
