@@ -6858,6 +6858,19 @@ else:
     st.divider()
 
 
+
+st.markdown("## 🔎 DEBUG SQLITE DIRETO")
+
+debug_sqlite = carregar_baixas_sqlite()
+
+st.write("TOTAL SQLITE:")
+st.write(len(debug_sqlite))
+
+st.dataframe(debug_sqlite.tail(20))
+
+
+
+
 # ============================================================
 # 📜 HISTÓRICO PREMIUM DE BAIXAS OPERACIONAIS
 # ============================================================
