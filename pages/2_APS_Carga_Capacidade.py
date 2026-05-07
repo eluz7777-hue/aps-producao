@@ -4097,19 +4097,80 @@ for col in [
             columns=[col]
         )
 
+
+
 # ============================================================
-# 🔥 MERGE LIMPO
+# 🔥 MERGE LIMPO E BLINDADO
 # ============================================================
+
+# 🔒 REMOVE COLUNAS DUPLICADAS ANTIGAS
+for col in [
+    "Horas_Baixadas_x",
+    "Horas_Baixadas_y"
+]:
+
+    if col in df_base_gargalo.columns:
+
+        df_base_gargalo = df_base_gargalo.drop(
+            columns=[col],
+            errors="ignore"
+        )
+
+# ------------------------------------------------------------
+# 🔥 MERGE REAL
+# ------------------------------------------------------------
 df_base_gargalo = df_base_gargalo.merge(
     baixas_agg,
     on="CHAVE_OPERACAO",
     how="left"
 )
 
+# ------------------------------------------------------------
+# 🔒 GARANTE COLUNA CRÍTICA
+# ------------------------------------------------------------
+if "Horas_Baixadas" not in df_base_gargalo.columns:
+
+    df_base_gargalo["Horas_Baixadas"] = 0
+
+# ------------------------------------------------------------
+# 🔥 CONVERSÃO NUMÉRICA
+# ------------------------------------------------------------
 df_base_gargalo["Horas_Baixadas"] = pd.to_numeric(
     df_base_gargalo["Horas_Baixadas"],
     errors="coerce"
 ).fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 RECONSTRÓI SALDO REAL
+# ------------------------------------------------------------
+df_base_gargalo["Horas"] = pd.to_numeric(
+    df_base_gargalo["Horas"],
+    errors="coerce"
+).fillna(0)
+
+df_base_gargalo["Saldo_Horas"] = (
+    df_base_gargalo["Horas"]
+    -
+    df_base_gargalo["Horas_Baixadas"]
+)
+
+df_base_gargalo["Saldo_Horas"] = (
+    df_base_gargalo["Saldo_Horas"]
+    .clip(lower=0)
+    .round(4)
+)
+
+# ------------------------------------------------------------
+# 🔥 SOMENTE PENDENTES
+# ------------------------------------------------------------
+df_base_gargalo = df_base_gargalo[
+    df_base_gargalo["Saldo_Horas"] > 0
+].copy()
+
+df_base_gargalo = df_base_gargalo.reset_index(drop=True)
+
+
+
 
 # ============================================================
 # 🔥 SALDO REAL FINAL
@@ -4139,6 +4200,8 @@ df_base_gargalo["Saldo_Horas"] = (
 df_base_gargalo = df_base_gargalo[
     df_base_gargalo["Saldo_Horas"] > 0
 ].copy()
+
+
 
 # ============================================================
 # 🔥 CONTROLE VISUAL
