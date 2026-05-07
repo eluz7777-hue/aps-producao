@@ -7063,27 +7063,60 @@ else:
     df_hist["Data_Baixa_DT"] = pd.to_datetime(
 
         df_hist["Data_Baixa"],
-        errors="coerce"
 
+        errors="coerce"
     )
 
     df_hist["Data_Estorno_DT"] = pd.to_datetime(
 
         df_hist["Data_Estorno"],
-        errors="coerce"
 
+        errors="coerce"
+    )
+
+
+    # ========================================================
+    # 🔥 NORMALIZA DATAS DEFINITIVAMENTE
+    # ========================================================
+    df_hist["Data_Baixa_DT"] = pd.to_datetime(
+
+        df_hist["Data_Baixa_DT"],
+
+        errors="coerce"
+    )
+
+    df_hist["Data_Estorno_DT"] = pd.to_datetime(
+
+        df_hist["Data_Estorno_DT"],
+
+        errors="coerce"
     )
 
 
     # ========================================================
     # 🔥 SUBSTITUI DATAS INVÁLIDAS
     # ========================================================
+    data_minima = pd.Timestamp(
+        "2000-01-01 00:00:00"
+    )
+
     df_hist["Data_Baixa_DT"] = (
 
         df_hist["Data_Baixa_DT"]
 
-        .fillna(
-            pd.Timestamp("2000-01-01")
+        .where(
+            df_hist["Data_Baixa_DT"].notna(),
+            data_minima
+        )
+    )
+
+    df_hist["Data_Estorno_DT"] = (
+
+        df_hist["Data_Estorno_DT"]
+
+        .where(
+            df_hist["Data_Estorno_DT"].notna(),
+            data_minima
         )
     )
 
