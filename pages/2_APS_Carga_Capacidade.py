@@ -3388,11 +3388,35 @@ else:
 # ============================================================
 # 🔥 INTEGRA COM BASE OPERACIONAL
 # ============================================================
+
 df_operacional = df_operacional.merge(
     df_baixas_agg,
     on="CHAVE_OPERACAO",
     how="left"
 )
+
+
+
+
+# 🔎 DEBUG AQUI
+st.markdown("### 🔎 DEBUG BAIXAS")
+
+st.write("BAIXAS AGRUPADAS:")
+st.write(df_baixas_agg.head(10))
+
+st.write("OPERACIONAL (AMOSTRA):")
+st.write(df_operacional[[
+    "PV",
+    "Processo",
+    "CODIGO_PV",
+    "CHAVE_OPERACAO",
+    "Horas",
+    "Horas_Baixadas"
+]].head(20))
+
+
+
+
 
 df_operacional["Horas_Baixadas"] = pd.to_numeric(
     df_operacional["Horas_Baixadas"],
@@ -4044,9 +4068,9 @@ def carregar_baixas_sqlite_local():
 
 
 # ============================================================
-# 🔥 BASE REAL DAS BAIXAS (SQLITE)
+# 🔥 BASE REAL DAS BAIXAS (SQLITE - PADRÃO ÚNICO)
 # ============================================================
-df_baixas_ativas = carregar_baixas_sqlite_local()
+df_baixas_ativas = carregar_baixas_sqlite()
 
 if not df_baixas_ativas.empty:
 
@@ -4063,7 +4087,17 @@ if not df_baixas_ativas.empty:
 
 
 # ============================================================
-# 🔒 GARANTIA DA FILA (USA df — BASE REAL DO APS)
+# 🔥 BASE REAL DO APS (SOMENTE PENDENTES)
+# ============================================================
+df = df_operacional[
+    df_operacional["Saldo_Horas"] > 0
+].copy()
+
+df = df.reset_index(drop=True)
+
+
+# ============================================================
+# 🔒 MINI DASHBOARD DE GARGALOS (BASE CORRETA)
 # ============================================================
 if df is None or df.empty:
     df_mini_gargalos = pd.DataFrame()
@@ -4072,6 +4106,7 @@ else:
         fila=df,
         df_baixas_ativas=df_baixas_ativas
     )
+
 
 
 # ============================================================
