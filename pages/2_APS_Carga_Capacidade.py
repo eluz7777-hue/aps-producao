@@ -6957,6 +6957,7 @@ else:
     cols_invalidas = [
 
         c for c in df_hist.columns
+
         if c.endswith("_x")
         or c.endswith("_y")
         or c in [
@@ -7005,13 +7006,15 @@ else:
     # 🔥 NORMALIZAÇÕES GLOBAIS
     # ========================================================
     for col in [
+
         "PV",
         "Cliente",
         "CODIGO_PV",
         "Processo",
         "Usuario",
         "Observacao",
-        "Status_Baixa"
+        "Status_Baixa",
+        "CHAVE_OPERACAO"
     ]:
 
         df_hist[col] = (
@@ -7047,8 +7050,10 @@ else:
     # 🔥 HORAS NUMÉRICAS
     # ========================================================
     df_hist["Horas"] = pd.to_numeric(
+
         df_hist["Horas"],
         errors="coerce"
+
     ).fillna(0)
 
 
@@ -7056,15 +7061,31 @@ else:
     # 🔥 DATAS SEGURAS
     # ========================================================
     df_hist["Data_Baixa_DT"] = pd.to_datetime(
+
         df_hist["Data_Baixa"],
         errors="coerce"
+
     )
 
     df_hist["Data_Estorno_DT"] = pd.to_datetime(
+
         df_hist["Data_Estorno"],
         errors="coerce"
+
     )
 
+
+    # ========================================================
+    # 🔥 SUBSTITUI DATAS INVÁLIDAS
+    # ========================================================
+    df_hist["Data_Baixa_DT"] = (
+
+        df_hist["Data_Baixa_DT"]
+
+        .fillna(
+            pd.Timestamp("2000-01-01")
+        )
+    )
 
 
     # ========================================================
@@ -7074,18 +7095,24 @@ else:
 
 
     # ========================================================
-    # 🔥 ORDENAÇÃO
+    # 🔥 ORDENAÇÃO CRONOLÓGICA REAL
     # ========================================================
-    if "Data_Baixa_DT" in df_hist.columns:
+    df_hist = df_hist.sort_values(
 
-        df_hist = df_hist.sort_values(
-            by="Data_Baixa_DT",
-            ascending=False,
-            na_position="last"
-        )
+        by=[
+            "Data_Baixa_DT"
+        ],
+
+        ascending=False,
+
+        na_position="last"
+    )
 
 
-    df_hist = df_hist.reset_index(drop=True)
+    df_hist = (
+        df_hist
+        .reset_index(drop=True)
+    )
 
 
     # ========================================================
@@ -7183,6 +7210,25 @@ else:
             hist_filtrado["Cliente"]
             == filtro_cliente
         ]
+
+
+    hist_filtrado = (
+        hist_filtrado
+        .reset_index(drop=True)
+    )
+
+
+    # ========================================================
+    # 🔥 ORDENA NOVAMENTE APÓS FILTROS
+    # ========================================================
+    hist_filtrado = hist_filtrado.sort_values(
+
+        by="Data_Baixa_DT",
+
+        ascending=False,
+
+        na_position="last"
+    )
 
 
     hist_filtrado = (
@@ -7314,18 +7360,9 @@ else:
     # 🔥 HORAS FORMATADAS
     # ========================================================
     hist_filtrado["Horas"] = (
+
         hist_filtrado["Horas"]
         .round(2)
-    )
-
-
-    # ========================================================
-    # 🔥 REMOVE DUPLICIDADES VISUAIS
-    # ========================================================
-    hist_filtrado = (
-        hist_filtrado
-        .drop_duplicates()
-        .reset_index(drop=True)
     )
 
 
@@ -7349,25 +7386,35 @@ else:
 
 
     colunas_exibir = [
+
         c for c in colunas_exibir
         if c in hist_filtrado.columns
     ]
 
 
     # ========================================================
+    # 🔥 DATAFRAME FINAL
+    # ========================================================
+    tabela_final = (
+        hist_filtrado[
+            colunas_exibir
+        ]
+        .copy()
+        .reset_index(drop=True)
+    )
+
+
+    # ========================================================
     # 🔥 EXIBIÇÃO FINAL
     # ========================================================
     st.dataframe(
-        hist_filtrado[
-            colunas_exibir
-        ],
+        tabela_final,
         use_container_width=True,
         hide_index=True,
         height=500
     )
 
 st.divider()
-
 
 
 
