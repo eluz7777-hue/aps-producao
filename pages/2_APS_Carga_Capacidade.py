@@ -1566,6 +1566,14 @@ df["Horas"] = df["Horas_Restantes"]
 
 df = df.reset_index(drop=True)
 
+# ------------------------------------------------------------
+# DATAFRAMES AUXILIARES
+# ------------------------------------------------------------
+df_excluidas = pd.DataFrame(pvs_excluidas)
+df_sem_carga = pd.DataFrame(pvs_sem_carga)
+df_auditoria_pv = pd.DataFrame(auditoria_pv)
+
+
 
 
 # -------------------------------
