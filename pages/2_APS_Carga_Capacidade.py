@@ -3626,435 +3626,302 @@ df_operacional["Status Operacional"] = np.where(
 
 
 
-# ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO BLINDADA - SQLITE)
-# ============================================================
-
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
-
-# ------------------------------------------------------------
-# 🔥 FUNÇÃO DE NORMALIZAÇÃO (PADRÃO GLOBAL)
-# ------------------------------------------------------------
-def _norm(x):
-    if pd.isna(x):
-        return ""
-    x = str(x)
-    x = x.replace("\xa0", "")
-    x = x.replace(" ", "")
-    x = x.replace(".0", "")
-    return x.strip().upper()
-
-
-# ------------------------------------------------------------
-# 🔥 BASE REAL DO APS (JÁ FILTRADA PELO SALDO)
-# ------------------------------------------------------------
-base_corte = df.copy()
-
-base_corte["Processo"] = (
-    base_corte["Processo"]
-    .astype(str)
-    .str.upper()
-    .str.strip()
-)
-
-base_corte = base_corte[
-    base_corte["Processo"].str.contains("SERRA|LASER|PLASMA", na=False)
-].copy()
-
-if base_corte.empty:
-    st.info("Nenhuma operação de corte encontrada.")
-
-else:
-
-    base_corte["Horas"] = pd.to_numeric(
-        base_corte["Horas"],
-        errors="coerce"
-    ).fillna(0).round(4)
-
-    base_corte["Saldo_Horas"] = pd.to_numeric(
-        base_corte["Saldo_Horas"],
-        errors="coerce"
-    ).fillna(0).round(4)
-
-    base_corte = base_corte[
-        base_corte["Saldo_Horas"] > 0
-    ].copy()
-
-    base_corte = base_corte.reset_index(drop=True)
-
-    # ------------------------------------------------------------
-    # 🔥 LABEL REAL COM SALDO
-    # ------------------------------------------------------------
-    base_corte["LABEL"] = (
-        "PV " + base_corte["PV"].astype(str) +
-        " | " + base_corte["Processo"].astype(str) +
-        " | " + base_corte["CODIGO_PV"].astype(str) +
-        " | SALDO: " + base_corte["Saldo_Horas"].round(2).astype(str) + " h"
-    )
-
-    if base_corte.empty:
-        st.info("Nenhuma operação pendente de corte.")
-
-    else:
-
-        opcoes = base_corte["LABEL"].tolist()
-
-        # ------------------------------------------------------------
-        # CONTROLE DE RESET
-        # ------------------------------------------------------------
-        if "reset_corte_unitario" not in st.session_state:
-            st.session_state["reset_corte_unitario"] = False
-
-        if "reset_corte_lote" not in st.session_state:
-            st.session_state["reset_corte_lote"] = False
-
-        if st.session_state["reset_corte_unitario"]:
-            if opcoes:
-                st.session_state["corte_unitario"] = opcoes[0]
-            st.session_state["reset_corte_unitario"] = False
-
-        if st.session_state["reset_corte_lote"]:
-            st.session_state["corte_lote"] = []
-            st.session_state["reset_corte_lote"] = False
-
-        # ============================================================
-        # 🔹 BAIXA UNITÁRIA
-        # ============================================================
-        st.markdown("#### 🔹 Baixa Unitária")
-
-        escolha = st.selectbox(
-            "Operação",
-            opcoes,
-            key="corte_unitario"
-        )
-
-        linha_sel = base_corte[
-            base_corte["LABEL"] == escolha
-        ]
-
-        if not linha_sel.empty:
-
-            linha = linha_sel.iloc[0]
-
-            saldo_real = float(linha["Saldo_Horas"])
-
-            if st.button("💾 Confirmar Baixa", key="btn_corte_unitario"):
-
-                # 🔒 BLOQUEIO TOTAL
-                if saldo_real <= 0:
-                    st.warning("⚠️ Operação já baixada")
-                    st.stop()
-
-                chave = (
-                    _norm(linha["PV"]) + "||" +
-                    _norm(linha["Processo"]) + "||" +
-                    _norm(linha["CODIGO_PV"])
-                )
-
-                nova_baixa = {
-                    "PV": _norm(linha["PV"]),
-                    "Cliente": linha.get("Cliente", ""),
-                    "CODIGO_PV": _norm(linha["CODIGO_PV"]),
-                    "Processo": _norm(linha["Processo"]),
-                    "Horas": saldo_real,
-                    "Data_Baixa": datetime.now(
-                        ZoneInfo("America/Sao_Paulo")
-                    ).strftime("%Y-%m-%d %H:%M:%S"),
-                    "Usuario": "Sistema",
-                    "Observacao": "UNITARIO_CORTE",
-                    "Status_Baixa": "ATIVA",
-                    "Data_Estorno": "",
-                    "Motivo_Estorno": "",
-                    "CHAVE_OPERACAO": chave
-                }
-
-                resultado = salvar_baixa_sqlite(nova_baixa)
-
-                if resultado.get("ok"):
-
-                    st.session_state["reset_corte_unitario"] = True
-
-                    st.success(
-                        f"✅ Baixa registrada ({saldo_real:.2f}h)"
-                    )
-
-                    st.rerun()
-
-                else:
-                    st.error(
-                        resultado.get(
-                            "erro",
-                            "Erro ao registrar baixa"
-                        )
-                    )
-
-        st.divider()
-
-        # ============================================================
-        # 📦 BAIXA EM LOTE (BLINDADA)
-        # ============================================================
-        st.markdown("#### 📦 Baixa em Lote")
-
-        selecao = st.multiselect(
-            "Selecionar operações",
-            opcoes,
-            key="corte_lote"
-        )
-
-        if selecao:
-
-            if st.button(
-                "📦 Baixar Corte em Lote",
-                key="btn_corte_lote"
-            ):
-
-                sucessos = []
-                erros = []
-
-                for label in selecao:
-
-                    linha = base_corte[
-                        base_corte["LABEL"] == label
-                    ].iloc[0]
-
-                    saldo_real = float(linha["Saldo_Horas"])
-
-                    # 🔒 NÃO BAIXA ZERADOS
-                    if saldo_real <= 0:
-                        erros.append(label)
-                        continue
-
-                    chave = (
-                        _norm(linha["PV"]) + "||" +
-                        _norm(linha["Processo"]) + "||" +
-                        _norm(linha["CODIGO_PV"])
-                    )
-
-                    nova_baixa = {
-                        "PV": _norm(linha["PV"]),
-                        "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": _norm(linha["CODIGO_PV"]),
-                        "Processo": _norm(linha["Processo"]),
-                        "Horas": saldo_real,
-                        "Data_Baixa": datetime.now(
-                            ZoneInfo("America/Sao_Paulo")
-                        ).strftime("%Y-%m-%d %H:%M:%S"),
-                        "Usuario": "Sistema",
-                        "Observacao": "LOTE_CORTE",
-                        "Status_Baixa": "ATIVA",
-                        "Data_Estorno": "",
-                        "Motivo_Estorno": "",
-                        "CHAVE_OPERACAO": chave
-                    }
-
-                    resultado = salvar_baixa_sqlite(nova_baixa)
-
-                    if resultado.get("ok"):
-                        sucessos.append(nova_baixa)
-                    else:
-                        erros.append(label)
-
-                if sucessos:
-
-                    st.session_state["reset_corte_lote"] = True
-
-                    st.success(
-                        f"{len(sucessos)} operações baixadas"
-                    )
-
-                if erros:
-                    st.warning(
-                        f"{len(erros)} não foram baixadas"
-                    )
-
-                st.rerun()
-
-
-
-
 # =========================================================
-# 🔥 FUNÇÃO LOCAL - CARREGAR BAIXAS SQLITE (GARANTIA TOTAL)
-# =========================================================
-def carregar_baixas_sqlite_local():
-    try:
-        conn = get_connection()
-        df = pd.read_sql_query("SELECT * FROM baixas", conn)
-        conn.close()
-
-        if df is None or df.empty:
-            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-        return _padronizar_df_baixas(df)
-
-    except Exception as e:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-
-# =========================================================
-# 🔥 BASE REAL DO DASHBOARD DE CORTE (CORRIGIDA - SQLITE)
+# 🔥 BASE REAL DO DASHBOARD DE CORTE (BLINDADO SQLITE)
 # =========================================================
 st.markdown("## 📊 Dashboard do Corte")
 st.caption("Indicadores operacionais e gerenciais do setor de corte.")
 
-# 🔹 BASE OPERACIONAL
+# ---------------------------------------------------------
+# 🔥 BASE OPERACIONAL REAL
+# ---------------------------------------------------------
 fila_corte_dash = df_operacional.copy()
 
-fila_corte_dash["PROC_UPPER"] = fila_corte_dash["Processo"].astype(str).str.strip().str.upper()
+# 🔒 GARANTE COLUNAS
+for col in [
+    "Horas",
+    "Horas_Baixadas",
+    "Saldo_Horas",
+    "Processo",
+    "PV",
+    "CODIGO_PV"
+]:
+    if col not in fila_corte_dash.columns:
+        fila_corte_dash[col] = 0
 
-fila_corte_dash = fila_corte_dash[
-    fila_corte_dash["PROC_UPPER"].str.contains("SERRA|LASER|PLASMA", na=False)
-].copy()
-
+# 🔥 NUMÉRICOS
 fila_corte_dash["Horas"] = pd.to_numeric(
-    fila_corte_dash["Horas"], errors="coerce"
+    fila_corte_dash["Horas"],
+    errors="coerce"
 ).fillna(0)
 
+fila_corte_dash["Horas_Baixadas"] = pd.to_numeric(
+    fila_corte_dash["Horas_Baixadas"],
+    errors="coerce"
+).fillna(0)
+
+fila_corte_dash["Saldo_Horas"] = pd.to_numeric(
+    fila_corte_dash["Saldo_Horas"],
+    errors="coerce"
+).fillna(0)
+
+# ---------------------------------------------------------
+# 🔥 NORMALIZA PROCESSO
+# ---------------------------------------------------------
+fila_corte_dash["PROC_UPPER"] = (
+    fila_corte_dash["Processo"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
+
+# ---------------------------------------------------------
+# 🔥 SOMENTE CORTE
+# ---------------------------------------------------------
+fila_corte_dash = fila_corte_dash[
+    fila_corte_dash["PROC_UPPER"].str.contains(
+        "SERRA|LASER|PLASMA",
+        na=False
+    )
+].copy()
+
+# ---------------------------------------------------------
+# 🔥 SOMENTE PENDENTES
+# ---------------------------------------------------------
+fila_corte_dash = fila_corte_dash[
+    fila_corte_dash["Saldo_Horas"] > 0
+].copy()
+
+# ---------------------------------------------------------
 # 🔥 CHAVE PADRONIZADA
+# ---------------------------------------------------------
 fila_corte_dash["CHAVE_OPERACAO"] = (
-    fila_corte_dash["PV"].astype(str).str.strip().str.upper() + "||" +
-    fila_corte_dash["Processo"].astype(str).str.strip().str.upper() + "||" +
-    fila_corte_dash["CODIGO_PV"].astype(str).str.strip().str.upper()
+
+    fila_corte_dash["PV"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+
+    + "||" +
+
+    fila_corte_dash["Processo"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+
+    + "||" +
+
+    fila_corte_dash["CODIGO_PV"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
 )
 
 # =========================================================
-# 🔥 HISTÓRICO REAL (SQLITE)
+# 🔥 HISTÓRICO SQLITE
 # =========================================================
-df_baixas = carregar_baixas_sqlite_local()
+df_baixas = carregar_baixas_sqlite()
 
 hist_corte_dash = df_baixas.copy()
 
 if not hist_corte_dash.empty:
 
-    hist_corte_dash["PROC_UPPER"] = hist_corte_dash["Processo"].astype(str).str.strip().str.upper()
-    hist_corte_dash["STATUS_UPPER"] = hist_corte_dash["Status_Baixa"].astype(str).str.strip().str.upper()
+    hist_corte_dash["PROC_UPPER"] = (
+        hist_corte_dash["Processo"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    hist_corte_dash["STATUS_UPPER"] = (
+        hist_corte_dash["Status_Baixa"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
     hist_corte_dash = hist_corte_dash[
-        hist_corte_dash["PROC_UPPER"].str.contains("SERRA|LASER|PLASMA", na=False)
+        hist_corte_dash["PROC_UPPER"].str.contains(
+            "SERRA|LASER|PLASMA",
+            na=False
+        )
     ].copy()
 
     hist_corte_dash["Horas"] = pd.to_numeric(
-        hist_corte_dash["Horas"], errors="coerce"
+        hist_corte_dash["Horas"],
+        errors="coerce"
     ).fillna(0)
-
-    # 🔥 CHAVE PADRONIZADA
-    hist_corte_dash["CHAVE_OPERACAO"] = (
-        hist_corte_dash["PV"].astype(str).str.strip().str.upper() + "||" +
-        hist_corte_dash["Processo"].astype(str).str.strip().str.upper() + "||" +
-        hist_corte_dash["CODIGO_PV"].astype(str).str.strip().str.upper()
-    )
-
-    # 🔥 BAIXAS VÁLIDAS
-    baixas_validas = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
-    ]
-
-    chaves_baixadas = set(baixas_validas["CHAVE_OPERACAO"])
-
-    # 🔥 REMOVE DA FILA
-    fila_corte_dash = fila_corte_dash[
-        ~fila_corte_dash["CHAVE_OPERACAO"].isin(chaves_baixadas)
-    ].copy()
 
 # =========================================================
 # 📊 KPIs
 # =========================================================
 ops_fila_corte = len(fila_corte_dash)
-horas_fila_corte = fila_corte_dash["Horas"].sum()
+
+horas_fila_corte = (
+    fila_corte_dash["Saldo_Horas"]
+    .sum()
+)
 
 if not hist_corte_dash.empty:
 
     baixas_ativas_corte = hist_corte_dash[
-        hist_corte_dash["STATUS_UPPER"].isin(["ATIVA", "TERCEIRIZADA"])
+        hist_corte_dash["STATUS_UPPER"].isin([
+            "ATIVA",
+            "TERCEIRIZADA"
+        ])
     ]
 
     baixas_estornadas_corte = hist_corte_dash[
         hist_corte_dash["STATUS_UPPER"] == "ESTORNADA"
     ]
 
-    qtd_baixadas_corte = len(baixas_ativas_corte)
-    horas_baixadas_corte = baixas_ativas_corte["Horas"].sum()
-    qtd_estornadas_corte = len(baixas_estornadas_corte)
+    qtd_baixadas_corte = len(
+        baixas_ativas_corte
+    )
+
+    horas_baixadas_corte = (
+        baixas_ativas_corte["Horas"]
+        .sum()
+    )
+
+    qtd_estornadas_corte = len(
+        baixas_estornadas_corte
+    )
 
 else:
+
     qtd_baixadas_corte = 0
     horas_baixadas_corte = 0
     qtd_estornadas_corte = 0
 
 # =========================================================
-# 📊 RENDER KPIs
+# 📊 KPIs VISUAIS
 # =========================================================
 col_dc1, col_dc2, col_dc3, col_dc4, col_dc5 = st.columns(5)
 
-col_dc1.metric("📋 Ops na Fila", f"{ops_fila_corte:,.0f}")
-col_dc2.metric("⏱️ Horas na Fila", f"{horas_fila_corte:,.1f} h")
-col_dc3.metric("✅ Baixas Ativas", f"{qtd_baixadas_corte:,.0f}")
-col_dc4.metric("🏁 Horas Baixadas", f"{horas_baixadas_corte:,.1f} h")
-col_dc5.metric("🔄 Estornos", f"{qtd_estornadas_corte:,.0f}")
+col_dc1.metric(
+    "📋 Ops na Fila",
+    f"{ops_fila_corte:,.0f}"
+)
 
-# ------------------------------------------------------------
-# 🧾 FILA ATUAL DE CORTE
-# ------------------------------------------------------------
+col_dc2.metric(
+    "⏱️ Horas na Fila",
+    f"{horas_fila_corte:,.1f} h"
+)
+
+col_dc3.metric(
+    "✅ Baixas Ativas",
+    f"{qtd_baixadas_corte:,.0f}"
+)
+
+col_dc4.metric(
+    "🏁 Horas Baixadas",
+    f"{horas_baixadas_corte:,.1f} h"
+)
+
+col_dc5.metric(
+    "🔄 Estornos",
+    f"{qtd_estornadas_corte:,.0f}"
+)
+
+# =========================================================
+# 🧾 FILA REAL DE CORTE
+# =========================================================
 st.markdown("### 🧾 Fila Atual de Corte")
 
 if not fila_corte_dash.empty:
 
     fila_corte_exib = fila_corte_dash.copy()
 
+    fila_corte_exib["Saldo_Horas"] = (
+        pd.to_numeric(
+            fila_corte_exib["Saldo_Horas"],
+            errors="coerce"
+        )
+        .fillna(0)
+        .round(1)
+    )
+
     if "ENTREGA" in fila_corte_exib.columns:
+
         fila_corte_exib["ENTREGA_DT"] = pd.to_datetime(
-            fila_corte_exib["ENTREGA"], errors="coerce"
+            fila_corte_exib["ENTREGA"],
+            errors="coerce"
         )
 
-    fila_corte_exib["Horas"] = pd.to_numeric(
-        fila_corte_exib["Horas"], errors="coerce"
-    ).fillna(0).round(1)
-
-    if "ENTREGA_DT" in fila_corte_exib.columns:
         hoje = pd.Timestamp.today().normalize()
+
         fila_corte_exib["Dias para Entrega"] = (
             fila_corte_exib["ENTREGA_DT"] - hoje
         ).dt.days
 
     def classificar(dias):
+
         if pd.isna(dias):
             return "⚪"
+
         if dias < 0:
             return "🔴"
+
         elif dias <= 2:
             return "🟡"
+
         else:
             return "🟢"
 
     if "Dias para Entrega" in fila_corte_exib.columns:
-        fila_corte_exib["Status"] = fila_corte_exib["Dias para Entrega"].apply(classificar)
+
+        fila_corte_exib["Status"] = (
+            fila_corte_exib["Dias para Entrega"]
+            .apply(classificar)
+        )
 
     colunas_corte_fila = [
+
         "Status",
         "PV",
         "Cliente",
         "CODIGO_PV",
         "Processo",
-        "Horas",
+        "Saldo_Horas",
         "Dias para Entrega",
         "ENTREGA",
         "ENTREGA_DT"
     ]
 
-    colunas_corte_fila = [c for c in colunas_corte_fila if c in fila_corte_exib.columns]
+    colunas_corte_fila = [
+        c for c in colunas_corte_fila
+        if c in fila_corte_exib.columns
+    ]
 
-    df_exib = fila_corte_exib[colunas_corte_fila].copy()
+    df_exib = fila_corte_exib[
+        colunas_corte_fila
+    ].copy()
+
+    df_exib = df_exib.rename(columns={
+        "Saldo_Horas": "Horas Pendentes"
+    })
 
     if "ENTREGA_DT" in df_exib.columns:
-        df_exib = df_exib.sort_values(["ENTREGA_DT"], ascending=[True])
+
+        df_exib = df_exib.sort_values(
+            ["ENTREGA_DT"],
+            ascending=[True]
+        )
 
     df_exib = df_exib.reset_index(drop=True)
 
     if "ENTREGA_DT" in df_exib.columns:
-        df_exib["ENTREGA"] = df_exib["ENTREGA_DT"].dt.strftime("%d/%m/%Y")
-        df_exib = df_exib.drop(columns=["ENTREGA_DT"], errors="ignore")
+
+        df_exib["ENTREGA"] = (
+            df_exib["ENTREGA_DT"]
+            .dt.strftime("%d/%m/%Y")
+        )
+
+        df_exib = df_exib.drop(
+            columns=["ENTREGA_DT"],
+            errors="ignore"
+        )
 
     st.dataframe(
         df_exib,
@@ -4064,92 +3931,282 @@ if not fila_corte_dash.empty:
     )
 
 else:
-    st.success("Nenhuma operação de corte pendente no momento. 🎯")
+
+    st.success(
+        "Nenhuma operação de corte pendente no momento. 🎯"
+    )
 
 st.divider()
 
 
 
-
-
-
-
 # ============================================================
-# =========== CONTROLE DOS GARGALOS (BLINDADO SQLITE) =========
+# =========== CONTROLE DOS GARGALOS (BLINDADO SQLITE REAL) ====
 # ============================================================
 
-# 🔒 GARANTE COLUNA CRÍTICA
+# 🔒 GARANTE COLUNAS CRÍTICAS
 if "Status Operacional" not in df_operacional.columns:
     df_operacional["Status Operacional"] = "⏳ Pendente"
 
+if "Horas" not in df_operacional.columns:
+    df_operacional["Horas"] = 0
+
+if "Horas_Baixadas" not in df_operacional.columns:
+    df_operacional["Horas_Baixadas"] = 0
+
+if "Saldo_Horas" not in df_operacional.columns:
+
+    df_operacional["Saldo_Horas"] = (
+        pd.to_numeric(
+            df_operacional["Horas"],
+            errors="coerce"
+        ).fillna(0)
+        -
+        pd.to_numeric(
+            df_operacional["Horas_Baixadas"],
+            errors="coerce"
+        ).fillna(0)
+    )
 
 # ============================================================
 # 🔥 NORMALIZAÇÃO GLOBAL
 # ============================================================
 def _norm(x):
+
     if pd.isna(x):
         return ""
+
     x = str(x)
-    x = x.replace("\xa0", "")
-    x = x.replace(" ", "")
-    x = x.replace(".0", "")
+
+    x = (
+        x.replace("\xa0", "")
+        .replace(" ", "")
+        .replace(".0", "")
+    )
+
     return x.strip().upper()
 
+# ============================================================
+# 🔥 BASE REAL DO APS
+# ============================================================
+df_base_aps = df_operacional.copy()
 
-# ============================================================
-# 🔥 BASE REAL DO APS (SOMENTE PENDENTES)
-# ============================================================
-df_base_aps = df_operacional[
-    df_operacional["Saldo_Horas"] > 0
+df_base_aps["Saldo_Horas"] = pd.to_numeric(
+    df_base_aps["Saldo_Horas"],
+    errors="coerce"
+).fillna(0)
+
+# 🔥 SOMENTE PENDENTES
+df_base_aps = df_base_aps[
+    df_base_aps["Saldo_Horas"] > 0
 ].copy()
 
 df_base_gargalo = df_base_aps.copy()
 
-for col in ["PV", "Processo", "CODIGO_PV", "Horas", "Saldo_Horas"]:
+# ============================================================
+# 🔥 GARANTE CHAVE ÚNICA
+# ============================================================
+df_base_gargalo["CHAVE_OPERACAO"] = (
+
+    df_base_gargalo["PV"].apply(_norm)
+    + "||" +
+
+    df_base_gargalo["Processo"].apply(_norm)
+    + "||" +
+
+    df_base_gargalo["CODIGO_PV"].apply(_norm)
+)
+
+# ============================================================
+# 🔥 PROTEÇÃO COLUNAS
+# ============================================================
+for col in [
+    "PV",
+    "Processo",
+    "CODIGO_PV",
+    "Horas",
+    "Saldo_Horas"
+]:
+
     if col not in df_base_gargalo.columns:
         df_base_gargalo[col] = ""
 
+# ============================================================
+# 🔥 HISTÓRICO SQLITE REAL
+# ============================================================
+df_baixas_sql = carregar_baixas_sqlite()
 
-with st.expander("🎯 Controle dos Gargalos", expanded=True):
+if not df_baixas_sql.empty:
 
-    st.subheader("🏭 Operações mais carregadas do APS")
+    df_baixas_sql["Status_Baixa"] = (
+        df_baixas_sql["Status_Baixa"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-    # =========================================================
+    df_baixas_sql = df_baixas_sql[
+        df_baixas_sql["Status_Baixa"].isin([
+            "ATIVA",
+            "TERCEIRIZADA"
+        ])
+    ].copy()
+
+    df_baixas_sql["Horas"] = pd.to_numeric(
+        df_baixas_sql["Horas"],
+        errors="coerce"
+    ).fillna(0)
+
+else:
+
+    df_baixas_sql = pd.DataFrame()
+
+# ============================================================
+# 🔥 AGREGAÇÃO REAL
+# ============================================================
+if not df_baixas_sql.empty:
+
+    baixas_agg = (
+        df_baixas_sql.groupby(
+            "CHAVE_OPERACAO",
+            as_index=False
+        )
+        .agg(
+            Horas_Baixadas=("Horas", "sum")
+        )
+    )
+
+else:
+
+    baixas_agg = pd.DataFrame(
+        columns=[
+            "CHAVE_OPERACAO",
+            "Horas_Baixadas"
+        ]
+    )
+
+# ============================================================
+# 🔥 REMOVE COLUNAS ANTIGAS
+# ============================================================
+for col in [
+    "Horas_Baixadas_y",
+    "Horas_Baixadas_x"
+]:
+    if col in df_base_gargalo.columns:
+        df_base_gargalo = df_base_gargalo.drop(
+            columns=[col]
+        )
+
+# ============================================================
+# 🔥 MERGE LIMPO
+# ============================================================
+df_base_gargalo = df_base_gargalo.merge(
+    baixas_agg,
+    on="CHAVE_OPERACAO",
+    how="left"
+)
+
+df_base_gargalo["Horas_Baixadas"] = pd.to_numeric(
+    df_base_gargalo["Horas_Baixadas"],
+    errors="coerce"
+).fillna(0)
+
+# ============================================================
+# 🔥 SALDO REAL FINAL
+# ============================================================
+df_base_gargalo["Saldo_Horas"] = (
+
+    pd.to_numeric(
+        df_base_gargalo["Horas"],
+        errors="coerce"
+    ).fillna(0)
+
+    -
+
+    pd.to_numeric(
+        df_base_gargalo["Horas_Baixadas"],
+        errors="coerce"
+    ).fillna(0)
+)
+
+df_base_gargalo["Saldo_Horas"] = (
+    df_base_gargalo["Saldo_Horas"]
+    .clip(lower=0)
+    .round(4)
+)
+
+# 🔥 SOMENTE PENDENTES
+df_base_gargalo = df_base_gargalo[
+    df_base_gargalo["Saldo_Horas"] > 0
+].copy()
+
+# ============================================================
+# 🔥 CONTROLE VISUAL
+# ============================================================
+with st.expander(
+    "🎯 Controle dos Gargalos",
+    expanded=True
+):
+
+    st.subheader(
+        "🏭 Operações mais carregadas do APS"
+    )
+
+    # ========================================================
     # 🔥 TOP 5 GARGALOS
-    # =========================================================
+    # ========================================================
     gargalos_top = (
-        df_base_gargalo.groupby("Processo", as_index=False)
+
+        df_base_gargalo.groupby(
+            "Processo",
+            as_index=False
+        )
+
         .agg(
             Horas_Pendentes=("Saldo_Horas", "sum"),
             PVs_Pendentes=("PV", "nunique")
         )
+
         .merge(
             dem_proc[
-                ["Processo", "Capacidade Processo", "Utilização (%)"]
+                [
+                    "Processo",
+                    "Capacidade Processo",
+                    "Utilização (%)"
+                ]
             ],
             on="Processo",
             how="left"
         )
     )
 
-    gargalos_top["Capacidade Processo"] = pd.to_numeric(
-        gargalos_top["Capacidade Processo"],
-        errors="coerce"
-    ).fillna(0)
+    gargalos_top["Capacidade Processo"] = (
+        pd.to_numeric(
+            gargalos_top["Capacidade Processo"],
+            errors="coerce"
+        ).fillna(0)
+    )
 
-    gargalos_top["Horas_Pendentes"] = pd.to_numeric(
-        gargalos_top["Horas_Pendentes"],
-        errors="coerce"
-    ).fillna(0)
+    gargalos_top["Horas_Pendentes"] = (
+        pd.to_numeric(
+            gargalos_top["Horas_Pendentes"],
+            errors="coerce"
+        ).fillna(0)
+    )
 
     gargalos_top["Carga_Relativa"] = np.where(
+
         gargalos_top["Capacidade Processo"] > 0,
-        gargalos_top["Horas_Pendentes"] /
+
+        gargalos_top["Horas_Pendentes"]
+        /
         gargalos_top["Capacidade Processo"],
+
         0
     )
 
     gargalos_top = (
+
         gargalos_top
         .sort_values(
             ["Carga_Relativa", "Horas_Pendentes"],
@@ -4161,11 +4218,15 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
 
     if gargalos_top.empty:
 
-        st.info("Nenhum gargalo pendente encontrado.")
+        st.info(
+            "Nenhum gargalo pendente encontrado."
+        )
 
     else:
 
-        gargalos_top["Ranking"] = gargalos_top.index + 1
+        gargalos_top["Ranking"] = (
+            gargalos_top.index + 1
+        )
 
         st.dataframe(
             gargalos_top[
@@ -4182,492 +4243,327 @@ with st.expander("🎯 Controle dos Gargalos", expanded=True):
 
         st.divider()
 
-        # =====================================================
-        # 🔥 FILA REAL DOS GARGALOS
-        # =====================================================
-        processos_top = gargalos_top[
-            "Processo"
-        ].astype(str).tolist()
 
-        base_gargalos = df_base_gargalo[
-            df_base_gargalo["Processo"].isin(processos_top)
-        ].copy()
 
-        base_gargalos["CHAVE_OPERACAO"] = (
-            base_gargalos["PV"].apply(_norm) + "||" +
-            base_gargalos["Processo"].apply(_norm) + "||" +
-            base_gargalos["CODIGO_PV"].apply(_norm)
+# ============================================================
+# 📜 HISTÓRICO PREMIUM DE BAIXAS OPERACIONAIS
+# ============================================================
+
+st.markdown("## 🧾 Histórico Premium de Baixas Operacionais")
+
+st.caption(
+    "Rastreabilidade completa das baixas operacionais, terceirizações e estornos."
+)
+
+# ============================================================
+# 🔥 BASE SQLITE REAL
+# ============================================================
+df_hist = carregar_baixas_sqlite()
+
+# ============================================================
+# 🔒 PROTEÇÃO TOTAL
+# ============================================================
+if df_hist is None:
+    df_hist = pd.DataFrame()
+
+if df_hist.empty:
+
+    st.info("Nenhuma baixa registrada.")
+
+else:
+
+    # --------------------------------------------------------
+    # 🔥 REMOVE COLUNAS DUPLICADAS
+    # --------------------------------------------------------
+    cols_invalidas = [
+        c for c in df_hist.columns
+        if c.endswith("_x") or c.endswith("_y")
+    ]
+
+    if cols_invalidas:
+
+        df_hist = df_hist.drop(
+            columns=cols_invalidas,
+            errors="ignore"
         )
 
-        fila = base_gargalos[
-            base_gargalos["Saldo_Horas"] > 0
-        ].copy()
-
-        fila = fila.reset_index(drop=True)
-
-        st.markdown(
-            "### ✅ Dar Baixa em Operação Concluída"
-        )
-
-        if fila.empty:
-
-            st.info("Nenhuma operação disponível.")
-
-        else:
-
-            # =================================================
-            # RESET
-            # =================================================
-            if "reset_gargalo_unitario" not in st.session_state:
-                st.session_state["reset_gargalo_unitario"] = False
-
-            if "reset_gargalo_lote" not in st.session_state:
-                st.session_state["reset_gargalo_lote"] = False
-
-            fila["ROTULO"] = (
-                "PV " + fila["PV"].astype(str) +
-                " | " + fila["Processo"].astype(str) +
-                " | " + fila["CODIGO_PV"].astype(str) +
-                " | SALDO: " +
-                fila["Saldo_Horas"].round(2).astype(str) + " h"
-            )
-
-            opcoes = fila["ROTULO"].tolist()
-
-            if st.session_state["reset_gargalo_unitario"]:
-
-                if opcoes:
-                    st.session_state[
-                        "selectbox_baixa_gargalo"
-                    ] = opcoes[0]
-
-                st.session_state[
-                    "reset_gargalo_unitario"
-                ] = False
-
-            if st.session_state["reset_gargalo_lote"]:
-
-                st.session_state["multi_gargalo"] = []
-
-                st.session_state[
-                    "reset_gargalo_lote"
-                ] = False
-
-            # =================================================
-            # UNITÁRIO
-            # =================================================
-            col1, col2 = st.columns(2)
-
-            escolha = col1.selectbox(
-                "Operação",
-                opcoes,
-                key="selectbox_baixa_gargalo"
-            )
-
-            obs = col2.text_input("Observação")
-
-            linha_sel = fila[
-                fila["ROTULO"] == escolha
-            ]
-
-            if not linha_sel.empty:
-
-                linha = linha_sel.iloc[0]
-
-                saldo_real = float(linha["Saldo_Horas"])
-
-                col_btn1, col_btn2 = st.columns(2)
-
-                # =============================================
-                # BAIXA
-                # =============================================
-                if col_btn1.button("💾 Baixar"):
-
-                    if saldo_real <= 0:
-                        st.warning(
-                            "⚠️ Operação já totalmente baixada"
-                        )
-                        st.stop()
-
-                    nova_baixa = {
-                        "PV": _norm(linha["PV"]),
-                        "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": _norm(linha["CODIGO_PV"]),
-                        "Processo": _norm(linha["Processo"]),
-                        "Horas": saldo_real,
-                        "Data_Baixa": datetime.now().strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                        "Usuario": "Sistema",
-                        "Observacao": obs,
-                        "Status_Baixa": "ATIVA",
-                        "Data_Estorno": "",
-                        "Motivo_Estorno": "",
-                        "CHAVE_OPERACAO": linha["CHAVE_OPERACAO"]
-                    }
-
-                    resultado = salvar_baixa_sqlite(
-                        nova_baixa
-                    )
-
-                    if resultado["ok"]:
-
-                        st.session_state[
-                            "reset_gargalo_unitario"
-                        ] = True
-
-                        st.success(
-                            f"Baixa registrada ({saldo_real:.2f}h)"
-                        )
-
-                        st.rerun()
-
-                    else:
-                        st.error(resultado["erro"])
-
-                # =============================================
-                # TERCEIRIZAÇÃO
-                # =============================================
-                if col_btn2.button("🟣 Terceirizar"):
-
-                    if saldo_real <= 0:
-                        st.warning(
-                            "⚠️ Operação já totalmente baixada"
-                        )
-                        st.stop()
-
-                    nova_baixa = {
-                        "PV": _norm(linha["PV"]),
-                        "Cliente": linha.get("Cliente", ""),
-                        "CODIGO_PV": _norm(linha["CODIGO_PV"]),
-                        "Processo": _norm(linha["Processo"]),
-                        "Horas": saldo_real,
-                        "Data_Baixa": datetime.now().strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                        "Usuario": "Sistema",
-                        "Observacao": obs,
-                        "Status_Baixa": "TERCEIRIZADA",
-                        "Data_Estorno": "",
-                        "Motivo_Estorno": "",
-                        "CHAVE_OPERACAO": linha["CHAVE_OPERACAO"]
-                    }
-
-                    resultado = salvar_baixa_sqlite(
-                        nova_baixa
-                    )
-
-                    if resultado["ok"]:
-
-                        st.session_state[
-                            "reset_gargalo_unitario"
-                        ] = True
-
-                        st.success(
-                            "Operação terceirizada"
-                        )
-
-                        st.rerun()
-
-                    else:
-                        st.error(resultado["erro"])
-
-            st.divider()
-
-            # =================================================
-            # 📦 LOTE BLINDADO
-            # =================================================
-            st.markdown("#### 📦 Baixa em Lote")
-
-            selecao = st.multiselect(
-                "Selecionar operações",
-                opcoes,
-                key="multi_gargalo"
-            )
-
-            if selecao:
-
-                if st.button("📦 Baixar Lote"):
-
-                    sucessos = 0
-                    erros = 0
-
-                    for label in selecao:
-
-                        linha = fila[
-                            fila["ROTULO"] == label
-                        ].iloc[0]
-
-                        saldo_real = float(
-                            linha["Saldo_Horas"]
-                        )
-
-                        if saldo_real <= 0:
-                            erros += 1
-                            continue
-
-                        nova_baixa = {
-                            "PV": _norm(linha["PV"]),
-                            "Cliente": linha.get("Cliente", ""),
-                            "CODIGO_PV": _norm(
-                                linha["CODIGO_PV"]
-                            ),
-                            "Processo": _norm(
-                                linha["Processo"]
-                            ),
-                            "Horas": saldo_real,
-                            "Data_Baixa": datetime.now().strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            ),
-                            "Usuario": "Sistema",
-                            "Observacao": "",
-                            "Status_Baixa": "ATIVA",
-                            "Data_Estorno": "",
-                            "Motivo_Estorno": "",
-                            "CHAVE_OPERACAO": linha[
-                                "CHAVE_OPERACAO"
-                            ]
-                        }
-
-                        resultado = salvar_baixa_sqlite(
-                            nova_baixa
-                        )
-
-                        if resultado["ok"]:
-                            sucessos += 1
-                        else:
-                            erros += 1
-
-                    if sucessos:
-
-                        st.session_state[
-                            "reset_gargalo_lote"
-                        ] = True
-
-                        st.success(
-                            f"{sucessos} operações baixadas"
-                        )
-
-                    if erros:
-                        st.warning(
-                            f"{erros} operações falharam"
-                        )
-
-                    st.rerun()
-
-        st.divider()
-
-
-
-
-# ============================================================
-# MINI DASHBOARD POR GARGALO (SQLITE REAL)
-# ============================================================
-
-st.markdown("## 🔥 Mini Dashboard por Gargalo")
-
-# ============================================================
-# 🔥 FUNÇÃO LOCAL SQLITE (GARANTIA TOTAL)
-# ============================================================
-def carregar_baixas_sqlite_local():
-    try:
-        conn = get_connection()
-        df_sql = pd.read_sql_query("SELECT * FROM baixas", conn)
-        conn.close()
-
-        if df_sql is None or df_sql.empty:
-            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-        return _padronizar_df_baixas(df_sql)
-
-    except Exception:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-
-# ============================================================
-# 🔥 BASE REAL DAS BAIXAS (SQLITE - PADRÃO ÚNICO)
-# ============================================================
-df_baixas_ativas = carregar_baixas_sqlite()
-
-if not df_baixas_ativas.empty:
-
-    df_baixas_ativas["Status_Baixa"] = (
-        df_baixas_ativas["Status_Baixa"]
+    # --------------------------------------------------------
+    # 🔥 GARANTE COLUNAS
+    # --------------------------------------------------------
+    colunas_necessarias = [
+
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Data_Baixa",
+        "Usuario",
+        "Observacao",
+        "Status_Baixa",
+        "Data_Estorno",
+        "Motivo_Estorno",
+        "CHAVE_OPERACAO"
+    ]
+
+    for col in colunas_necessarias:
+
+        if col not in df_hist.columns:
+            df_hist[col] = ""
+
+    # --------------------------------------------------------
+    # 🔥 NORMALIZA STATUS
+    # --------------------------------------------------------
+    df_hist["Status_Baixa"] = (
+
+        df_hist["Status_Baixa"]
         .astype(str)
         .str.strip()
         .str.upper()
     )
 
-    df_baixas_ativas = df_baixas_ativas[
-        df_baixas_ativas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
-    ].copy()
+    # --------------------------------------------------------
+    # 🔥 NORMALIZA PROCESSO
+    # --------------------------------------------------------
+    df_hist["Processo"] = (
 
-
-# ============================================================
-# 🔥 BASE REAL DO APS (SOMENTE PENDENTES)
-# ============================================================
-df = df_operacional[
-    df_operacional["Saldo_Horas"] > 0
-].copy()
-
-df = df.reset_index(drop=True)
-
-
-# ============================================================
-# 🔒 MINI DASHBOARD DE GARGALOS (BASE CORRETA)
-# ============================================================
-if df is None or df.empty:
-    df_mini_gargalos = pd.DataFrame()
-else:
-    df_mini_gargalos = montar_mini_dashboard_gargalos(
-        fila=df,
-        df_baixas_ativas=df_baixas_ativas
+        df_hist["Processo"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
     )
 
+    # --------------------------------------------------------
+    # 🔥 HORAS NUMÉRICAS
+    # --------------------------------------------------------
+    df_hist["Horas"] = pd.to_numeric(
+        df_hist["Horas"],
+        errors="coerce"
+    ).fillna(0)
 
+    # --------------------------------------------------------
+    # 🔥 DATAS
+    # --------------------------------------------------------
+    df_hist["Data_Baixa_DT"] = pd.to_datetime(
+        df_hist["Data_Baixa"],
+        errors="coerce"
+    )
 
-# ============================================================
-# 🔥 CORREÇÃO DE SCORE (ROBUSTA + NORMALIZADA)
-# ============================================================
-if not df_mini_gargalos.empty:
+    df_hist["Data_Estorno_DT"] = pd.to_datetime(
+        df_hist["Data_Estorno"],
+        errors="coerce"
+    )
 
-    col_util = None
+    # --------------------------------------------------------
+    # 🔥 ORDENAÇÃO
+    # --------------------------------------------------------
+    df_hist = df_hist.sort_values(
+        by="Data_Baixa_DT",
+        ascending=False
+    )
 
-    if 'gargalos' in locals() and not gargalos.empty:
-        for col in ["Utilizacao", "Utilizacao (%)", "Utilizacao_Real"]:
-            if col in gargalos.columns:
-                col_util = col
-                break
+    df_hist = df_hist.reset_index(drop=True)
 
-    if col_util:
-        df_mini_gargalos = df_mini_gargalos.merge(
-            gargalos[["Processo", col_util]].rename(columns={col_util: "Utilizacao"}),
-            on="Processo",
-            how="left"
+    # ========================================================
+    # 🔍 FILTROS
+    # ========================================================
+    col_f1, col_f2, col_f3 = st.columns(3)
+
+    status_opcoes = ["Todos"] + sorted(
+        df_hist["Status_Baixa"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+    processo_opcoes = ["Todos"] + sorted(
+        df_hist["Processo"]
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+    cliente_opcoes = ["Todos"] + sorted(
+        df_hist["Cliente"]
+        .astype(str)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+    filtro_status = col_f1.selectbox(
+        "Filtrar por status",
+        status_opcoes
+    )
+
+    filtro_processo = col_f2.selectbox(
+        "Filtrar por processo",
+        processo_opcoes
+    )
+
+    filtro_cliente = col_f3.selectbox(
+        "Filtrar por cliente",
+        cliente_opcoes
+    )
+
+    # ========================================================
+    # 🔥 FILTRAGEM
+    # ========================================================
+    hist_filtrado = df_hist.copy()
+
+    if filtro_status != "Todos":
+
+        hist_filtrado = hist_filtrado[
+            hist_filtrado["Status_Baixa"] == filtro_status
+        ]
+
+    if filtro_processo != "Todos":
+
+        hist_filtrado = hist_filtrado[
+            hist_filtrado["Processo"] == filtro_processo
+        ]
+
+    if filtro_cliente != "Todos":
+
+        hist_filtrado = hist_filtrado[
+            hist_filtrado["Cliente"] == filtro_cliente
+        ]
+
+    # ========================================================
+    # 📊 KPIs
+    # ========================================================
+    total_registros = len(hist_filtrado)
+
+    total_ativas = len(
+        hist_filtrado[
+            hist_filtrado["Status_Baixa"]
+            .isin(["ATIVA"])
+        ]
+    )
+
+    total_terceirizadas = len(
+        hist_filtrado[
+            hist_filtrado["Status_Baixa"]
+            .isin(["TERCEIRIZADA"])
+        ]
+    )
+
+    total_estornos = len(
+        hist_filtrado[
+            hist_filtrado["Status_Baixa"]
+            .isin(["ESTORNADA"])
+        ]
+    )
+
+    horas_registradas = (
+        hist_filtrado["Horas"]
+        .sum()
+    )
+
+    col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
+
+    col_k1.metric(
+        "Total de Registros",
+        f"{total_registros:,.0f}"
+    )
+
+    col_k2.metric(
+        "Baixas Ativas",
+        f"{total_ativas:,.0f}"
+    )
+
+    col_k3.metric(
+        "Terceirizadas",
+        f"{total_terceirizadas:,.0f}"
+    )
+
+    col_k4.metric(
+        "Horas Registradas",
+        f"{horas_registradas:,.1f} h"
+    )
+
+    col_k5.metric(
+        "Estornos",
+        f"{total_estornos:,.0f}"
+    )
+
+    # ========================================================
+    # 🔥 STATUS VISUAL
+    # ========================================================
+    def traduzir_status(status):
+
+        status = str(status).strip().upper()
+
+        if status == "ATIVA":
+            return "✅ Baixada"
+
+        elif status == "TERCEIRIZADA":
+            return "🟣 Terceirizada"
+
+        elif status == "ESTORNADA":
+            return "🔄 Estornada"
+
+        else:
+            return status
+
+    hist_filtrado["Status"] = (
+        hist_filtrado["Status_Baixa"]
+        .apply(traduzir_status)
+    )
+
+    # ========================================================
+    # 🔥 FORMATAÇÃO VISUAL
+    # ========================================================
+    if "Data_Baixa_DT" in hist_filtrado.columns:
+
+        hist_filtrado["Data da Baixa"] = (
+            hist_filtrado["Data_Baixa_DT"]
+            .dt.strftime("%d/%m/%Y %H:%M")
         )
-    else:
-        df_mini_gargalos["Utilizacao"] = 0
 
-    for col in ["Horas_Fila", "Qtd_Fila", "Utilizacao"]:
-        if col not in df_mini_gargalos.columns:
-            df_mini_gargalos[col] = 0
+    if "Data_Estorno_DT" in hist_filtrado.columns:
 
-        df_mini_gargalos[col] = pd.to_numeric(
-            df_mini_gargalos[col],
-            errors="coerce"
-        ).fillna(0)
+        hist_filtrado["Data do Estorno"] = (
+            hist_filtrado["Data_Estorno_DT"]
+            .dt.strftime("%d/%m/%Y %H:%M")
+        )
 
-    max_util = df_mini_gargalos["Utilizacao"].max()
-    max_horas = df_mini_gargalos["Horas_Fila"].max()
-    max_qtd = df_mini_gargalos["Qtd_Fila"].max()
-
-    df_mini_gargalos["Util_norm"] = df_mini_gargalos["Utilizacao"] / max_util if max_util > 0 else 0
-    df_mini_gargalos["Fila_norm"] = df_mini_gargalos["Horas_Fila"] / max_horas if max_horas > 0 else 0
-    df_mini_gargalos["Qtd_norm"] = df_mini_gargalos["Qtd_Fila"] / max_qtd if max_qtd > 0 else 0
-
-    df_mini_gargalos["Score"] = (
-        df_mini_gargalos["Util_norm"] * 0.6 +
-        df_mini_gargalos["Fila_norm"] * 0.3 +
-        df_mini_gargalos["Qtd_norm"] * 0.1
+    hist_filtrado["Horas"] = (
+        hist_filtrado["Horas"]
+        .round(2)
     )
 
-    df_mini_gargalos = df_mini_gargalos.sort_values(
-        by=["Score", "Utilizacao", "Horas_Fila"],
-        ascending=[False, False, False]
-    ).reset_index(drop=True)
+    # ========================================================
+    # 📋 TABELA FINAL
+    # ========================================================
+    colunas_exibir = [
 
-    df_mini_gargalos["Ranking"] = df_mini_gargalos.index + 1
+        "Status",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Data da Baixa",
+        "Usuario",
+        "Observacao",
+        "Data do Estorno",
+        "Motivo_Estorno"
+    ]
 
-
-# ============================================================
-# 🔒 CARDS
-# ============================================================
-cards_gargalos = resumo_cards_gargalos(df_mini_gargalos)
-
-if df_mini_gargalos.empty:
-    st.info("Nenhum dado disponível para análise de gargalos.")
-
-else:
-
-    st.markdown("## 🚨 Alerta Inteligente de Produção")
-
-    gargalo_top = df_mini_gargalos.iloc[0]
-
-    processo = gargalo_top.get("Processo", "N/A")
-    horas = float(gargalo_top.get("Horas_Fila", 0))
-    qtd = int(gargalo_top.get("Qtd_Fila", 0))
-    score = float(gargalo_top.get("Score", 0))
-
-    col_a1, col_a2, col_a3 = st.columns(3)
-
-    col_a1.metric("Processo Crítico", f"🔴 {processo}")
-    col_a2.metric("Horas Acumuladas", f"{horas:.1f} h")
-    col_a3.metric("Itens na Fila", qtd)
-
-    st.divider()
-
-    if score >= 0.75:
-        st.error("🚨 AÇÃO IMEDIATA: Gargalo crítico impactando diretamente os prazos.")
-    elif score >= 0.5:
-        st.warning("⚠️ Atenção: Gargalo em crescimento, priorizar na sequência.")
-    else:
-        st.info("🟢 Situação controlada.")
-
-    st.markdown("### 💡 Ação Recomendada")
-
-    if gargalo_top.get("Util_norm", 0) > 0.7:
-        st.markdown(f"➡️ Aumentar capacidade no processo **{processo}**.")
-    elif horas > 20:
-        st.markdown(f"➡️ Atuar na fila do processo **{processo}**.")
-    else:
-        st.markdown(f"➡️ Monitorar o processo **{processo}**.")
-
-    col_g1, col_g2, col_g3, col_g4, col_g5 = st.columns(5)
-
-    col_g1.metric("Processos", cards_gargalos.get("total_processos", 0))
-    col_g2.metric("Itens na Fila", cards_gargalos.get("total_itens_fila", 0))
-    col_g3.metric("Horas na Fila", f"{cards_gargalos.get('total_horas_fila', 0):.1f}h")
-    col_g4.metric("Baixas Ativas", cards_gargalos.get("total_baixas_ativas", 0))
-    col_g5.metric("🔥 Gargalo Imediato", f"🔴 {processo}")
-
-    st.markdown("### 🚨 Classificação dos Gargalos")
-
-    col_s1, col_s2, col_s3 = st.columns(3)
-
-    col_s1.metric("🔴 Críticos", cards_gargalos.get("qtd_criticos", 0))
-    col_s2.metric("🟡 Atenção", cards_gargalos.get("qtd_atencao", 0))
-    col_s3.metric("🟢 Controlados", cards_gargalos.get("qtd_controlados", 0))
-
-    st.markdown("### 🔥 Top 5 Gargalos Prioritários")
-
-    top5 = df_mini_gargalos.head(5)
-    top5_cols = st.columns(5)
-
-    for i in range(5):
-        with top5_cols[i]:
-            if i < len(top5):
-                row = top5.iloc[i]
-                st.metric(
-                    label=f"{row['Ranking']}º - {row['Processo']}",
-                    value=f"{int(row['Qtd_Fila'])} itens",
-                    delta=f"{row['Horas_Fila']:.1f}h | Score {row['Score']:.2f}"
-                )
-            else:
-                st.metric(label="-", value="-", delta="-")
-
-    st.markdown("### 📊 Ranking Inteligente de Gargalos")
+    colunas_exibir = [
+        c for c in colunas_exibir
+        if c in hist_filtrado.columns
+    ]
 
     st.dataframe(
-        df_mini_gargalos[
-            ["Ranking", "Processo", "Qtd_Fila", "Horas_Fila", "Qtd_Baixas_Ativas", "Carga_Total", "Score"]
-        ],
+        hist_filtrado[colunas_exibir],
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        height=450
     )
 
-    st.divider()
-
-
+st.divider()
 
 
 
