@@ -1000,6 +1000,21 @@ else:
     df_operacional["CHAVE_OPERACAO"] = ""
 
 
+
+
+# ============================================================
+# 🔥 REMOVE DUPLICIDADES OPERACIONAIS
+# ============================================================
+df_operacional = (
+    df_operacional
+    .drop_duplicates(
+        subset=["CHAVE_OPERACAO"],
+        keep="first"
+    )
+    .reset_index(drop=True)
+)
+
+
 # --------------------------------------------
 # BASE OFICIAL PARA TIRAR DA FILA (CORRIGIDO)
 # --------------------------------------------
@@ -3510,20 +3525,6 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
         df_operacional[col] = df_operacional[col].apply(_norm)
 
 
-# ============================================================
-# 🔥 CHAVE ÚNICA (UM ÚNICO PADRÃO)
-# ============================================================
-df_baixas["CHAVE_OPERACAO"] = (
-    df_baixas["PV"] + "||" +
-    df_baixas["Processo"] + "||" +
-    df_baixas["CODIGO_PV"]
-)
-
-df_operacional["CHAVE_OPERACAO"] = (
-    df_operacional["PV"] + "||" +
-    df_operacional["Processo"] + "||" +
-    df_operacional["CODIGO_PV"]
-)
 
 
 # ============================================================
