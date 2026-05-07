@@ -7058,38 +7058,40 @@ else:
 
 
     # ========================================================
-    # 🔥 DATAS SEGURAS
+    # 🔥 DATAS SEGURAS E PADRONIZADAS
     # ========================================================
     df_hist["Data_Baixa_DT"] = pd.to_datetime(
 
         df_hist["Data_Baixa"],
 
-        errors="coerce"
+        errors="coerce",
+
+        utc=True
     )
 
     df_hist["Data_Estorno_DT"] = pd.to_datetime(
 
         df_hist["Data_Estorno"],
 
-        errors="coerce"
+        errors="coerce",
+
+        utc=True
     )
 
 
     # ========================================================
-    # 🔥 NORMALIZA DATAS DEFINITIVAMENTE
+    # 🔥 REMOVE TIMEZONE (PADRÃO ÚNICO)
     # ========================================================
-    df_hist["Data_Baixa_DT"] = pd.to_datetime(
+    df_hist["Data_Baixa_DT"] = (
 
-        df_hist["Data_Baixa_DT"],
-
-        errors="coerce"
+        df_hist["Data_Baixa_DT"]
+        .dt.tz_localize(None)
     )
 
-    df_hist["Data_Estorno_DT"] = pd.to_datetime(
+    df_hist["Data_Estorno_DT"] = (
 
-        df_hist["Data_Estorno_DT"],
-
-        errors="coerce"
+        df_hist["Data_Estorno_DT"]
+        .dt.tz_localize(None)
     )
 
 
@@ -7104,20 +7106,14 @@ else:
 
         df_hist["Data_Baixa_DT"]
 
-        .where(
-            df_hist["Data_Baixa_DT"].notna(),
-            data_minima
-        )
+        .fillna(data_minima)
     )
 
     df_hist["Data_Estorno_DT"] = (
 
         df_hist["Data_Estorno_DT"]
 
-        .where(
-            df_hist["Data_Estorno_DT"].notna(),
-            data_minima
-        )
+        .fillna(data_minima)
     )
 
 
@@ -7132,9 +7128,7 @@ else:
     # ========================================================
     df_hist = df_hist.sort_values(
 
-        by=[
-            "Data_Baixa_DT"
-        ],
+        by="Data_Baixa_DT",
 
         ascending=False,
 
