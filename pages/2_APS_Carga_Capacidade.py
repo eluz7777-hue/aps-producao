@@ -4039,14 +4039,6 @@ elif opcao_visao == "PVs urgentes da semana":
 
 
 
-st.markdown("## 🔎 DEBUG FILA REAL")
-
-debug_6550 = df_operacional[
-    df_operacional["PV"].astype(str).str.strip() == "6550"
-].copy()
-
-st.dataframe(debug_6550)
-
 
 
 
@@ -4499,65 +4491,6 @@ df_operacional["Status Operacional"] = np.where(
     )
 )
 
-
-# ============================================================
-# 🔎 DEBUG BAIXAS
-# ============================================================
-st.markdown("### 🔎 DEBUG BAIXAS")
-
-st.write("BAIXAS AGRUPADAS:")
-st.write(df_baixas_agg.head(10))
-
-
-st.write("OPERACIONAL (AMOSTRA):")
-
-st.write(
-
-    df_operacional[[
-
-        "PV",
-        "Processo",
-        "CODIGO_PV",
-        "CHAVE_OPERACAO",
-        "Horas",
-        "Horas_Baixadas",
-        "Saldo_Horas",
-        "Status Operacional"
-
-    ]].head(20)
-)
-
-
-
-st.markdown("## 🔎 DEBUG MATCH 6987")
-
-debug_baixa_6987 = df_baixas_agg[
-    df_baixas_agg["CHAVE_OPERACAO"]
-    .astype(str)
-    .str.contains("6987", na=False)
-]
-
-debug_oper_6987 = df_operacional[
-    df_operacional["CHAVE_OPERACAO"]
-    .astype(str)
-    .str.contains("6987", na=False)
-]
-
-st.write("SQLITE:")
-st.dataframe(debug_baixa_6987)
-
-st.write("OPERACIONAL:")
-st.dataframe(
-    debug_oper_6987[[
-        "PV",
-        "Processo",
-        "CODIGO_PV",
-        "CHAVE_OPERACAO",
-        "Horas",
-        "Horas_Baixadas",
-        "Saldo_Horas"
-    ]]
-)
 
 
 
@@ -7363,15 +7296,6 @@ else:
     st.divider()
 
 
-
-st.markdown("## 🔎 DEBUG SQLITE DIRETO")
-
-debug_sqlite = carregar_baixas_sqlite()
-
-st.write("TOTAL SQLITE:")
-st.write(len(debug_sqlite))
-
-st.dataframe(debug_sqlite.tail(20))
 
 
 
