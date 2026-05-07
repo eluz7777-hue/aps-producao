@@ -3546,6 +3546,18 @@ elif opcao_visao == "PVs urgentes da semana":
 
 
 
+
+st.markdown("## 🔎 DEBUG FILA REAL")
+
+debug_6550 = df_operacional[
+    df_operacional["PV"].astype(str).str.strip() == "6550"
+].copy()
+
+st.dataframe(debug_6550)
+
+
+
+
 # ============================================================
 # ===================== FILA POR PROCESSO ====================
 # ============================================================
