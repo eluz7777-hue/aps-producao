@@ -7183,6 +7183,42 @@ st.dataframe(debug_sqlite.tail(20))
 
 
 # ============================================================
+# 🧨 RESET TOTAL DAS BAIXAS SQLITE
+# ============================================================
+st.markdown("## 🧨 RESET TOTAL SQLITE")
+
+if st.button("🗑️ APAGAR TODAS AS BAIXAS"):
+
+    try:
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "DELETE FROM baixas"
+        )
+
+        conn.commit()
+
+        conn.close()
+
+        st.success(
+            "✅ Todas as baixas foram removidas."
+        )
+
+        st.rerun()
+
+    except Exception as e:
+
+        st.error(str(e))
+
+
+
+
+
+
+# ============================================================
 # 📜 HISTÓRICO PREMIUM DE BAIXAS OPERACIONAIS
 # ============================================================
 
