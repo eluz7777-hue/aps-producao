@@ -4220,50 +4220,17 @@ df_operacional["Horas"] = pd.to_numeric(
     errors="coerce"
 ).fillna(0)
 
-
-df_operacional["Horas_Baixadas"] = pd.to_numeric(
-    df_operacional["Horas_Baixadas"],
-    errors="coerce"
-).fillna(0)
-
-
 # ============================================================
-# 🔥 SALDO REAL
-# ============================================================
-df_operacional["Saldo_Horas"] = (
-
-    df_operacional["Horas"]
-    -
-    df_operacional["Horas_Baixadas"]
-)
-
-df_operacional["Saldo_Horas"] = (
-
-    df_operacional["Saldo_Horas"]
-    .clip(lower=0)
-    .round(4)
-)
-
-
-# ============================================================
-# 🔥 STATUS OPERACIONAL
+# 🔥 STATUS OPERACIONAL REAL
 # ============================================================
 df_operacional["Status Operacional"] = np.where(
 
-    df_operacional["Saldo_Horas"] <= 0,
+    df_operacional["Horas"] <= 0,
 
     "✅ Baixado",
 
-    np.where(
-
-        df_operacional["Horas_Baixadas"] > 0,
-
-        "🟡 Parcial",
-
-        "⏳ Pendente"
-    )
+    "⏳ Pendente"
 )
-
 
 
 
