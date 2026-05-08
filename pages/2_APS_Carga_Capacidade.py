@@ -4240,31 +4240,17 @@ df_operacional["Status Operacional"] = np.where(
 # ============================================================
 st.markdown("### 📋 PVs na Fila")
 
+# ============================================================
+# 🔥 BASE DA FILA (APS OFICIAL)
+# ============================================================
+fila_detalhe = df.copy()
 
 # ============================================================
-# 🔥 BASE DA FILA
-# ============================================================
-fila_detalhe = df_operacional.copy()
-
-
-# ============================================================
-# 🔥 REMOVE OPERAÇÕES BAIXADAS
+# 🔥 SOMENTE OPERAÇÕES PENDENTES
 # ============================================================
 fila_detalhe = fila_detalhe[
-
-    fila_detalhe["Saldo_Horas"] > 0.0001
-
+    fila_detalhe["Horas"] > 0.0001
 ].copy()
-
-
-# ============================================================
-# 🔥 USA SALDO COMO HORAS REAIS
-# ============================================================
-fila_detalhe["Horas"] = (
-
-    fila_detalhe["Saldo_Horas"]
-)
-
 
 # ============================================================
 # 🔥 ENTREGA FORMATADA
@@ -4282,7 +4268,6 @@ if "ENTREGA" in fila_detalhe.columns:
         fila_detalhe["ENTREGA"]
         .dt.strftime("%d/%m/%Y")
     )
-
 
 # ============================================================
 # 🔥 COLUNAS
