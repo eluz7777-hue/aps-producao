@@ -1318,26 +1318,19 @@ def carregar_baixas_operacionais(base_path, file_mtime_baixas):
 
 
 # ============================================================
-# 🔥 CARREGAMENTO DAS BAIXAS (PERSISTÊNCIA REAL - SEM CACHE)
+# 🔥 CARREGAMENTO DAS BAIXAS (SQLITE OFICIAL)
 # ============================================================
 
-caminho_baixas = garantir_arquivo_baixas(BASE_PATH)
-
-try:
-    file_mtime_baixas = os.path.getmtime(caminho_baixas)
-except:
-    file_mtime_baixas = 0
-
 # ------------------------------------------------------------
-# 🔥 LEITURA REAL DO EXCEL (FONTE DA VERDADE)
+# 🔥 LEITURA OFICIAL SQLITE
 # ------------------------------------------------------------
-df_baixas = carregar_baixas_operacionais(BASE_PATH, file_mtime_baixas)
+df_baixas = carregar_baixas_sqlite()
 
 # 🔒 GARANTE PADRÃO
 df_baixas = _padronizar_df_baixas(df_baixas)
 
 # ------------------------------------------------------------
-# 🔥 SINCRONIZA SESSION STATE (NÃO É MAIS FONTE PRINCIPAL)
+# 🔥 SINCRONIZA SESSION STATE
 # ------------------------------------------------------------
 st.session_state["df_baixas"] = df_baixas.copy()
 
@@ -1345,13 +1338,24 @@ st.session_state["df_baixas"] = df_baixas.copy()
 # 🔥 FILTRA BAIXAS ATIVAS
 # ------------------------------------------------------------
 df_baixas_ativas = df_baixas[
-    df_baixas["Status_Baixa"].isin(["ATIVA", "TERCEIRIZADA"])
+    df_baixas["Status_Baixa"].isin([
+        "ATIVA",
+        "TERCEIRIZADA"
+    ])
 ].copy()
 
 # 🔒 GARANTE PADRÃO NAS ATIVAS
-df_baixas_ativas = _padronizar_df_baixas(df_baixas_ativas)
+df_baixas_ativas = _padronizar_df_baixas(
+    df_baixas_ativas
+)
 
-st.session_state["df_baixas_ativas"] = df_baixas_ativas
+# ------------------------------------------------------------
+# 🔥 SESSION STATE OFICIAL
+# ------------------------------------------------------------
+st.session_state["df_baixas_ativas"] = (
+    df_baixas_ativas
+)
+
 
 
 
