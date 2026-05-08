@@ -4319,26 +4319,15 @@ st.dataframe(
 
 
 # ============================================================
-# 🔥 SALDO REAL
-# ============================================================
-df_operacional["Saldo_Horas"] = (
-    df_operacional["Horas"] - df_operacional["Horas_Baixadas"]
-)
-
-df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].clip(lower=0)
-
-
-# ============================================================
-# 🔥 STATUS OPERACIONAL
+# 🔥 STATUS OPERACIONAL REAL
 # ============================================================
 df_operacional["Status Operacional"] = np.where(
-    df_operacional["Saldo_Horas"] <= 0,
+
+    df_operacional["Horas"] <= 0,
+
     "✅ Baixado",
-    np.where(
-        df_operacional["Horas_Baixadas"] > 0,
-        "🟡 Parcial",
-        "⏳ Pendente"
-    )
+
+    "⏳ Pendente"
 )
 
 
