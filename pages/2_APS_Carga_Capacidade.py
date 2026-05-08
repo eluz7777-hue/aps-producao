@@ -4022,78 +4022,33 @@ st.subheader("📌 Fila por Processo")
 
 
 # ============================================================
-# 🔥 BASE REAL
+# 🔥 BASE REAL DA FILA (APS OFICIAL)
 # ============================================================
-fila = df_operacional.copy()
 
+fila = df.copy()
 
 # ============================================================
 # 🔒 GARANTE COLUNAS
 # ============================================================
-for col in [
-    "Horas",
-    "Horas_Baixadas",
-    "Saldo_Horas"
-]:
-
-    if col not in fila.columns:
-        fila[col] = 0
-
+if "Horas" not in fila.columns:
+    fila["Horas"] = 0
 
 # ============================================================
-# 🔥 NUMÉRICOS
+# 🔥 TRATAMENTO NUMÉRICO
 # ============================================================
 fila["Horas"] = pd.to_numeric(
     fila["Horas"],
     errors="coerce"
 ).fillna(0)
 
-fila["Horas_Baixadas"] = pd.to_numeric(
-    fila["Horas_Baixadas"],
-    errors="coerce"
-).fillna(0)
-
-
 # ============================================================
-# 🔥 SALDO REAL
-# ============================================================
-fila["Saldo_Horas"] = (
-    fila["Horas"]
-    -
-    fila["Horas_Baixadas"]
-)
-
-fila["Saldo_Horas"] = (
-    fila["Saldo_Horas"]
-    .clip(lower=0)
-    .round(4)
-)
-
-
-# ============================================================
-# 🔥 SOMENTE PENDENTES
+# 🔥 SOMENTE OPERAÇÕES PENDENTES
 # ============================================================
 fila = fila[
-    fila["Saldo_Horas"] > 0
+    fila["Horas"] > 0
 ].copy()
 
 fila = fila.reset_index(drop=True)
-
-
-# ============================================================
-# 🔥 REMOVE DUPLICIDADE
-# ============================================================
-if "CHAVE_OPERACAO" in fila.columns:
-
-    fila = (
-        fila
-        .drop_duplicates(
-            subset=["CHAVE_OPERACAO"],
-            keep="first"
-        )
-        .reset_index(drop=True)
-    )
-
 
 # ============================================================
 # 🔥 ENTREGA
@@ -4107,14 +4062,12 @@ if "ENTREGA" in fila.columns:
 
     fila["Dias para Entrega"] = (
         fila["ENTREGA"]
-        -
-        hoje
+        - hoje
     ).dt.days
 
 else:
 
     fila["Dias para Entrega"] = None
-
 
 # ============================================================
 # 🔥 SEMÁFORO
@@ -4124,12 +4077,10 @@ fila["Semáforo"] = (
     .apply(semaforo_entrega)
 )
 
-
 # ============================================================
 # 🔍 FILTROS
 # ============================================================
 col_f1, col_f2, col_f3 = st.columns(3)
-
 
 processos_fila = sorted(
 
@@ -4146,7 +4097,6 @@ processo_fila_sel = col_f1.selectbox(
     ["Todos"] + processos_fila
 )
 
-
 pvs_fila = sorted(
 
     fila["PV"]
@@ -4162,7 +4112,6 @@ pv_fila_sel = col_f2.selectbox(
     ["Todas"] + pvs_fila
 )
 
-
 tipo_corte_sel = col_f3.selectbox(
     "Filtrar por Tipo de Corte",
     [
@@ -4173,7 +4122,6 @@ tipo_corte_sel = col_f3.selectbox(
         "Apenas Plasma"
     ]
 )
-
 
 # ============================================================
 # 🔥 FILTROS PROCESSO/PV
@@ -4187,7 +4135,6 @@ if processo_fila_sel != "Todos":
         == processo_fila_sel
     ].copy()
 
-
 if pv_fila_sel != "Todas":
 
     fila = fila[
@@ -4196,7 +4143,6 @@ if pv_fila_sel != "Todas":
         .str.strip()
         == pv_fila_sel
     ].copy()
-
 
 # ============================================================
 # 🔥 NORMALIZA PROCESSO
@@ -4207,7 +4153,6 @@ fila["Processo"] = (
     .str.strip()
     .str.upper()
 )
-
 
 # ============================================================
 # 🔥 FILTROS CORTE
@@ -4240,7 +4185,6 @@ elif tipo_corte_sel == "Apenas Plasma":
         == "CORTE-PLASMA"
     ].copy()
 
-
 # ============================================================
 # 📊 KPIs
 # ============================================================
@@ -4262,140 +4206,8 @@ col_k2.metric(
 
 col_k3.metric(
     "Horas na Fila",
-    f"{fila['Saldo_Horas'].sum():.1f} h"
+    f"{fila['Horas'].sum():.1f} h"
 )
-
-
-# ============================================================
-# 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (SQLITE → OPERACIONAL)
-# ============================================================
-
-df_baixas = carregar_baixas_sqlite()
-
-
-# ============================================================
-# 🔥 NORMALIZAÇÃO FORTE (PADRÃO ÚNICO)
-# ============================================================
-def _norm(x):
-
-    if pd.isna(x):
-        return ""
-
-    x = str(x)
-
-    x = x.replace("\xa0", "")
-    x = x.replace(" ", "")
-    x = x.replace(".0", "")
-
-    return x.strip().upper()
-
-
-# ============================================================
-# 🔥 NORMALIZA DADOS
-# ============================================================
-for col in ["PV", "Processo", "CODIGO_PV"]:
-
-    if col in df_baixas.columns:
-
-        df_baixas[col] = (
-            df_baixas[col]
-            .apply(_norm)
-        )
-
-    if col in df_operacional.columns:
-
-        df_operacional[col] = (
-            df_operacional[col]
-            .apply(_norm)
-        )
-
-
-# ============================================================
-# 🔥 GARANTE CHAVE OPERACIONAL
-# ============================================================
-if "CHAVE_OPERACAO" not in df_operacional.columns:
-
-    df_operacional["CHAVE_OPERACAO"] = (
-
-        df_operacional["PV"]
-        + "||"
-        + df_operacional["Processo"]
-        + "||"
-        + df_operacional["CODIGO_PV"]
-    )
-
-
-# ============================================================
-# 🔥 GARANTE CHAVE SQLITE
-# ============================================================
-if "CHAVE_OPERACAO" not in df_baixas.columns:
-
-    df_baixas["CHAVE_OPERACAO"] = (
-
-        df_baixas["PV"]
-        + "||"
-        + df_baixas["Processo"]
-        + "||"
-        + df_baixas["CODIGO_PV"]
-    )
-
-
-# ============================================================
-# 🔥 TRATAMENTO DAS BAIXAS
-# ============================================================
-if not df_baixas.empty:
-
-    df_baixas["Horas"] = pd.to_numeric(
-        df_baixas["Horas"],
-        errors="coerce"
-    ).fillna(0)
-
-
-    df_baixas["Status_Baixa"] = (
-
-        df_baixas["Status_Baixa"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-
-    # ========================================================
-    # 🔥 SOMENTE BAIXAS ATIVAS
-    # ========================================================
-    df_baixas_validas = df_baixas[
-
-        df_baixas["Status_Baixa"]
-        .isin(["ATIVA", "TERCEIRIZADA"])
-
-    ].copy()
-
-
-    # ========================================================
-    # 🔥 AGREGA BAIXAS
-    # ========================================================
-    df_baixas_agg = (
-
-        df_baixas_validas
-        .groupby(
-            "CHAVE_OPERACAO",
-            as_index=False
-        )
-        .agg(
-            Horas_Baixadas=("Horas", "sum"),
-            Qtde_Baixas=("Horas", "count")
-        )
-    )
-
-else:
-
-    df_baixas_agg = pd.DataFrame(
-        columns=[
-            "CHAVE_OPERACAO",
-            "Horas_Baixadas",
-            "Qtde_Baixas"
-        ]
-    )
 
 
 # ============================================================
