@@ -902,7 +902,6 @@ ROOT_DIR = os.path.dirname(PAGE_DIR)
 arquivo_pv = os.path.join(ROOT_DIR, "PV.xlsx")
 BASE_PATH = ROOT_DIR
 
-st.caption(f"📂 Lendo arquivo: {arquivo_pv}")
 
 if not os.path.exists(arquivo_pv):
     st.error(f"Arquivo PV.xlsx não encontrado em: {arquivo_pv}")
@@ -1626,22 +1625,7 @@ for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
         )
 
 if df.empty:
-    st.error("Nenhum dado válido foi encontrado para exibir no dashboard.")
-
-    st.markdown("### 🔎 Diagnóstico da expansão da base")
-
-    st.write("**Total de linhas em df_pv:**", len(df_pv))
-    st.write("**Total de PVs únicas no Excel:**", df_pv["PV"].astype(str).str.strip().nunique())
-
-    if "ENTREGA" in df_pv.columns:
-        st.write("**Linhas com ENTREGA válida:**", df_pv["ENTREGA"].notna().sum())
-
-    if "QTD" in df_pv.columns:
-        st.write("**Linhas com QTD > 0:**", (pd.to_numeric(df_pv["QTD"], errors="coerce").fillna(0) > 0).sum())
-
-    st.markdown("### 📋 Prévia da base lida")
-    st.dataframe(df_pv.head(20), use_container_width=True)
-
+    st.error("Nenhuma carga operacional pendente encontrada.")
     st.stop()
 
 
@@ -1830,13 +1814,6 @@ dem["Ocupacao"] = dem["Ocupacao"].replace([float("inf"), -float("inf")], 0)
 dem["Ocupacao"] = dem["Ocupacao"].fillna(0)
 dem["Ocupacao"] = dem["Ocupacao"].round(1)
 
-def status(x):
-    if x > 100:
-        return "🔴"
-    elif x > 80:
-        return "🟡"
-    else:
-        return "🟢"
 
 dem["Saldo (h)"] = (dem["Capacidade"] - dem["Horas"]).round(1)
 
@@ -2395,13 +2372,10 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     # --------------------------------------------------------
-    # 🔒 GARANTE COLUNAS
+    # 🔒 GARANTE COLUNA OFICIAL
     # --------------------------------------------------------
     if "Horas" not in fila_tmp.columns:
         fila_tmp["Horas"] = 0
-
-    if "Saldo_Horas" not in fila_tmp.columns:
-        fila_tmp["Saldo_Horas"] = fila_tmp["Horas"]
 
     # --------------------------------------------------------
     # 🔥 CONVERSÃO NUMÉRICA
@@ -2411,16 +2385,11 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         errors="coerce"
     ).fillna(0)
 
-    fila_tmp["Saldo_Horas"] = pd.to_numeric(
-        fila_tmp["Saldo_Horas"],
-        errors="coerce"
-    ).fillna(0)
-
     # --------------------------------------------------------
     # 🔥 SOMENTE OPERAÇÕES PENDENTES
     # --------------------------------------------------------
     fila_tmp = fila_tmp[
-        fila_tmp["Saldo_Horas"] > 0
+        fila_tmp["Horas"] > 0
     ].copy()
 
     fila_tmp = fila_tmp.reset_index(drop=True)
@@ -2432,7 +2401,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         fila_tmp.groupby("Processo", dropna=False)
         .agg(
             Qtd_Fila=("Processo", "size"),
-            Horas_Fila=("Saldo_Horas", "sum")
+            Horas_Fila=("Horas", "sum")
         )
         .reset_index()
     )
@@ -2604,7 +2573,6 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     return df_dash
-
 
 # ============================================================
 # RESUMO DOS CARDS
