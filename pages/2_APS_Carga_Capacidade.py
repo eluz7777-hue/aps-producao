@@ -4434,6 +4434,37 @@ df_operacional = df_operacional.merge(
 )
 
 
+
+
+# ------------------------------------------------------------
+# 🔒 BLINDAGEM DE COLUNAS OPERACIONAIS
+# ------------------------------------------------------------
+if "Horas_Baixadas" not in df_operacional.columns:
+
+    df_operacional["Horas_Baixadas"] = (
+        pd.to_numeric(
+            df_operacional.get("Horas_Originais", 0),
+            errors="coerce"
+        ).fillna(0)
+        -
+        pd.to_numeric(
+            df_operacional.get("Horas", 0),
+            errors="coerce"
+        ).fillna(0)
+    ).clip(lower=0)
+
+if "Horas_Restantes" not in df_operacional.columns:
+
+    df_operacional["Horas_Restantes"] = (
+        pd.to_numeric(
+            df_operacional.get("Horas", 0),
+            errors="coerce"
+        ).fillna(0)
+    ).clip(lower=0)
+
+
+
+
 # ============================================================
 # 🔥 NUMÉRICOS
 # ============================================================
