@@ -294,7 +294,7 @@ def salvar_baixa_sqlite(nova_baixa):
 
         try:
 
-            base_oper = df_operacional[
+            base_oper = df[
                 df_operacional[
                     "CHAVE_OPERACAO"
                 ] == chave_operacao
@@ -4319,17 +4319,16 @@ st.dataframe(
 
 
 # ============================================================
-# 🔥 STATUS OPERACIONAL REAL
+# 🔥 STATUS OPERACIONAL REAL (BASE APS)
 # ============================================================
-df_operacional["Status Operacional"] = np.where(
+df["Status Operacional"] = np.where(
 
-    df_operacional["Horas"] <= 0,
+    df["Horas"] <= 0,
 
     "✅ Baixado",
 
     "⏳ Pendente"
 )
-
 
 
 # ============================================================
@@ -4643,18 +4642,7 @@ else:
                 horas_ja_baixadas = 0
 
 
-            # =================================================
-            # 🔥 SALDO DINÂMICO REAL
-            # =================================================
-            horas_planejadas = float(
-                linha["Horas"]
-            )
-
-            saldo_real = max(
-                horas_planejadas -
-                horas_ja_baixadas,
-                0
-            )
+            
 
 
             # 🔒 BLOQUEIO FINAL
@@ -4670,6 +4658,14 @@ else:
                 ] = False
 
                 st.stop()
+
+
+            # =================================================
+            # 🔥 SALDO DINÂMICO REAL
+            # =================================================
+            saldo_real = float(
+                linha["Saldo_Horas"]
+            )
 
 
             # =================================================
@@ -4855,14 +4851,9 @@ else:
                         .sum()
                     )
 
-                horas_planejadas = float(
-                    linha["Horas"]
-                )
-
-                saldo_real = max(
-                    horas_planejadas -
-                    horas_ja_baixadas,
-                    0
+                		
+		saldo_real = float(
+                    linha["Saldo_Horas"]
                 )
 
 
@@ -6045,16 +6036,11 @@ else:
                 .sum()
             )
 
-        horas_planejadas = float(
-            linha["Horas"]
+        saldo_real = float(
+            linha["Saldo_Horas"]
         )
 
-        saldo_real = max(
-            horas_planejadas -
-            horas_ja_baixadas,
-            0
-        )
-
+        
         col_btn1, col_btn2 = st.columns(2)
 
 
@@ -6348,14 +6334,10 @@ else:
                         .sum()
                     )
 
-                horas_planejadas = float(
-                    linha["Horas"]
-                )
+                
 
-                saldo_real = max(
-                    horas_planejadas -
-                    horas_ja_baixadas,
-                    0
+                saldo_real = float(
+                    linha["Horas"]
                 )
 
 
