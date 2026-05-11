@@ -4544,18 +4544,7 @@ if selecao:
 
             chave = linha["CHAVE_OPERACAO"]
 
-            horas_ja_baixadas = 0
-
-            if not df_baixas_validas.empty:
-
-                horas_ja_baixadas = (
-                    df_baixas_validas[
-                        df_baixas_validas[
-                            "CHAVE_OPERACAO"
-                        ] == chave
-                    ]["Horas"]
-                    .sum()
-                )
+            
 
             # =============================================
             # 🔥 SALDO REAL
@@ -6040,7 +6029,7 @@ else:
                 
 
                 saldo_real = float(
-                    linha["Horas"]
+                    linha["Saldo_Horas"]
                 )
 
 
