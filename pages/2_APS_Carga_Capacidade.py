@@ -4451,237 +4451,131 @@ if "CHAVE_OPERACAO" not in base_corte.columns:
     )
 
 
-# ============================================================
-# 🔒 PROTEÇÃO FINAL
-# ============================================================
-if base_corte.empty:
+# ========================================================
+# 📦 BAIXA EM LOTE (BLINDADA)
+# ========================================================
+st.markdown("#### 📦 Baixa em Lote")
 
-    st.info("Nenhuma operação pendente de corte.")
+selecao = st.multiselect(
+    "Selecionar operações",
+    opcoes,
+    key="corte_lote"
+)
 
-else:
+if selecao:
 
-    # ========================================================
-    # 🔥 LABEL VISUAL
-    # ========================================================
-    base_corte["LABEL"] = (
+    if st.button(
+        "📦 Baixar Corte em Lote",
+        key="btn_corte_lote"
+    ):
 
-        "PV "
-        + base_corte["PV"].astype(str)
+        # =================================================
+        # 🔒 LOCK DUPLO CLIQUE
+        # =================================================
+        if st.session_state["lock_baixa_lote"]:
 
-        + " | "
+            st.warning(
+                "⚠️ Lote já em processamento"
+            )
 
-        + base_corte["Processo"].astype(str)
-
-        + " | "
-
-        + base_corte["CODIGO_PV"].astype(str)
-
-        + " | SALDO: "
-
-        + base_corte["Saldo_Horas"]
-        .round(2)
-        .astype(str)
-
-        + " h"
-    )
-
-    opcoes = (
-        base_corte["LABEL"]
-        .drop_duplicates()
-        .tolist()
-    )
-
-
-    # ========================================================
-    # 🔄 CONTROLE DE RESET
-    # ========================================================
-    if "reset_corte_unitario" not in st.session_state:
-        st.session_state["reset_corte_unitario"] = False
-
-    if "reset_corte_lote" not in st.session_state:
-        st.session_state["reset_corte_lote"] = False
-
-    if "lock_baixa_unitaria" not in st.session_state:
-        st.session_state["lock_baixa_unitaria"] = False
-
-    if "lock_baixa_lote" not in st.session_state:
-        st.session_state["lock_baixa_lote"] = False
-
-
-    # ========================================================
-    # 🔥 RESET UNITÁRIO
-    # ========================================================
-    if st.session_state["reset_corte_unitario"]:
-
-        if opcoes:
-
-            st.session_state[
-                "corte_unitario"
-            ] = opcoes[0]
+            st.stop()
 
         st.session_state[
-            "reset_corte_unitario"
-        ] = False
+            "lock_baixa_lote"
+        ] = True
 
+        sucessos = []
+        erros = []
 
-    # ========================================================
-    # 🔥 RESET LOTE
-    # ========================================================
-    if st.session_state["reset_corte_lote"]:
+        # =================================================
+        # 🔥 RECARREGA SQLITE
+        # =================================================
+        df_baixas_atual = carregar_baixas_sqlite()
 
-        st.session_state["corte_lote"] = []
+        if not df_baixas_atual.empty:
 
-        st.session_state[
-            "reset_corte_lote"
-        ] = False
+            df_baixas_atual["Horas"] = pd.to_numeric(
+                df_baixas_atual["Horas"],
+                errors="coerce"
+            ).fillna(0)
 
+            df_baixas_atual["Status_Baixa"] = (
+                df_baixas_atual["Status_Baixa"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
 
-    # ========================================================
-    # 🔹 BAIXA UNITÁRIA
-    # ========================================================
-    st.markdown("#### 🔹 Baixa Unitária")
-
-    escolha = st.selectbox(
-        "Operação",
-        opcoes,
-        key="corte_unitario"
-    )
-
-    linha_sel = base_corte[
-        base_corte["LABEL"] == escolha
-    ]
-
-    if not linha_sel.empty:
-
-        linha = linha_sel.iloc[0]
-
-        saldo_real = float(
-            linha["Saldo_Horas"]
-        )
-
-        # ----------------------------------------------------
-        # 🔥 BOTÃO BAIXA
-        # ----------------------------------------------------
-        if st.button(
-            "💾 Confirmar Baixa",
-            key="btn_corte_unitario"
-        ):
-
-            # =================================================
-            # 🔒 LOCK DUPLO CLIQUE
-            # =================================================
-            if st.session_state["lock_baixa_unitaria"]:
-
-                st.warning(
-                    "⚠️ Baixa já em processamento"
-                )
-
-                st.stop()
-
-            st.session_state[
-                "lock_baixa_unitaria"
-            ] = True
-
-
-            # 🔒 BLOQUEIA ZERADOS
-            if saldo_real <= 0:
-
-                st.warning(
-                    "⚠️ Operação já totalmente baixada"
-                )
-
-                st.session_state[
-                    "lock_baixa_unitaria"
-                ] = False
-
-                st.stop()
-
-
-            # =================================================
-            # 🔥 RECARREGA SQLITE
-            # =================================================
-            df_baixas_atual = carregar_baixas_sqlite()
-
-            if not df_baixas_atual.empty:
-
-                df_baixas_atual["Horas"] = pd.to_numeric(
-                    df_baixas_atual["Horas"],
-                    errors="coerce"
-                ).fillna(0)
-
-                df_baixas_atual["Status_Baixa"] = (
-                    df_baixas_atual["Status_Baixa"]
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                )
-
-                df_baixas_validas = (
+            df_baixas_validas = (
+                df_baixas_atual[
                     df_baixas_atual[
-                        df_baixas_atual[
-                            "Status_Baixa"
-                        ].isin([
-                            "ATIVA",
-                            "TERCEIRIZADA"
-                        ])
-                    ]
-                    .copy()
-                )
+                        "Status_Baixa"
+                    ].isin([
+                        "ATIVA",
+                        "TERCEIRIZADA"
+                    ])
+                ]
+                .copy()
+            )
+
+        else:
+
+            df_baixas_validas = pd.DataFrame()
+
+        # =================================================
+        # 🔥 LOOP LOTE
+        # =================================================
+        for label in selecao:
+
+            linha = base_corte[
+                base_corte["LABEL"] == label
+            ].iloc[0]
+
+            chave = linha["CHAVE_OPERACAO"]
+
+            horas_ja_baixadas = 0
+
+            if not df_baixas_validas.empty:
 
                 horas_ja_baixadas = (
                     df_baixas_validas[
                         df_baixas_validas[
                             "CHAVE_OPERACAO"
-                        ] == linha["CHAVE_OPERACAO"]
+                        ] == chave
                     ]["Horas"]
                     .sum()
                 )
 
-            else:
-
-                horas_ja_baixadas = 0
-
-
-            
-
-
-            # 🔒 BLOQUEIO FINAL
-            # =================================================
-            if saldo_real <= 0:
-
-                st.warning(
-                    "⚠️ Operação já totalmente baixada"
-                )
-
-                st.session_state[
-                    "lock_baixa_unitaria"
-                ] = False
-
-                st.stop()
-
-
-            # =================================================
-            # 🔥 SALDO DINÂMICO REAL
-            # =================================================
+            # =============================================
+            # 🔥 SALDO REAL
+            # =============================================
             saldo_real = float(
                 linha["Saldo_Horas"]
             )
 
+            # 🔒 BLOQUEIA DUPLICADOS
+            # =============================================
+            if saldo_real <= 0:
 
-            # =================================================
+                erros.append(label)
+
+                continue
+
+            # =============================================
             # 🔥 TIMESTAMP REAL
-            # =================================================
+            # =============================================
             data_real = datetime.now(
                 ZoneInfo("America/Sao_Paulo")
             )
 
-
-            # =================================================
+            # =============================================
             # 🔥 REGISTRO FINAL
-            # =================================================
+            # =============================================
             nova_baixa = {
 
-                "PV": _norm(linha["PV"]),
+                "PV": _norm(
+                    linha["PV"]
+                ),
 
                 "Cliente": linha.get(
                     "Cliente",
@@ -4702,7 +4596,7 @@ else:
 
                 "Usuario": "Sistema",
 
-                "Observacao": "UNITARIO_CORTE",
+                "Observacao": "LOTE_CORTE",
 
                 "Status_Baixa": "ATIVA",
 
@@ -4710,248 +4604,46 @@ else:
 
                 "Motivo_Estorno": "",
 
-                "CHAVE_OPERACAO": linha[
-                    "CHAVE_OPERACAO"
-                ]
+                "CHAVE_OPERACAO": chave
             }
 
-
-            # =================================================
-            # 💾 SALVA SQLITE
-            # =================================================
             resultado = salvar_baixa_sqlite(
                 nova_baixa
             )
 
-
-            st.session_state[
-                "lock_baixa_unitaria"
-            ] = False
-
-
             if resultado.get("ok"):
 
-                st.session_state[
-                    "reset_corte_unitario"
-                ] = True
-
-                st.success(
-                    f"✅ Baixa registrada ({saldo_real:.2f}h)"
-                )
-
-                st.rerun()
+                sucessos.append(label)
 
             else:
 
-                st.error(
-                    resultado.get(
-                        "erro",
-                        "Erro ao registrar baixa"
-                    )
-                )
+                erros.append(label)
 
-    st.divider()
+        st.session_state[
+            "lock_baixa_lote"
+        ] = False
 
-
-    # ========================================================
-    # 📦 BAIXA EM LOTE (BLINDADA)
-    # ========================================================
-    st.markdown("#### 📦 Baixa em Lote")
-
-    selecao = st.multiselect(
-        "Selecionar operações",
-        opcoes,
-        key="corte_lote"
-    )
-
-    if selecao:
-
-        if st.button(
-            "📦 Baixar Corte em Lote",
-            key="btn_corte_lote"
-        ):
-
-            # =================================================
-            # 🔒 LOCK DUPLO CLIQUE
-            # =================================================
-            if st.session_state["lock_baixa_lote"]:
-
-                st.warning(
-                    "⚠️ Lote já em processamento"
-                )
-
-                st.stop()
+        # =================================================
+        # 🔥 RESULTADOS
+        # =================================================
+        if sucessos:
 
             st.session_state[
-                "lock_baixa_lote"
+                "reset_corte_lote"
             ] = True
 
+            st.success(
+                f"{len(sucessos)} operações baixadas"
+            )
 
-            sucessos = []
-            erros = []
+        if erros:
 
+            st.warning(
+                f"{len(erros)} operações não foram baixadas"
+            )
 
-            # =================================================
-            # 🔥 RECARREGA SQLITE
-            # =================================================
-            df_baixas_atual = carregar_baixas_sqlite()
+        st.rerun()
 
-            if not df_baixas_atual.empty:
-
-                df_baixas_atual["Horas"] = pd.to_numeric(
-                    df_baixas_atual["Horas"],
-                    errors="coerce"
-                ).fillna(0)
-
-                df_baixas_atual["Status_Baixa"] = (
-                    df_baixas_atual["Status_Baixa"]
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                )
-
-                df_baixas_validas = (
-                    df_baixas_atual[
-                        df_baixas_atual[
-                            "Status_Baixa"
-                        ].isin([
-                            "ATIVA",
-                            "TERCEIRIZADA"
-                        ])
-                    ]
-                    .copy()
-                )
-
-            else:
-
-                df_baixas_validas = pd.DataFrame()
-
-
-            # =================================================
-            # 🔥 LOOP LOTE
-            # =================================================
-            for label in selecao:
-
-                linha = base_corte[
-                    base_corte["LABEL"] == label
-                ].iloc[0]
-
-                chave = linha["CHAVE_OPERACAO"]
-
-                horas_ja_baixadas = 0
-
-                if not df_baixas_validas.empty:
-
-                    horas_ja_baixadas = (
-                        df_baixas_validas[
-                            df_baixas_validas[
-                                "CHAVE_OPERACAO"
-                            ] == chave
-                        ]["Horas"]
-                        .sum()
-                    )
-
-                		
-		saldo_real = float(
-                    linha["Saldo_Horas"]
-                )
-
-
-                # 🔒 BLOQUEIA DUPLICADOS
-                # =============================================
-                if saldo_real <= 0:
-
-                    erros.append(label)
-
-                    continue
-
-
-                # =============================================
-                # 🔥 TIMESTAMP REAL
-                # =============================================
-                data_real = datetime.now(
-                    ZoneInfo("America/Sao_Paulo")
-                )
-
-
-                # =============================================
-                # 🔥 REGISTRO FINAL
-                # =============================================
-                nova_baixa = {
-
-                    "PV": _norm(
-                        linha["PV"]
-                    ),
-
-                    "Cliente": linha.get(
-                        "Cliente",
-                        ""
-                    ),
-
-                    "CODIGO_PV": _norm(
-                        linha["CODIGO_PV"]
-                    ),
-
-                    "Processo": _norm(
-                        linha["Processo"]
-                    ),
-
-                    "Horas": saldo_real,
-
-                    "Data_Baixa": data_real,
-
-                    "Usuario": "Sistema",
-
-                    "Observacao": "LOTE_CORTE",
-
-                    "Status_Baixa": "ATIVA",
-
-                    "Data_Estorno": "",
-
-                    "Motivo_Estorno": "",
-
-                    "CHAVE_OPERACAO": chave
-                }
-
-
-                resultado = salvar_baixa_sqlite(
-                    nova_baixa
-                )
-
-                if resultado.get("ok"):
-
-                    sucessos.append(label)
-
-                else:
-
-                    erros.append(label)
-
-
-            st.session_state[
-                "lock_baixa_lote"
-            ] = False
-
-
-            # =================================================
-            # 🔥 RESULTADOS
-            # =================================================
-            if sucessos:
-
-                st.session_state[
-                    "reset_corte_lote"
-                ] = True
-
-                st.success(
-                    f"{len(sucessos)} operações baixadas"
-                )
-
-            if erros:
-
-                st.warning(
-                    f"{len(erros)} operações não foram baixadas"
-                )
-
-            st.rerun()
 
 # ============================================================
 # 🔥 FUNÇÃO LOCAL - CARREGAR BAIXAS SQLITE
