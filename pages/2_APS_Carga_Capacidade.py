@@ -1574,19 +1574,21 @@ df = df.reset_index(drop=True)
 # ------------------------------------------------------------
 # 🔥 SINCRONIZA BASE OPERACIONAL REAL
 # ------------------------------------------------------------
-# IMPORTANTE:
-# Toda a aplicação deve usar a MESMA BASE
-# já abatida pelas baixas operacionais.
-#
-# Isso elimina divergência entre:
-# - painel operacional
-# - dashboards
-# - gargalos
-# - corte
-# - indicadores
+# Mantém compatibilidade com dashboards
+# que ainda utilizam:
+# - Horas_Baixadas
+# - Horas_Restantes
 # ------------------------------------------------------------
 df_operacional = df.copy()
 
+# 🔒 GARANTE COLUNAS LEGADAS
+if "Horas_Baixadas" not in df_operacional.columns:
+    df_operacional["Horas_Baixadas"] = 0
+
+if "Horas_Restantes" not in df_operacional.columns:
+    df_operacional["Horas_Restantes"] = (
+        df_operacional["Horas"]
+    )
 
 
 
