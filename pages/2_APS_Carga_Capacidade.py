@@ -2132,16 +2132,47 @@ df_gargalo = df.copy()
 if not df_gargalo.empty:
 
     # ------------------------------------------------------------
-    # NORMALIZAÇÃO
+    # 🔒 NORMALIZAÇÃO OFICIAL
     # ------------------------------------------------------------
-    df_gargalo["Horas"] = pd.to_numeric(df_gargalo["Horas"], errors="coerce").fillna(0)
-    df_gargalo["Processo"] = df_gargalo["Processo"].astype(str).str.strip()
+    df_gargalo["Horas"] = (
+        pd.to_numeric(
+            df_gargalo["Horas"],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+
+    df_gargalo["Fila (dias)"] = (
+        pd.to_numeric(
+            df_gargalo["Fila (dias)"],
+            errors="coerce"
+        )
+        .replace([np.inf, -np.inf], 0)
+        .fillna(0)
+    )
+
+    df_gargalo["Processo"] = (
+        df_gargalo["Processo"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
 
     # ------------------------------------------------------------
-    # BASE POR PROCESSO (MANTIDA)
+    # 🔥 SOMENTE SALDO OPERACIONAL REAL
+    # ------------------------------------------------------------
+    df_gargalo = df_gargalo[
+        df_gargalo["Horas"] > 0.0001
+    ].copy()
+
+    # ------------------------------------------------------------
+    # 🔥 BASE POR PROCESSO
     # ------------------------------------------------------------
     gargalos = (
-        df_gargalo.groupby("Processo", as_index=False)
+        df_gargalo.groupby(
+            "Processo",
+            as_index=False
+        )
         .agg(
             Carga_Total=("Horas", "sum"),
             Fila_Total=("Fila (dias)", "sum"),
@@ -2151,79 +2182,268 @@ if not df_gargalo.empty:
     )
 
     # ------------------------------------------------------------
-    # 🔥 BASE REAL DE CAPACIDADE (AGORA VEM DO DEM)
+    # 🔒 BLINDAGEM NUMÉRICA
+    # ------------------------------------------------------------
+    for col in [
+        "Carga_Total",
+        "Fila_Total",
+        "Fila_Media"
+    ]:
+
+        gargalos[col] = (
+            pd.to_numeric(
+                gargalos[col],
+                errors="coerce"
+            )
+            .replace([np.inf, -np.inf], 0)
+            .fillna(0)
+        )
+
+    # ------------------------------------------------------------
+    # 🔥 BASE REAL DE CAPACIDADE
     # ------------------------------------------------------------
     if not dem.empty:
 
         dem_base = (
-            dem.groupby("Processo", as_index=False)
+            dem.groupby(
+                "Processo",
+                as_index=False
+            )
             .agg(
                 Carga_DEM=("Horas", "sum"),
                 Capacidade_DEM=("Capacidade", "sum")
             )
         )
 
+        # --------------------------------------------------------
+        # 🔒 NUMÉRICOS
+        # --------------------------------------------------------
+        dem_base["Carga_DEM"] = (
+            pd.to_numeric(
+                dem_base["Carga_DEM"],
+                errors="coerce"
+            )
+            .fillna(0)
+        )
+
+        dem_base["Capacidade_DEM"] = (
+            pd.to_numeric(
+                dem_base["Capacidade_DEM"],
+                errors="coerce"
+            )
+            .fillna(0)
+        )
+
+        # --------------------------------------------------------
+        # 🔥 UTILIZAÇÃO REAL
+        # --------------------------------------------------------
         dem_base["Utilizacao_Real"] = np.where(
+
             dem_base["Capacidade_DEM"] > 0,
-            (dem_base["Carga_DEM"] / dem_base["Capacidade_DEM"]) * 100,
+
+            (
+                dem_base["Carga_DEM"]
+                /
+                dem_base["Capacidade_DEM"]
+            ) * 100,
+
             0
         )
 
-        # merge com gargalos (mantém tudo que você já tinha)
+        dem_base["Utilizacao_Real"] = (
+            pd.to_numeric(
+                dem_base["Utilizacao_Real"],
+                errors="coerce"
+            )
+            .replace([np.inf, -np.inf], 0)
+            .fillna(0)
+        )
+
+        # --------------------------------------------------------
+        # 🔥 MERGE OFICIAL
+        # --------------------------------------------------------
         gargalos = gargalos.merge(
-            dem_base[["Processo", "Utilizacao_Real"]],
+            dem_base[
+                [
+                    "Processo",
+                    "Carga_DEM",
+                    "Capacidade_DEM",
+                    "Utilizacao_Real"
+                ]
+            ],
             on="Processo",
             how="left"
         )
 
     else:
+
+        gargalos["Carga_DEM"] = 0
+        gargalos["Capacidade_DEM"] = 0
         gargalos["Utilizacao_Real"] = 0
 
     # ------------------------------------------------------------
-    # 🔥 PESO DE RESTRIÇÃO (MANTIDO)
+    # 🔒 PÓS-MERGE
     # ------------------------------------------------------------
-    gargalos["Recursos"] = gargalos["Processo"].apply(lambda p: MAQUINAS.get(p, 0))
+    for col in [
+        "Carga_DEM",
+        "Capacidade_DEM",
+        "Utilizacao_Real"
+    ]:
 
+        gargalos[col] = (
+            pd.to_numeric(
+                gargalos[col],
+                errors="coerce"
+            )
+            .replace([np.inf, -np.inf], 0)
+            .fillna(0)
+        )
+
+    # ------------------------------------------------------------
+    # 🔥 RECURSOS REAIS
+    # ------------------------------------------------------------
+    gargalos["Recursos"] = (
+        gargalos["Processo"]
+        .apply(
+            lambda p: MAQUINAS.get(p, 0)
+        )
+    )
+
+    gargalos["Recursos"] = (
+        pd.to_numeric(
+            gargalos["Recursos"],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+
+    # ------------------------------------------------------------
+    # 🔥 PESO DE RESTRIÇÃO
+    # ------------------------------------------------------------
     gargalos["Peso_Recurso"] = np.where(
+
         gargalos["Recursos"] > 0,
+
         1 / gargalos["Recursos"],
+
         0
     )
 
+    gargalos["Peso_Recurso"] = (
+        pd.to_numeric(
+            gargalos["Peso_Recurso"],
+            errors="coerce"
+        )
+        .replace([np.inf, -np.inf], 0)
+        .fillna(0)
+    )
+
     # ------------------------------------------------------------
-    # 🔥 SCORE CORRIGIDO (SEM DISTORCER REALIDADE)
+    # 🔥 SCORE REAL
     # ------------------------------------------------------------
     gargalos["Score_Gargalo"] = (
-        (gargalos["Utilizacao_Real"] * 0.7) +   # 🔥 BASE REAL (principal)
-        (gargalos["Peso_Recurso"] * 50) +       # restrição física
-        (gargalos["Fila_Media"] * 2.0)          # apoio (não dominante)
+
+        (gargalos["Utilizacao_Real"] * 0.7)
+
+        +
+
+        (gargalos["Peso_Recurso"] * 50)
+
+        +
+
+        (gargalos["Fila_Media"] * 2.0)
+
+    )
+
+    gargalos["Score_Gargalo"] = (
+        pd.to_numeric(
+            gargalos["Score_Gargalo"],
+            errors="coerce"
+        )
+        .replace([np.inf, -np.inf], 0)
+        .fillna(0)
     )
 
     # ------------------------------------------------------------
-    # ORDENAÇÃO FINAL
+    # 🔥 ORDENAÇÃO FINAL
     # ------------------------------------------------------------
-    gargalos = gargalos.sort_values(
-        ["Score_Gargalo", "Utilizacao_Real"],
-        ascending=[False, False]
-    ).reset_index(drop=True)
-
-    # ------------------------------------------------------------
-    # 🔥 DEFINIÇÕES FINAIS CORRETAS
-    # ------------------------------------------------------------
-    gargalo_raiz = gargalos.iloc[0]["Processo"]
-
-    # Gargalo imediato = MAIOR FILA (continua válido)
-    gargalo_imediato = (
-        df.groupby("Processo")["Fila (dias)"]
-        .sum()
-        .sort_values(ascending=False)
-        .index[0]
+    gargalos = (
+        gargalos.sort_values(
+            by=[
+                "Score_Gargalo",
+                "Utilizacao_Real",
+                "Fila_Total",
+                "Carga_Total"
+            ],
+            ascending=[
+                False,
+                False,
+                False,
+                False
+            ]
+        )
+        .reset_index(drop=True)
     )
+
+    # ------------------------------------------------------------
+    # 🔥 DEFINIÇÕES EXECUTIVAS
+    # ------------------------------------------------------------
+    gargalo_raiz = None
+    gargalo_imediato_fila = None
+    gargalo_imediato_carga = None
+
+    if not gargalos.empty:
+
+        # --------------------------------------------------------
+        # 🧠 GARGALO RAIZ
+        # --------------------------------------------------------
+        gargalo_raiz = (
+            gargalos.iloc[0]["Processo"]
+        )
+
+        # --------------------------------------------------------
+        # 🔥 GARGALO IMEDIATO OPERACIONAL
+        # --------------------------------------------------------
+        gargalo_imediato_fila = (
+
+            gargalos.sort_values(
+                by=[
+                    "Fila_Total",
+                    "Fila_Media"
+                ],
+                ascending=[
+                    False,
+                    False
+                ]
+            )
+
+            .iloc[0]["Processo"]
+        )
+
+        # --------------------------------------------------------
+        # 📦 GARGALO POR CARGA
+        # --------------------------------------------------------
+        gargalo_imediato_carga = (
+
+            gargalos.sort_values(
+                by=[
+                    "Carga_Total"
+                ],
+                ascending=False
+            )
+
+            .iloc[0]["Processo"]
+        )
 
 else:
+
     gargalos = pd.DataFrame()
+
     gargalo_raiz = None
-    gargalo_imediato = None
+
+    gargalo_imediato_fila = None
+
+    gargalo_imediato_carga = None
 
 
 # ===============================
@@ -2364,37 +2584,102 @@ st.subheader("🔥 Destaques da Operação")
 
 d1, d2, d3, d4 = st.columns(4)
 
+
+
+
 # ------------------------------------------------------------
-# 🔥 GARGALO IMEDIATO (COM FALLBACK INTELIGENTE)
+# 🔥 GARGALO IMEDIATO (OPERACIONAL)
 # ------------------------------------------------------------
-gargalo_imediato = None
+# Representa:
+# - maior pressão operacional imediata
+# - maior impacto de fila
+# ------------------------------------------------------------
+
+gargalo_exec_operacional = None
 
 try:
-    df_dash_tmp = montar_mini_dashboard_gargalos(df, df_baixas_ativas)
 
-    if df_dash_tmp is not None and not df_dash_tmp.empty:
-        resumo_tmp = resumo_cards_gargalos(df_dash_tmp)
-        gargalo_imediato = resumo_tmp.get("gargalo_critico", None)
+    # --------------------------------------------------------
+    # 🔥 USA BASE REAL DO NOVO NÚCLEO
+    # --------------------------------------------------------
+    if (
+        "gargalo_imediato_fila" in locals()
+        and gargalo_imediato_fila
+    ):
 
-except Exception as e:
-    gargalo_imediato = None
+        gargalo_exec_operacional = (
+            gargalo_imediato_fila
+        )
 
-# 🔁 FALLBACK (GARANTE QUE NUNCA FIQUE VAZIO)
-if not gargalo_imediato or gargalo_imediato == "-":
+    # --------------------------------------------------------
+    # 🔁 FALLBACK INTELIGENTE
+    # --------------------------------------------------------
+    else:
+
+        df_dash_tmp = montar_mini_dashboard_gargalos(
+            df,
+            df_baixas_ativas
+        )
+
+        if (
+            df_dash_tmp is not None
+            and not df_dash_tmp.empty
+        ):
+
+            resumo_tmp = resumo_cards_gargalos(
+                df_dash_tmp
+            )
+
+            gargalo_exec_operacional = (
+                resumo_tmp.get(
+                    "gargalo_critico",
+                    None
+                )
+            )
+
+except Exception:
+
+    gargalo_exec_operacional = None
+
+# ------------------------------------------------------------
+# 🔁 FALLBACK FINAL
+# ------------------------------------------------------------
+if (
+    not gargalo_exec_operacional
+    or gargalo_exec_operacional == "-"
+):
+
     try:
-        gargalo_imediato = (
-            df.groupby("Processo")["Horas"]
+
+        gargalo_exec_operacional = (
+
+            df.groupby("Processo")["Fila (dias)"]
+
             .sum()
+
             .sort_values(ascending=False)
+
             .index[0]
         )
-    except:
-        gargalo_imediato = None
 
+    except:
+
+        gargalo_exec_operacional = None
+
+# ------------------------------------------------------------
+# 🔥 MÉTRICA EXECUTIVA
+# ------------------------------------------------------------
 d1.metric(
     "🔥 Gargalo Imediato (Operacional)",
-    gargalo_imediato if gargalo_imediato else "N/D"
+    (
+        gargalo_exec_operacional
+        if gargalo_exec_operacional
+        else "N/D"
+    )
 )
+
+
+
 
 # ------------------------------------------------------------
 # 📊 GARGALO DE CAPACIDADE
