@@ -1689,9 +1689,6 @@ ano_ref = int(df["Ano"].mode()[0])
 horas_mes = horas_uteis_mes(ano_ref, mes_ref)
 total_recursos = sum(MAQUINAS.values())
 
-
-
-
 # ===============================
 # FILA REAL POR PROCESSO
 # ===============================
@@ -1713,15 +1710,18 @@ df = (
 )
 
 # ------------------------------------------------------------
-# 🔥 GARANTE NUMÉRICO REAL
+# 🔥 GARANTE NUMÉRICO
 # ------------------------------------------------------------
-df["Horas"] = pd.to_numeric(
-    df["Horas"],
-    errors="coerce"
-).fillna(0)
+df["Horas"] = (
+    pd.to_numeric(
+        df["Horas"],
+        errors="coerce"
+    )
+    .fillna(0)
+)
 
 # ------------------------------------------------------------
-# 🔥 SOMENTE SALDO REAL
+# 🔥 SOMENTE SALDO OPERACIONAL REAL
 # ------------------------------------------------------------
 df = df[
     df["Horas"] > 0.0001
@@ -1743,6 +1743,73 @@ df["Fila Acumulada (h)"] = (
         df["Fila Acumulada (h)"],
         errors="coerce"
     )
+    .fillna(0)
+)
+
+# ------------------------------------------------------------
+# 🔥 CAPACIDADE DIÁRIA REAL
+# ------------------------------------------------------------
+def capacidade_diaria_real(processo):
+    """
+    Capacidade média diária operacional por processo.
+    Usada para estimativa contínua de fila.
+    """
+
+    recursos = MAQUINAS.get(processo, 0)
+
+    if recursos <= 0:
+        return 0
+
+    return (
+        HORAS_DIA_UTIL_MEDIA
+        * recursos
+        * EFICIENCIA
+    )
+
+# ------------------------------------------------------------
+# 🔥 CAPACIDADE DIÁRIA POR PROCESSO
+# ------------------------------------------------------------
+df["Capacidade Diária Real (h)"] = (
+    df["Processo"]
+    .apply(capacidade_diaria_real)
+)
+
+# ------------------------------------------------------------
+# 🔥 FILA OPERACIONAL EM DIAS
+# ------------------------------------------------------------
+df["Fila (dias)"] = np.where(
+
+    pd.to_numeric(
+        df["Capacidade Diária Real (h)"],
+        errors="coerce"
+    ).fillna(0) > 0,
+
+    (
+        pd.to_numeric(
+            df["Fila Acumulada (h)"],
+            errors="coerce"
+        ).fillna(0)
+
+        /
+
+        pd.to_numeric(
+            df["Capacidade Diária Real (h)"],
+            errors="coerce"
+        ).fillna(0)
+    ),
+
+    0
+)
+
+# ------------------------------------------------------------
+# 🔒 BLINDAGEM FINAL
+# ------------------------------------------------------------
+df["Fila (dias)"] = (
+    pd.to_numeric(
+        df["Fila (dias)"],
+        errors="coerce"
+    )
+    .replace([np.inf, -np.inf], 0)
     .fillna(0)
 )
 
