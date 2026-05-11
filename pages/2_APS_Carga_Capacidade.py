@@ -4451,6 +4451,43 @@ if "CHAVE_OPERACAO" not in base_corte.columns:
     )
 
 
+
+# ========================================================
+# 🔥 LABEL VISUAL
+# ========================================================
+base_corte["LABEL"] = (
+
+    "PV "
+    + base_corte["PV"].astype(str)
+
+    + " | "
+
+    + base_corte["Processo"].astype(str)
+
+    + " | "
+
+    + base_corte["CODIGO_PV"].astype(str)
+
+    + " | SALDO: "
+
+    + base_corte["Saldo_Horas"]
+    .round(2)
+    .astype(str)
+
+    + " h"
+)
+
+# ========================================================
+# 🔥 OPÇÕES DO LOTE
+# ========================================================
+opcoes = (
+    base_corte["LABEL"]
+    .drop_duplicates()
+    .tolist()
+)
+
+
+
 # ========================================================
 # 🔥 OPÇÕES DO LOTE
 # ========================================================
