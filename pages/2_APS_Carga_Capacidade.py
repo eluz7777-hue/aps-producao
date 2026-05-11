@@ -294,7 +294,7 @@ def salvar_baixa_sqlite(nova_baixa):
 
         try:
 
-            base_oper = df[
+            base_oper = df_operacional[
                 df_operacional[
                     "CHAVE_OPERACAO"
                 ] == chave_operacao
