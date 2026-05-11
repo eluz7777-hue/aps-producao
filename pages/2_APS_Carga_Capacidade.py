@@ -1689,29 +1689,64 @@ ano_ref = int(df["Ano"].mode()[0])
 horas_mes = horas_uteis_mes(ano_ref, mes_ref)
 total_recursos = sum(MAQUINAS.values())
 
+
+
+
 # ===============================
 # FILA REAL POR PROCESSO
 # ===============================
-df = df.sort_values(by=["Processo", "Data", "PV"]).reset_index(drop=True)
-df["Fila Acumulada (h)"] = df.groupby("Processo")["Horas"].cumsum()
 
-def capacidade_diaria_real(processo):
-    """
-    Capacidade média diária operacional por processo.
-    Usada para estimativa contínua de fila.
-    """
-    recursos = MAQUINAS.get(processo, 0)
-    if recursos <= 0:
-        return 0
-    return HORAS_DIA_UTIL_MEDIA * recursos * EFICIENCIA
-
-df["Capacidade Diária Real (h)"] = df["Processo"].apply(capacidade_diaria_real)
-
-df["Fila (dias)"] = np.where(
-    df["Capacidade Diária Real (h)"] > 0,
-    df["Fila Acumulada (h)"] / df["Capacidade Diária Real (h)"],
-    0
+# ------------------------------------------------------------
+# 🔒 ORDENAÇÃO OFICIAL APS
+# ------------------------------------------------------------
+df = (
+    df.sort_values(
+        by=[
+            "Processo",
+            "Data",
+            "PV",
+            "Horas"
+        ],
+        ascending=[True, True, True, False]
+    )
+    .reset_index(drop=True)
 )
+
+# ------------------------------------------------------------
+# 🔥 GARANTE NUMÉRICO REAL
+# ------------------------------------------------------------
+df["Horas"] = pd.to_numeric(
+    df["Horas"],
+    errors="coerce"
+).fillna(0)
+
+# ------------------------------------------------------------
+# 🔥 SOMENTE SALDO REAL
+# ------------------------------------------------------------
+df = df[
+    df["Horas"] > 0.0001
+].copy()
+
+# ------------------------------------------------------------
+# 🔥 FILA ACUMULADA REAL
+# ------------------------------------------------------------
+df["Fila Acumulada (h)"] = (
+    df.groupby("Processo")["Horas"]
+    .cumsum()
+)
+
+# ------------------------------------------------------------
+# 🔒 BLINDAGEM
+# ------------------------------------------------------------
+df["Fila Acumulada (h)"] = (
+    pd.to_numeric(
+        df["Fila Acumulada (h)"],
+        errors="coerce"
+    )
+    .fillna(0)
+)
+
+
 
 
 # ===============================
