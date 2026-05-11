@@ -4500,6 +4500,18 @@ opcoes = (
 
 
 # ========================================================
+# 🔒 SESSION STATE LOTE
+# ========================================================
+if "reset_corte_lote" not in st.session_state:
+    st.session_state["reset_corte_lote"] = False
+
+if "lock_baixa_lote" not in st.session_state:
+    st.session_state["lock_baixa_lote"] = False
+
+
+
+
+# ========================================================
 # 📦 BAIXA EM LOTE (BLINDADA)
 # ========================================================
 st.markdown("#### 📦 Baixa em Lote")
