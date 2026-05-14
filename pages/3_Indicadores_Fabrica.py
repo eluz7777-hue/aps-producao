@@ -1,8 +1,73 @@
 import streamlit as st
 import pandas as pd
 import os
+import sqlite3
 import plotly.express as px
 from datetime import datetime
+
+
+# ============================================================
+# 🗄️ SQLITE — INDICADORES ISO
+# ============================================================
+
+CAMINHO_DB_INDICADORES = "data/indicadores_iso.db"
+
+# ------------------------------------------------------------
+# 🔥 CONEXÃO
+# ------------------------------------------------------------
+def get_conn_indicadores():
+
+    conn = sqlite3.connect(
+        CAMINHO_DB_INDICADORES,
+        check_same_thread=False
+    )
+
+    return conn
+
+# ------------------------------------------------------------
+# 🔥 CRIA TABELA OFICIAL
+# ------------------------------------------------------------
+def criar_tabela_indicadores():
+
+    conn = get_conn_indicadores()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+
+        CREATE TABLE IF NOT EXISTS indicadores_iso (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            setor TEXT,
+            indicador TEXT,
+
+            ano INTEGER,
+            mes TEXT,
+
+            valor REAL,
+            meta REAL,
+
+            tipo TEXT,
+
+            arquivo_evidencia TEXT,
+
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+
+    """)
+
+    conn.commit()
+
+    conn.close()
+
+# ------------------------------------------------------------
+# 🔥 GARANTE ESTRUTURA
+# ------------------------------------------------------------
+criar_tabela_indicadores()
+
+
+
 
 
 # ============================================================
