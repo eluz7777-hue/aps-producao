@@ -636,17 +636,57 @@ with tab2:
         "Jul","Ago","Set","Out","Nov","Dez"
     ]
 
-    # ========================================================
-    # 📁 ARQUIVO OFICIAL
-    # ========================================================
-    caminho_excel = os.path.abspath(
-        "data/Indicadores_qualidade/Indicadores_Qualidade_2026.xlsx"
+   
+
+# ========================================================
+# 📁 ARQUIVO OFICIAL
+# ========================================================
+pastas_possiveis = [
+
+    os.path.abspath(
+        "data/Indicadores de Qualidade"
+    ),
+
+    os.path.abspath(
+        "data/Indicadores_qualidade"
     )
+]
+
+caminho_excel = None
+
+# ========================================================
+# 🔍 PROCURA AUTOMÁTICA
+# ========================================================
+for pasta in pastas_possiveis:
+
+    if not os.path.exists(pasta):
+        continue
+
+    arquivos_xlsx = [
+
+        arq for arq in os.listdir(pasta)
+
+        if arq.lower().endswith(".xlsx")
+    ]
+
+    if not arquivos_xlsx:
+        continue
+
+    caminho_excel = os.path.join(
+
+        pasta,
+
+        arquivos_xlsx[0]
+    )
+
+    break
+
+
 
     # ========================================================
     # 🚨 EXISTÊNCIA
     # ========================================================
-    if not os.path.exists(caminho_excel):
+    if caminho_excel is None:
 
         st.error(
             "Arquivo da Qualidade não encontrado."
