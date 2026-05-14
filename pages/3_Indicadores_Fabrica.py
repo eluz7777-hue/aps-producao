@@ -268,12 +268,15 @@ with tab1:
 
                             texto_completo.append(texto)
 
+            # ------------------------------------------------
+            # 🔥 TEXTO FINAL
+            # ------------------------------------------------
             texto_completo = " ".join(
                 texto_completo
             )
 
             # ------------------------------------------------
-            # 🔥 IDENTIFICA MESES
+            # 🔥 IDENTIFICA MESES DO EIXO X
             # ------------------------------------------------
             meses_encontrados = re.findall(
 
@@ -283,65 +286,77 @@ with tab1:
             )
 
             # ------------------------------------------------
-            # 🔥 LOCALIZA BLOCO REAL DO GRÁFICO
+            # 🔥 IDENTIFICA TODOS OS PERCENTUAIS
             # ------------------------------------------------
-            bloco_indicador = ""
-
-            match_bloco = re.search(
-
-                r"Jan\/26.*?ACM\/2026(.*?)Indicador Comercial",
-
-                texto_completo,
-
-                re.DOTALL
-            )
-
-            if match_bloco:
-
-                bloco_indicador = (
-                    match_bloco.group(1)
-                )
-
-            # ------------------------------------------------
-            # 🔥 IDENTIFICA SOMENTE PERCENTUAIS DAS BARRAS
-            # ------------------------------------------------
-            percentuais = re.findall(
+            todos_percentuais = re.findall(
 
                 r"(\d+)%",
 
-                bloco_indicador
+                texto_completo
             )
 
             # ------------------------------------------------
             # 🔥 CONVERSÃO NUMÉRICA
             # ------------------------------------------------
-            percentuais = [
+            todos_percentuais = [
 
-                int(p) / 100
+                int(p)
 
-                for p in percentuais
+                for p in todos_percentuais
             ]
+
+            # ------------------------------------------------
+            # 🔥 REMOVE ESCALA DO EIXO Y
+            # ------------------------------------------------
+            # Escala padrão:
+            # 0,5,10,15...100
+            # Total = 21 valores
+            # ------------------------------------------------
+            escala_eixo_y = [
+                0,5,10,15,20,25,30,35,40,45,
+                50,55,60,65,70,75,80,85,90,95,100
+            ]
+
+            percentuais_reais = []
+
+            for valor in todos_percentuais:
+
+                if valor in escala_eixo_y:
+                    continue
+
+                percentuais_reais.append(valor)
 
             # ------------------------------------------------
             # 🔥 REMOVE ACM FINAL
             # ------------------------------------------------
-            if len(percentuais) >= 13:
+            # O último percentual é o ACM
+            # ------------------------------------------------
+            acm_extraido = None
 
-                percentuais = percentuais[:12]
+            if len(percentuais_reais) >= 1:
+
+                acm_extraido = (
+                    percentuais_reais[-1] / 100
+                )
 
             # ------------------------------------------------
-            # 🔥 GARANTE 12 MESES
+            # 🔥 SOMENTE MESES
             # ------------------------------------------------
-            while len(percentuais) < 12:
+            percentuais_meses = percentuais_reais[:-1]
 
-                percentuais.append(0)
+            # ------------------------------------------------
+            # 🔥 GARANTE 12 POSIÇÕES
+            # ------------------------------------------------
+            while len(percentuais_meses) < 12:
+
+                percentuais_meses.append(0)
 
             # ------------------------------------------------
             # 🔥 MONTA BASE OFICIAL
             # ------------------------------------------------
             for idx, mes_docx in enumerate(meses_encontrados):
 
-                if idx >= len(percentuais):
+                if idx >= len(percentuais_meses):
                     continue
 
                 mes_curto = mapa_meses_docx.get(
@@ -351,10 +366,12 @@ with tab1:
                 if not mes_curto:
                     continue
 
-                valor = percentuais[idx]
+                valor = (
+                    percentuais_meses[idx] / 100
+                )
 
                 # --------------------------------------------
-                # 🔥 IGNORA MESES FUTUROS ZERADOS
+                # 🔥 IGNORA FUTUROS ZERADOS
                 # --------------------------------------------
                 if valor <= 0:
                     continue
@@ -408,7 +425,7 @@ with tab1:
             arquivos.append(None)
 
     # ========================================================
-    # 📊 MÉDIA ACUMULADA (ACM)
+    # 📊 ACM
     # ========================================================
     valores_validos = [
 
@@ -417,16 +434,22 @@ with tab1:
         if v is not None
     ]
 
-    media_acm = (
+    if acm_extraido is not None:
 
-        sum(valores_validos)
+        media_acm = acm_extraido
 
-        /
+    else:
 
-        len(valores_validos)
+        media_acm = (
 
-        if valores_validos else None
-    )
+            sum(valores_validos)
+
+            /
+
+            len(valores_validos)
+
+            if valores_validos else None
+        )
 
     # ========================================================
     # 📊 DATAFRAME
@@ -464,7 +487,7 @@ with tab1:
     )
 
     # ========================================================
-    # 🏷️ RÓTULOS
+    # 🏷️ LABELS
     # ========================================================
     def formatar(row):
 
