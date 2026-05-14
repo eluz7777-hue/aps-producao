@@ -1327,28 +1327,19 @@ with tab3:
         base["PV"].str.lower() != "nan"
     ]
 
+    # ========================================================
+    # 🔥 TOTAL REAL DE PVs
+    # ========================================================
+    total_pvs = (
 
+        base["PV"]
 
+        .astype(str)
 
-# ========================================================
-# 🔥 TOTAL REAL DE PVs
-# ========================================================
-#
-# O APS possui múltiplas linhas por processo.
-# Precisamos consolidar PV única.
-#
-total_pvs = (
+        .str.strip()
 
-    base["PV"]
-
-    .astype(str)
-
-    .str.strip()
-
-    .nunique()
-)
-
-
+        .nunique()
+    )
 
     # ========================================================
     # 📅 DATA APS
@@ -1403,8 +1394,15 @@ total_pvs = (
     # ========================================================
     # 📊 KPIs
     # ========================================================
-    qtd_atrasadas = len(
-        atrasadas
+    qtd_atrasadas = (
+
+        atrasadas["PV"]
+
+        .astype(str)
+
+        .str.strip()
+
+        .nunique()
     )
 
     pct = (
@@ -1446,6 +1444,16 @@ total_pvs = (
     )
 
     if qtd_atrasadas > 0:
+
+        atrasadas = (
+
+            atrasadas[[
+                "PV",
+                "Atraso_dias"
+            ]]
+
+            .drop_duplicates()
+        )
 
         atrasadas["Atraso_dias"] = (
 
@@ -1774,6 +1782,9 @@ total_pvs = (
     # ========================================================
     fig2 = go.Figure()
 
+    # --------------------------------------------------------
+    # 🔴 CARGA PLANEJADA
+    # --------------------------------------------------------
     fig2.add_bar(
 
         name="Carga Planejada",
@@ -1781,6 +1792,8 @@ total_pvs = (
         x=resumo_cap["Processo"],
 
         y=resumo_cap["Carga"],
+
+        marker_color="#d62728",
 
         text=(
             resumo_cap["Carga"]
@@ -1790,6 +1803,9 @@ total_pvs = (
         textposition="outside"
     )
 
+    # --------------------------------------------------------
+    # 🔵 CAPACIDADE DISPONÍVEL
+    # --------------------------------------------------------
     fig2.add_bar(
 
         name="Capacidade Disponível",
@@ -1797,6 +1813,8 @@ total_pvs = (
         x=resumo_cap["Processo"],
 
         y=resumo_cap["Capacidade"],
+
+        marker_color="#1f77b4",
 
         text=(
             resumo_cap["Capacidade"]
@@ -1819,7 +1837,9 @@ total_pvs = (
 
         xaxis_title="Processo",
 
-        yaxis_title="Horas"
+        yaxis_title="Horas",
+
+        legend_title="Indicadores"
     )
 
     st.plotly_chart(
@@ -1874,7 +1894,6 @@ total_pvs = (
             ],
             use_container_width=True
         )
-
 
 
 
