@@ -156,16 +156,17 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 
+
+
+
 # ============================================================
-# 💰 COMERCIAL — COMPLETO (LEITURA AUTOMÁTICA DOCX)
+# 💰 COMERCIAL — LEITURA VIA EXCEL OFICIAL
 # ============================================================
 
 with tab1:
 
     import os
     import re
-
-    from docx import Document
 
     st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
     st.caption("Meta: ≥ 25%")
@@ -174,9 +175,11 @@ with tab1:
     META = 0.25
 
     # ========================================================
-    # 📁 PASTA OFICIAL
+    # 📁 ARQUIVO OFICIAL
     # ========================================================
-    caminho_base = "data/Indicadores Comerciais"
+    caminho_excel = (
+        "data/Indicadores Comerciais/INDICADOR  COMERCIAL.xlsx"
+    )
 
     # ========================================================
     # 📊 ORDEM DOS MESES
@@ -187,166 +190,91 @@ with tab1:
     ]
 
     # ========================================================
-    # 🔥 MAPA OFICIAL
-    # ========================================================
-    mapa_meses_docx = {
-        "Jan/26": "Jan",
-        "Fev/26": "Fev",
-        "Mar/26": "Mar",
-        "Abr/26": "Abr",
-        "Mai/26": "Mai",
-        "Jun/26": "Jun",
-        "Jul/26": "Jul",
-        "Ago/26": "Ago",
-        "Set/26": "Set",
-        "Out/26": "Out",
-        "Nov/26": "Nov",
-        "Dez/26": "Dez"
-    }
-
-    # ========================================================
-    # 🔥 LEITURA AUTOMÁTICA DOCX
+    # 🔥 BASE OFICIAL
     # ========================================================
     indicador_comercial = {}
 
-    arquivos_docx = []
-
-    if os.path.exists(caminho_base):
-
-        arquivos_docx = [
-
-            arq for arq in os.listdir(caminho_base)
-
-            if arq.lower().endswith(".docx")
-        ]
-
-    # --------------------------------------------------------
-    # 🔥 PROCESSA TODOS OS DOCX
-    # --------------------------------------------------------
-    for arquivo_docx in arquivos_docx:
-
-        caminho_docx = os.path.join(
-            caminho_base,
-            arquivo_docx
-        )
+    # ========================================================
+    # 🔥 LEITURA EXCEL
+    # ========================================================
+    if os.path.exists(caminho_excel):
 
         try:
 
-            doc = Document(caminho_docx)
-
-            texto_completo = []
-
             # ------------------------------------------------
-            # 🔥 PARÁGRAFOS
+            # 🔥 LEITURA BRUTA
             # ------------------------------------------------
-            for paragrafo in doc.paragraphs:
-
-                texto = (
-                    paragrafo.text
-                    .strip()
-                )
-
-                if texto:
-
-                    texto_completo.append(texto)
-
-            # ------------------------------------------------
-            # 🔥 TABELAS
-            # ------------------------------------------------
-            for tabela in doc.tables:
-
-                for linha in tabela.rows:
-
-                    for celula in linha.cells:
-
-                        texto = (
-                            celula.text
-                            .strip()
-                        )
-
-                        if texto:
-
-                            texto_completo.append(texto)
-
-            # ------------------------------------------------
-            # 🔥 TEXTO FINAL
-            # ------------------------------------------------
-            texto_completo = " ".join(
-                texto_completo
+            df_excel = pd.read_excel(
+                caminho_excel,
+                header=None
             )
 
             # ------------------------------------------------
-            # 🔥 IDENTIFICA MESES DO EIXO X
+            # 🔥 TRANSFORMA EM TEXTO
             # ------------------------------------------------
-            meses_encontrados = re.findall(
+            texto_excel = " ".join(
 
-                r"(Jan\/26|Fev\/26|Mar\/26|Abr\/26|Mai\/26|Jun\/26|Jul\/26|Ago\/26|Set\/26|Out\/26|Nov\/26|Dez\/26)",
-
-                texto_completo
+                df_excel.astype(str)
+                .fillna("")
+                .values
+                .flatten()
+                .tolist()
             )
 
             # ------------------------------------------------
-            # 🔥 IDENTIFICA TODOS OS PERCENTUAIS
+            # 🔥 EXTRAI PERCENTUAIS
             # ------------------------------------------------
-            todos_percentuais = re.findall(
+            percentuais = re.findall(
 
                 r"(\d+)%",
 
-                texto_completo
+                texto_excel
             )
 
             # ------------------------------------------------
             # 🔥 CONVERSÃO NUMÉRICA
             # ------------------------------------------------
-            todos_percentuais = [
+            percentuais = [
 
                 int(p)
 
-                for p in todos_percentuais
+                for p in percentuais
             ]
 
             # ------------------------------------------------
-            # 🔥 REMOVE ESCALA DO EIXO Y POR POSIÇÃO
+            # 🔥 REMOVE ESCALA DO EIXO Y
             # ------------------------------------------------
-            # Estrutura padrão do DOCX:
+            # Estrutura:
             #
-            # 1️⃣ Escala eixo Y:
-            # 0,5,10,15...100
-            #
-            # 2️⃣ Depois:
-            # valores reais das barras
-            #
-            # Portanto removemos os
-            # 21 primeiros percentuais.
+            # 0,5,10...100
+            # = 21 valores
             # ------------------------------------------------
-            percentuais_reais = []
+            if len(percentuais) > 21:
 
-            if len(todos_percentuais) > 21:
-
-                percentuais_reais = (
-                    todos_percentuais[21:]
+                percentuais = (
+                    percentuais[21:]
                 )
 
             else:
 
-                percentuais_reais = []
+                percentuais = []
 
             # ------------------------------------------------
             # 🔥 ACM EXTRAÍDO
             # ------------------------------------------------
             acm_extraido = None
 
-            if len(percentuais_reais) >= 1:
+            if len(percentuais) >= 1:
 
                 acm_extraido = (
-                    percentuais_reais[-1] / 100
+                    percentuais[-1] / 100
                 )
 
             # ------------------------------------------------
             # 🔥 REMOVE ACM DOS MESES
             # ------------------------------------------------
             percentuais_meses = (
-                percentuais_reais[:-1]
+                percentuais[:-1]
             )
 
             # ------------------------------------------------
@@ -359,16 +287,9 @@ with tab1:
             # ------------------------------------------------
             # 🔥 MONTA BASE OFICIAL
             # ------------------------------------------------
-            for idx, mes_docx in enumerate(meses_encontrados):
+            for idx, mes in enumerate(meses_ordem):
 
                 if idx >= len(percentuais_meses):
-                    continue
-
-                mes_curto = mapa_meses_docx.get(
-                    mes_docx
-                )
-
-                if not mes_curto:
                     continue
 
                 valor = (
@@ -381,18 +302,26 @@ with tab1:
                 if valor <= 0:
                     continue
 
-                indicador_comercial[mes_curto] = {
+                indicador_comercial[mes] = {
 
                     "valor": valor,
 
-                    "arquivo": arquivo_docx
+                    "arquivo": (
+                        "INDICADOR  COMERCIAL.xlsx"
+                    )
                 }
 
         except Exception as e:
 
-            st.warning(
-                f"Erro ao ler {arquivo_docx}: {e}"
+            st.error(
+                f"Erro ao ler Excel Comercial: {e}"
             )
+
+    else:
+
+        st.warning(
+            "Arquivo Excel do Comercial não encontrado."
+        )
 
     # ========================================================
     # 🔥 GARANTE ORDEM
@@ -439,22 +368,31 @@ with tab1:
         if v is not None
     ]
 
+    # --------------------------------------------------------
+    # 🔥 GARANTE EXISTÊNCIA
+    # --------------------------------------------------------
+    acm_extraido = None
+
+    # --------------------------------------------------------
+    # 🔥 ACM CALCULADO
+    # --------------------------------------------------------
+    media_acm = (
+
+        sum(valores_validos)
+
+        /
+
+        len(valores_validos)
+
+        if valores_validos else None
+    )
+
+    # --------------------------------------------------------
+    # 🔥 PRIORIZA ACM EXTRAÍDO
+    # --------------------------------------------------------
     if acm_extraido is not None:
 
         media_acm = acm_extraido
-
-    else:
-
-        media_acm = (
-
-            sum(valores_validos)
-
-            /
-
-            len(valores_validos)
-
-            if valores_validos else None
-        )
 
     # ========================================================
     # 📊 DATAFRAME
@@ -531,17 +469,17 @@ with tab1:
     )
 
     # --------------------------------------------------------
-    # 🔥 META
+    # 🔥 META 25%
     # --------------------------------------------------------
     fig.add_hline(
 
-        y=META * 100,
+        y=25,
 
         line_dash="dash",
 
         line_color="red",
 
-        annotation_text="Meta",
+        annotation_text="Meta 25%",
 
         annotation_position="top left"
     )
@@ -558,8 +496,8 @@ with tab1:
         range=[
             0,
             max(
-                max_val * 1.2 if pd.notna(max_val) else 1,
-                META * 100 * 1.2
+                max_val * 1.2 if pd.notna(max_val) else 30,
+                30
             )
         ]
     )
@@ -599,7 +537,7 @@ with tab1:
     if not meses_com_dado:
 
         st.warning(
-            "Nenhum dado válido encontrado nos arquivos DOCX."
+            "Nenhum dado válido encontrado no Excel Comercial."
         )
 
         st.stop()
@@ -660,31 +598,20 @@ with tab1:
         )
 
     # ========================================================
-    # 📎 EVIDÊNCIA ISO
+    # 📎 DOWNLOAD EXCEL
     # ========================================================
-    caminho_arquivo = os.path.join(
-        caminho_base,
-        arquivo
-    )
+    if os.path.exists(caminho_excel):
 
-    if os.path.exists(caminho_arquivo):
-
-        with open(caminho_arquivo, "rb") as file:
+        with open(caminho_excel, "rb") as file:
 
             st.download_button(
 
-                label="📎 Baixar evidência do mês",
+                label="📎 Baixar indicador comercial",
 
                 data=file,
 
-                file_name=arquivo
+                file_name="INDICADOR  COMERCIAL.xlsx"
             )
-
-    else:
-
-        st.warning(
-            "Arquivo de evidência não encontrado."
-        )
 
     # ========================================================
     # 🚨 REGRA ISO
