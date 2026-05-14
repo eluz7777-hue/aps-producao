@@ -1235,115 +1235,400 @@ with tab3:
     # 🔒 VALIDAÇÃO DA BASE
     # ========================================================
     if df_aps.empty:
-        st.warning("Abra o APS para visualizar os indicadores de produção.")
+
+        st.warning(
+            "Abra o APS para visualizar os indicadores de produção."
+        )
+
         st.stop()
 
+    # ========================================================
+    # 🔥 BASE ORIGINAL
+    # ========================================================
     base = df_aps.copy()
 
-    required_cols = ["PV", "DATA_ENTREGA_APS"]
+    # ========================================================
+    # 🔒 VALIDAÇÃO DE COLUNAS
+    # ========================================================
+    required_cols = [
 
-    if not all(col in base.columns for col in required_cols):
-        st.error("Colunas obrigatórias não encontradas na base do APS")
-        st.write("Colunas disponíveis:", base.columns.tolist())
+        "PV",
+        "DATA_ENTREGA_APS"
+    ]
+
+    faltando = [
+
+        c for c in required_cols
+
+        if c not in base.columns
+    ]
+
+    if faltando:
+
+        st.error(
+            f"Colunas obrigatórias não encontradas: {faltando}"
+        )
+
+        st.write(
+            "Colunas disponíveis:",
+            base.columns.tolist()
+        )
+
         st.stop()
 
     # ========================================================
-    # 📅 TRATAMENTO DE DATA
+    # 🔥 NORMALIZAÇÃO
     # ========================================================
-    base["DATA_ENTREGA_APS"] = pd.to_datetime(base["DATA_ENTREGA_APS"], errors="coerce")
+    base["PV"] = (
 
-    hoje = pd.Timestamp.today().normalize()
+        base["PV"]
+        .astype(str)
+        .str.strip()
+    )
+
+    # --------------------------------------------------------
+    # 🔥 REMOVE VAZIOS
+    # --------------------------------------------------------
+    base = base[
+
+        base["PV"].notna()
+    ]
+
+    base = base[
+
+        base["PV"] != ""
+    ]
+
+    base = base[
+
+        base["PV"].str.lower() != "nan"
+    ]
+
+    # ========================================================
+    # 📅 DATA APS
+    # ========================================================
+    base["DATA_ENTREGA_APS"] = pd.to_datetime(
+
+        base["DATA_ENTREGA_APS"],
+
+        errors="coerce"
+    )
+
+    # ========================================================
+    # 🔥 STATUS DE BAIXA
+    # ========================================================
+    colunas_status = [
+
+        "STATUS",
+        "Status",
+        "SITUACAO",
+        "Situacao",
+        "Situação",
+        "STATUS_PV",
+        "STATUS APS"
+    ]
+
+    coluna_status_real = None
+
+    for c in colunas_status:
+
+        if c in base.columns:
+
+            coluna_status_real = c
+            break
+
+    # ========================================================
+    # 🔥 REMOVE FINALIZADAS / ENCERRADAS
+    # ========================================================
+    if coluna_status_real is not None:
+
+        base[coluna_status_real] = (
+
+            base[coluna_status_real]
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+
+        status_fechados = [
+
+            "FINALIZADO",
+            "FINALIZADA",
+            "ENCERRADO",
+            "ENCERRADA",
+            "CONCLUÍDO",
+            "CONCLUIDO",
+            "BAIXADO",
+            "FECHADO",
+            "FATURADO"
+        ]
+
+        base = base[
+
+            ~base[coluna_status_real]
+            .isin(status_fechados)
+        ]
+
+    # ========================================================
+    # 🔥 REMOVE DUPLICIDADES REAIS
+    # ========================================================
+    base = base.drop_duplicates()
 
     # ========================================================
     # 📦 AGRUPAMENTO POR PV
     # ========================================================
-    pv = base.groupby("PV", as_index=False).agg(
-        data_entrega=("DATA_ENTREGA_APS", "min")
+    pv = (
+
+        base.groupby("PV", as_index=False)
+
+        .agg(
+
+            data_entrega=("DATA_ENTREGA_APS", "min")
+        )
     )
 
-    pv = pv.dropna(subset=["data_entrega"])
+    # ========================================================
+    # 🔥 REMOVE DATAS INVÁLIDAS
+    # ========================================================
+    pv = pv.dropna(
+        subset=["data_entrega"]
+    )
 
     # ========================================================
-    # 🚨 REGRA DE ATRASO (TEMPO REAL)
+    # 📅 DATA HOJE
     # ========================================================
-    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
-    pv["Atrasada"] = pv["Atraso_dias"] > 0
+    hoje = pd.Timestamp.today().normalize()
 
-    atrasadas = pv[pv["Atrasada"]].copy()
+    # ========================================================
+    # 🚨 REGRA DE ATRASO
+    # ========================================================
+    pv["Atraso_dias"] = (
+
+        hoje - pv["data_entrega"]
+
+    ).dt.days
+
+    pv["Atrasada"] = (
+
+        pv["Atraso_dias"] > 0
+    )
+
+    # ========================================================
+    # 🔥 BASE ATRASADAS
+    # ========================================================
+    atrasadas = pv[
+
+        pv["Atrasada"]
+    ].copy()
 
     # ========================================================
     # 📊 KPIs
     # ========================================================
     total = len(pv)
-    qtd_atrasadas = len(atrasadas)
-    pct = (qtd_atrasadas / total * 100) if total > 0 else 0
 
+    qtd_atrasadas = len(
+        atrasadas
+    )
+
+    pct = (
+
+        (qtd_atrasadas / total) * 100
+
+        if total > 0
+
+        else 0
+    )
+
+    # ========================================================
+    # 📊 CARDS
+    # ========================================================
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("🚨 Atraso (%)", f"{pct:.1f}%")
-    c2.metric("📦 PVs Atrasadas", qtd_atrasadas)
-    c3.metric("📦 Total PVs", total)
+    c1.metric(
+
+        "🚨 Atraso (%)",
+
+        f"{pct:.1f}%"
+    )
+
+    c2.metric(
+
+        "📦 PVs Atrasadas",
+
+        qtd_atrasadas
+    )
+
+    c3.metric(
+
+        "📦 Total PVs",
+
+        total
+    )
 
     st.divider()
 
     # ========================================================
-    # 📊 DISTRIBUIÇÃO POR FAIXAS (CORRETO)
+    # 📊 DISTRIBUIÇÃO POR FAIXA
     # ========================================================
-    st.subheader("📊 Distribuição do atraso por faixa (dias)")
+    st.subheader(
+        "📊 Distribuição do atraso por faixa (dias)"
+    )
 
     if qtd_atrasadas > 0:
 
-        # 🔒 GARANTE INTEIRO
-        atrasadas["Atraso_dias"] = atrasadas["Atraso_dias"].astype(int)
+        # ----------------------------------------------------
+        # 🔥 GARANTE INTEIRO
+        # ----------------------------------------------------
+        atrasadas["Atraso_dias"] = (
 
-        # 🔥 FAIXAS FIXAS (GESTÃO)
-        bins = [0, 2, 4, 6, 8, 10, 15, 20, 30, 9999]
+            atrasadas["Atraso_dias"]
+            .astype(int)
+        )
+
+        # ----------------------------------------------------
+        # 🔥 FAIXAS FIXAS
+        # ----------------------------------------------------
+        bins = [
+
+            0,
+            2,
+            4,
+            6,
+            8,
+            10,
+            15,
+            20,
+            30,
+            9999
+        ]
+
         labels = [
-            "1-2", "3-4", "5-6", "7-8", "9-10",
-            "11-15", "16-20", "21-30", "30+"
+
+            "1-2",
+            "3-4",
+            "5-6",
+            "7-8",
+            "9-10",
+            "11-15",
+            "16-20",
+            "21-30",
+            "30+"
         ]
 
         atrasadas["Faixa"] = pd.cut(
+
             atrasadas["Atraso_dias"],
+
             bins=bins,
+
             labels=labels,
+
             right=True
         )
 
+        # ----------------------------------------------------
+        # 📊 RESUMO
+        # ----------------------------------------------------
         resumo = (
+
             atrasadas.groupby("Faixa")
+
             .size()
-            .reindex(labels, fill_value=0)
-            .reset_index(name="Quantidade")
+
+            .reindex(
+                labels,
+                fill_value=0
+            )
+
+            .reset_index(
+                name="Quantidade"
+            )
         )
 
-        # ====================================================
-        # 🎨 GRÁFICO EM COLUNAS COM GRADIENTE
-        # ====================================================
+        # ----------------------------------------------------
+        # 📊 GRÁFICO
+        # ----------------------------------------------------
         fig = px.bar(
+
             resumo,
+
             x="Faixa",
+
             y="Quantidade",
+
             color="Quantidade",
+
             color_continuous_scale="Reds",
+
             text="Quantidade"
         )
 
-        fig.update_traces(textposition="outside")
+        fig.update_traces(
+            textposition="outside"
+        )
 
         fig.update_layout(
+
             title="Distribuição de Atraso por Faixa",
+
             xaxis_title="Faixa de atraso (dias)",
+
             yaxis_title="Quantidade de PVs",
+
             coloraxis_showscale=False,
+
             height=500
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+
+            fig,
+
+            use_container_width=True
+        )
+
+        # ====================================================
+        # 📋 TABELA DETALHADA
+        # ====================================================
+        with st.expander(
+            "📋 PVs em atraso"
+        ):
+
+            tabela = (
+
+                atrasadas
+
+                .sort_values(
+                    "Atraso_dias",
+                    ascending=False
+                )
+
+                .rename(columns={
+
+                    "PV": "PV",
+
+                    "data_entrega": "Entrega APS",
+
+                    "Atraso_dias": "Dias em atraso"
+                })
+            )
+
+            st.dataframe(
+
+                tabela[[
+                    "PV",
+                    "Entrega APS",
+                    "Dias em atraso"
+                ]],
+
+                use_container_width=True
+            )
 
     else:
-        st.success("Nenhuma PV em atraso no momento")
 
+        st.success(
+            "Nenhuma PV em atraso no momento"
+        )
 
 
 
