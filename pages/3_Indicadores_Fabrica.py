@@ -1256,28 +1256,16 @@ with tab3:
     base = df_aps.copy()
 
     # ========================================================
-    # 🔒 COLUNAS OBRIGATÓRIAS
+    # 🔥 NORMALIZAÇÃO
     # ========================================================
-    required_cols = ["PV"]
-
-    faltando = [
-
-        c for c in required_cols
-
-        if c not in base.columns
-    ]
-
-    if faltando:
+    if "PV" not in base.columns:
 
         st.error(
-            f"Colunas obrigatórias ausentes: {faltando}"
+            "Coluna PV não encontrada."
         )
 
         st.stop()
 
-    # ========================================================
-    # 🔥 NORMALIZAÇÃO PV
-    # ========================================================
     base["PV"] = (
 
         base["PV"]
@@ -1285,9 +1273,6 @@ with tab3:
         .str.strip()
     )
 
-    # ========================================================
-    # 🔥 REMOVE INVÁLIDOS
-    # ========================================================
     base = base[
 
         base["PV"].notna()
@@ -1306,11 +1291,7 @@ with tab3:
     # ========================================================
     # 🔥 TOTAL REAL APS
     # ========================================================
-    total_pvs = (
-
-        base["PV"]
-        .nunique()
-    )
+    total_pvs = len(base)
 
     # ========================================================
     # 📅 DATA APS
@@ -1329,7 +1310,7 @@ with tab3:
         base["DATA_ENTREGA_APS"] = pd.NaT
 
     # ========================================================
-    # 📅 DATA HOJE
+    # 📅 DATA ATUAL
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
@@ -1362,15 +1343,13 @@ with tab3:
         base_data["Atrasada"]
     ].copy()
 
-    # ========================================================
-    # 📊 KPIs
-    # ========================================================
-    qtd_atrasadas = (
-
-        atrasadas["PV"]
-        .nunique()
+    qtd_atrasadas = len(
+        atrasadas
     )
 
+    # ========================================================
+    # 📊 %
+    # ========================================================
     pct = (
 
         (qtd_atrasadas / total_pvs) * 100
@@ -1381,7 +1360,7 @@ with tab3:
     )
 
     # ========================================================
-    # 📊 CARDS
+    # 📊 KPIs
     # ========================================================
     c1, c2, c3 = st.columns(3)
 
@@ -1403,7 +1382,7 @@ with tab3:
     st.divider()
 
     # ========================================================
-    # 📊 DISTRIBUIÇÃO ATRASOS
+    # 📊 DISTRIBUIÇÃO
     # ========================================================
     st.subheader(
         "📊 Distribuição do atraso por faixa (dias)"
@@ -1418,8 +1397,8 @@ with tab3:
         )
 
         bins = [
-            0, 2, 4, 6, 8, 10,
-            15, 20, 30, 9999
+            0,2,4,6,8,10,
+            15,20,30,9999
         ]
 
         labels = [
@@ -1484,9 +1463,9 @@ with tab3:
 
             title="Distribuição de Atraso por Faixa",
 
-            xaxis_title="Faixa de atraso (dias)",
+            xaxis_title="Faixa de atraso",
 
-            yaxis_title="Quantidade de PVs",
+            yaxis_title="Quantidade",
 
             coloraxis_showscale=False,
 
@@ -1514,217 +1493,189 @@ with tab3:
     )
 
     # ========================================================
-    # 🔒 VALIDAÇÃO DEM
+    # 🔒 VALIDAÇÃO
     # ========================================================
-    if (
-        "dem" in globals()
-        and
-        isinstance(dem, pd.DataFrame)
-        and
-        not dem.empty
-    ):
+    required_cols = [
 
-        base_cap = dem.copy()
+        "Processo",
+        "Horas"
+    ]
 
-        # ----------------------------------------------------
-        # 🔥 VALIDAÇÃO COLUNAS
-        # ----------------------------------------------------
-        required_dem = [
+    faltando = [
 
-            "Processo",
-            "Horas",
-            "Capacidade"
-        ]
+        c for c in required_cols
 
-        faltando_dem = [
+        if c not in base.columns
+    ]
 
-            c for c in required_dem
+    if faltando:
 
-            if c not in base_cap.columns
-        ]
-
-        if faltando_dem:
-
-            st.error(
-                f"Colunas DEM ausentes: {faltando_dem}"
-            )
-
-        else:
-
-            # ------------------------------------------------
-            # 🔥 NORMALIZAÇÃO
-            # ------------------------------------------------
-            base_cap["Horas"] = pd.to_numeric(
-
-                base_cap["Horas"],
-
-                errors="coerce"
-            ).fillna(0)
-
-            base_cap["Capacidade"] = pd.to_numeric(
-
-                base_cap["Capacidade"],
-
-                errors="coerce"
-            ).fillna(0)
-
-            base_cap["Processo"] = (
-
-                base_cap["Processo"]
-                .astype(str)
-                .str.strip()
-            )
-
-            # ------------------------------------------------
-            # 📊 AGRUPAMENTO
-            # ------------------------------------------------
-            resumo_cap = (
-
-                base_cap.groupby(
-                    "Processo",
-                    as_index=False
-                )
-
-                .agg(
-
-                    Carga=("Horas", "sum"),
-
-                    Capacidade=("Capacidade", "sum")
-                )
-            )
-
-            # ------------------------------------------------
-            # 📊 UTILIZAÇÃO
-            # ------------------------------------------------
-            resumo_cap["Utilizacao"] = np.where(
-
-                resumo_cap["Capacidade"] > 0,
-
-                (
-                    resumo_cap["Carga"]
-
-                    /
-
-                    resumo_cap["Capacidade"]
-                ) * 100,
-
-                0
-            )
-
-            resumo_cap = resumo_cap.sort_values(
-
-                "Utilizacao",
-
-                ascending=False
-            )
-
-            # ------------------------------------------------
-            # 📊 GRÁFICO
-            # ------------------------------------------------
-            fig2 = go.Figure()
-
-            fig2.add_bar(
-
-                name="Carga Planejada",
-
-                x=resumo_cap["Processo"],
-
-                y=resumo_cap["Carga"],
-
-                text=(
-                    resumo_cap["Carga"]
-                    .round(1)
-                    .astype(str)
-                ),
-
-                textposition="outside"
-            )
-
-            fig2.add_bar(
-
-                name="Capacidade Disponível",
-
-                x=resumo_cap["Processo"],
-
-                y=resumo_cap["Capacidade"],
-
-                text=(
-                    resumo_cap["Capacidade"]
-                    .round(1)
-                    .astype(str)
-                ),
-
-                textposition="outside"
-            )
-
-            # ------------------------------------------------
-            # 📊 LAYOUT
-            # ------------------------------------------------
-            fig2.update_layout(
-
-                barmode="group",
-
-                height=600,
-
-                title="Carga Planejada x Capacidade Disponível",
-
-                xaxis_title="Processo",
-
-                yaxis_title="Horas"
-            )
-
-            st.plotly_chart(
-                fig2,
-                use_container_width=True
-            )
-
-            # =================================================
-            # 📋 TABELA EXECUTIVA
-            # =================================================
-            with st.expander(
-                "📋 Detalhamento por Processo"
-            ):
-
-                tabela = resumo_cap.copy()
-
-                tabela["Carga"] = (
-                    tabela["Carga"]
-                    .round(1)
-                )
-
-                tabela["Capacidade"] = (
-                    tabela["Capacidade"]
-                    .round(1)
-                )
-
-                tabela["Utilizacao"] = (
-                    tabela["Utilizacao"]
-                    .round(1)
-                )
-
-                tabela = tabela.rename(columns={
-
-                    "Carga": "Carga Planejada (h)",
-
-                    "Capacidade": "Capacidade Disponível (h)",
-
-                    "Utilizacao": "Utilização (%)"
-                })
-
-                st.dataframe(
-                    tabela,
-                    use_container_width=True
-                )
+        st.warning(
+            f"Colunas não encontradas para gráfico: {faltando}"
+        )
 
     else:
 
-        st.warning(
-            "Base DEM não disponível para o gráfico."
+        # ----------------------------------------------------
+        # 🔥 NORMALIZAÇÃO
+        # ----------------------------------------------------
+        base["Horas"] = pd.to_numeric(
+
+            base["Horas"],
+
+            errors="coerce"
+        ).fillna(0)
+
+        base["Processo"] = (
+
+            base["Processo"]
+            .astype(str)
+            .str.strip()
         )
 
-        st.info(
-            "Abra primeiro o APS Carga & Capacidade."
+        # ----------------------------------------------------
+        # 🔥 CAPACIDADE
+        # ----------------------------------------------------
+        def capacidade_real(processo):
+
+            recursos = MAQUINAS.get(
+                processo,
+                0
+            )
+
+            if recursos <= 0:
+                return 0
+
+            return (
+                HORAS_DIA_UTIL_MEDIA
+                *
+                recursos
+                *
+                EFICIENCIA
+            )
+
+        # ----------------------------------------------------
+        # 📊 AGRUPAMENTO
+        # ----------------------------------------------------
+        resumo_cap = (
+
+            base.groupby(
+                "Processo",
+                as_index=False
+            )
+
+            .agg(
+                Carga=("Horas", "sum")
+            )
         )
+
+        resumo_cap["Capacidade"] = (
+
+            resumo_cap["Processo"]
+            .apply(capacidade_real)
+        )
+
+        resumo_cap["Utilizacao"] = np.where(
+
+            resumo_cap["Capacidade"] > 0,
+
+            (
+                resumo_cap["Carga"]
+                /
+                resumo_cap["Capacidade"]
+            ) * 100,
+
+            0
+        )
+
+        resumo_cap = resumo_cap.sort_values(
+            "Utilizacao",
+            ascending=False
+        )
+
+        # ----------------------------------------------------
+        # 📊 GRÁFICO
+        # ----------------------------------------------------
+        fig2 = go.Figure()
+
+        fig2.add_bar(
+
+            name="Carga Planejada",
+
+            x=resumo_cap["Processo"],
+
+            y=resumo_cap["Carga"],
+
+            text=(
+                resumo_cap["Carga"]
+                .round(1)
+            ),
+
+            textposition="outside"
+        )
+
+        fig2.add_bar(
+
+            name="Capacidade Disponível",
+
+            x=resumo_cap["Processo"],
+
+            y=resumo_cap["Capacidade"],
+
+            text=(
+                resumo_cap["Capacidade"]
+                .round(1)
+            ),
+
+            textposition="outside"
+        )
+
+        fig2.update_layout(
+
+            barmode="group",
+
+            height=600,
+
+            title="Carga Planejada x Capacidade Disponível",
+
+            xaxis_title="Processo",
+
+            yaxis_title="Horas"
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+        # ====================================================
+        # 📋 DETALHAMENTO
+        # ====================================================
+        with st.expander(
+            "📋 Detalhamento por Processo"
+        ):
+
+            tabela = resumo_cap.copy()
+
+            tabela["Carga"] = (
+                tabela["Carga"]
+                .round(1)
+            )
+
+            tabela["Capacidade"] = (
+                tabela["Capacidade"]
+                .round(1)
+            )
+
+            tabela["Utilizacao"] = (
+                tabela["Utilizacao"]
+                .round(1)
+            )
+
+            st.dataframe(
+                tabela,
+                use_container_width=True
+            )
 
 
 
