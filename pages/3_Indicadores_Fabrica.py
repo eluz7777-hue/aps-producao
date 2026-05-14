@@ -157,7 +157,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 # ============================================================
-# 💰 COMERCIAL — COMPLETO (ISO + EVIDÊNCIA + KPI + REGRA)
+# 💰 COMERCIAL — COMPLETO (SQLITE + ISO + EVIDÊNCIA + KPI)
 # ============================================================
 
 with tab1:
@@ -171,106 +171,331 @@ with tab1:
     META = 0.25
 
     # ========================================================
-    # 📊 BASE CONTROLADA (ATUALIZAR MÊS A MÊS)
+    # 🗄️ SQLITE — COMERCIAL
     # ========================================================
-    indicador_comercial = {
-        "Jan": {"valor": 0.1463, "arquivo": "INDC. COMERCIAL - JANEIRO.docx"},
-        "Fev": {"valor": 0.1282, "arquivo": "INDI. COMERCIAL - FEVEREIRO.docx"},
-        "Mar": {"valor": 0.1875, "arquivo": "INDC. COMERCIAL - MARÇO.docx"},
-    }
 
-    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    conn_ind = get_conn_indicadores()
+
+    cursor = conn_ind.cursor()
+
+    # --------------------------------------------------------
+    # 🔥 VERIFICA EXISTÊNCIA
+    # --------------------------------------------------------
+    cursor.execute("""
+
+        SELECT COUNT(*)
+
+        FROM indicadores_iso
+
+        WHERE setor = 'Comercial'
+        AND indicador = 'Conversão'
+        AND ano = 2026
+
+    """)
+
+    qtd_existente = cursor.fetchone()[0]
+
+    # --------------------------------------------------------
+    # 🔥 CARGA INICIAL AUTOMÁTICA
+    # --------------------------------------------------------
+    if qtd_existente == 0:
+
+        dados_iniciais = [
+
+            (
+                "Comercial",
+                "Conversão",
+                2026,
+                "Jan",
+                0.1463,
+                0.25,
+                "percentual",
+                "INDC. COMERCIAL - JANEIRO.docx"
+            ),
+
+            (
+                "Comercial",
+                "Conversão",
+                2026,
+                "Fev",
+                0.1282,
+                0.25,
+                "percentual",
+                "INDI. COMERCIAL - FEVEREIRO.docx"
+            ),
+
+            (
+                "Comercial",
+                "Conversão",
+                2026,
+                "Mar",
+                0.1875,
+                0.25,
+                "percentual",
+                "INDC. COMERCIAL - MARÇO.docx"
+            ),
+
+            (
+                "Comercial",
+                "Conversão",
+                2026,
+                "Abr",
+                0.2210,
+                0.25,
+                "percentual",
+                "INDC. COMERCIAL - ABRIL.docx"
+            )
+
+        ]
+
+        cursor.executemany("""
+
+            INSERT INTO indicadores_iso (
+
+                setor,
+                indicador,
+                ano,
+                mes,
+                valor,
+                meta,
+                tipo,
+                arquivo_evidencia
+
+            )
+
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+
+        """, dados_iniciais)
+
+        conn_ind.commit()
+
+    # --------------------------------------------------------
+    # 🔥 LEITURA OFICIAL SQLITE
+    # --------------------------------------------------------
+    df_ind_comercial = pd.read_sql_query("""
+
+        SELECT *
+
+        FROM indicadores_iso
+
+        WHERE setor = 'Comercial'
+        AND indicador = 'Conversão'
+        AND ano = 2026
+
+    """, conn_ind)
+
+    conn_ind.close()
+
+    # --------------------------------------------------------
+    # 🔥 CONVERSÃO PARA O FORMATO ORIGINAL
+    # --------------------------------------------------------
+    indicador_comercial = {}
+
+    for _, row in df_ind_comercial.iterrows():
+
+        indicador_comercial[row["mes"]] = {
+
+            "valor": row["valor"],
+
+            "arquivo": row["arquivo_evidencia"]
+
+        }
+
+    # ========================================================
+    # 📊 ORDEM DOS MESES
+    # ========================================================
+    meses_ordem = [
+        "Jan","Fev","Mar","Abr","Mai","Jun",
+        "Jul","Ago","Set","Out","Nov","Dez"
+    ]
 
     valores = []
     arquivos = []
 
     for mes in meses_ordem:
+
         if mes in indicador_comercial:
-            valores.append(indicador_comercial[mes]["valor"])
-            arquivos.append(indicador_comercial[mes]["arquivo"])
+
+            valores.append(
+                indicador_comercial[mes]["valor"]
+            )
+
+            arquivos.append(
+                indicador_comercial[mes]["arquivo"]
+            )
+
         else:
+
             valores.append(None)
             arquivos.append(None)
 
     # ========================================================
     # 📊 MÉDIA ACUMULADA (ACM)
     # ========================================================
-    valores_validos = [v for v in valores if v is not None]
-    media_acm = sum(valores_validos) / len(valores_validos) if valores_validos else None
+    valores_validos = [
+        v for v in valores
+        if v is not None
+    ]
 
+    media_acm = (
+        sum(valores_validos) / len(valores_validos)
+        if valores_validos else None
+    )
+
+    # ========================================================
+    # 📊 DATAFRAME DO GRÁFICO
+    # ========================================================
     df_plot = pd.DataFrame({
+
         "Mês": meses_ordem,
+
         "Valor": valores
+
     })
 
     df_plot = pd.concat([
+
         df_plot,
-        pd.DataFrame([{"Mês": "ACM", "Valor": media_acm}])
+
+        pd.DataFrame([{
+            "Mês": "ACM",
+            "Valor": media_acm
+        }])
+
     ], ignore_index=True)
 
-    df_plot["Valor"] = df_plot["Valor"] * 100
+    # --------------------------------------------------------
+    # 🔥 PERCENTUAL
+    # --------------------------------------------------------
+    df_plot["Valor"] = (
+        pd.to_numeric(
+            df_plot["Valor"],
+            errors="coerce"
+        )
+        * 100
+    )
 
     # ========================================================
     # 🏷️ RÓTULOS
     # ========================================================
     def formatar(row):
+
         if pd.isna(row["Valor"]):
             return ""
+
         if row["Mês"] == "ACM":
             return f"{row['Valor']:.1f}%"
+
         return f"{row['Valor']:.0f}%"
 
-    df_plot["Label"] = df_plot.apply(formatar, axis=1)
+    df_plot["Label"] = (
+        df_plot.apply(
+            formatar,
+            axis=1
+        )
+    )
 
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
     fig = px.bar(
+
         df_plot,
+
         x="Mês",
+
         y="Valor",
+
         text="Label"
+
     )
 
-    fig.update_traces(textposition="outside")
+    fig.update_traces(
+        textposition="outside"
+    )
 
+    # --------------------------------------------------------
+    # 🔥 META
+    # --------------------------------------------------------
     fig.add_hline(
+
         y=META * 100,
+
         line_dash="dash",
+
         line_color="red",
+
         annotation_text="Meta",
+
         annotation_position="top left"
     )
 
+    # --------------------------------------------------------
+    # 🔥 ESCALA
+    # --------------------------------------------------------
     max_val = df_plot["Valor"].max()
 
     fig.update_yaxes(
+
         tickformat=".0f",
-        range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, META*100*1.2)]
+
+        range=[
+            0,
+            max(
+                max_val * 1.2 if pd.notna(max_val) else 1,
+                META * 100 * 1.2
+            )
+        ]
     )
 
+    # --------------------------------------------------------
+    # 🔥 LAYOUT
+    # --------------------------------------------------------
     fig.update_layout(
+
         title=f"📊 Desempenho Comercial - {ANO}",
+
         yaxis_title="% Conversão",
+
         showlegend=False,
+
         height=500
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
 
     # ========================================================
     # 🎯 SELECT MÊS
     # ========================================================
-    meses_com_dado = [m for m in meses_ordem if m in indicador_comercial]
+    meses_com_dado = [
+
+        m for m in meses_ordem
+
+        if (
+            m in indicador_comercial
+            and indicador_comercial[m]["valor"] is not None
+        )
+    ]
 
     mes_sel = st.selectbox(
+
         "Selecionar mês para análise",
+
         meses_com_dado,
+
         index=len(meses_com_dado) - 1
     )
 
-    valor = indicador_comercial[mes_sel]["valor"]
-    arquivo = indicador_comercial[mes_sel]["arquivo"]
+    valor = (
+        indicador_comercial[mes_sel]["valor"]
+    )
+
+    arquivo = (
+        indicador_comercial[mes_sel]["arquivo"]
+    )
 
     gap = valor - META
 
@@ -279,41 +504,87 @@ with tab1:
     # ========================================================
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("Resultado", f"{valor*100:.0f}%")
-    c2.metric("Meta", f"{META*100:.0f}%")
-    c3.metric("Desvio", f"{gap*100:.0f}%", delta_color="inverse")
+    c1.metric(
+        "Resultado",
+        f"{valor*100:.0f}%"
+    )
 
+    c2.metric(
+        "Meta",
+        f"{META*100:.0f}%"
+    )
+
+    c3.metric(
+        "Desvio",
+        f"{gap*100:.0f}%",
+        delta_color="inverse"
+    )
+
+    # --------------------------------------------------------
+    # 🔥 STATUS
+    # --------------------------------------------------------
     if valor >= META:
-        st.success("🟢 Dentro da meta")
+
+        st.success(
+            "🟢 Dentro da meta"
+        )
+
     else:
-        st.error("🔴 Fora da meta")
+
+        st.error(
+            "🔴 Fora da meta"
+        )
 
     # ========================================================
     # 📎 EVIDÊNCIA ISO
     # ========================================================
-    caminho_base = "data/Indicadores Comerciais"
-    caminho_arquivo = os.path.join(caminho_base, arquivo)
+    caminho_base = (
+        "data/Indicadores Comerciais"
+    )
+
+    caminho_arquivo = os.path.join(
+        caminho_base,
+        arquivo
+    )
 
     if os.path.exists(caminho_arquivo):
+
         with open(caminho_arquivo, "rb") as file:
+
             st.download_button(
+
                 label="📎 Baixar evidência do mês",
+
                 data=file,
+
                 file_name=arquivo
             )
+
     else:
-        st.warning("Arquivo de evidência não encontrado.")
+
+        st.warning(
+            "Arquivo de evidência não encontrado."
+        )
 
     # ========================================================
-    # 🚨 REGRA ISO (3 MESES FORA DA META)
+    # 🚨 REGRA ISO
     # ========================================================
     if len(valores_validos) >= 3:
+
         ultimos_3 = valores_validos[-3:]
 
         if all(v < META for v in ultimos_3):
-            st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
+
+            st.error(
+                "🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA"
+            )
+
         else:
-            st.success("Indicador sob controle recente")
+
+            st.success(
+                "Indicador sob controle recente"
+            )
+
 
 
 
