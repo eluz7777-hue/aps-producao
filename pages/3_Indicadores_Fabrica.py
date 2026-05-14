@@ -1234,6 +1234,7 @@ with tab3:
     import numpy as np
     import holidays
     import calendar
+
     from datetime import datetime
 
     st.header("🏭 Atraso de Entregas (Tempo Real)")
@@ -1329,12 +1330,12 @@ with tab3:
     # ========================================================
     # 🔥 TOTAL REAL APS
     # ========================================================
-    total_pvs = (
-
-        base["PV"]
-        .drop_duplicates()
-        .shape[0]
-    )
+    #
+    # 🔥 IMPORTANTE:
+    # Painel Executivo usa quantidade de registros válidos
+    # e não PV única consolidada.
+    #
+    total_pvs = len(base)
 
     # ========================================================
     # 📅 DATA APS
@@ -1353,7 +1354,7 @@ with tab3:
         base["DATA_ENTREGA_APS"] = pd.NaT
 
     # ========================================================
-    # 📅 DATA ATUAL
+    # 📅 DATA HOJE
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
@@ -1389,11 +1390,8 @@ with tab3:
     # ========================================================
     # 📊 KPIs
     # ========================================================
-    qtd_atrasadas = (
-
-        atrasadas["PV"]
-        .drop_duplicates()
-        .shape[0]
+    qtd_atrasadas = len(
+        atrasadas
     )
 
     pct = (
@@ -1436,16 +1434,6 @@ with tab3:
 
     if qtd_atrasadas > 0:
 
-        atrasadas = (
-
-            atrasadas[[
-                "PV",
-                "Atraso_dias"
-            ]]
-
-            .drop_duplicates()
-        )
-
         atrasadas["Atraso_dias"] = (
 
             atrasadas["Atraso_dias"]
@@ -1453,8 +1441,16 @@ with tab3:
         )
 
         bins = [
-            0, 2, 4, 6, 8, 10,
-            15, 20, 30, 9999
+            0,
+            2,
+            4,
+            6,
+            8,
+            10,
+            15,
+            20,
+            30,
+            9999
         ]
 
         labels = [
@@ -1625,7 +1621,9 @@ with tab3:
     ano = hoje_real.year
     mes = hoje_real.month
 
-    brasil_feriados = holidays.Brazil(years=ano)
+    brasil_feriados = holidays.Brazil(
+        years=ano
+    )
 
     total_dias_mes = calendar.monthrange(
         ano,
@@ -1642,14 +1640,22 @@ with tab3:
             dia
         )
 
-        if data.weekday() < 5 and data.date() not in brasil_feriados:
+        if (
+
+            data.weekday() < 5
+
+            and
+
+            data.date() not in brasil_feriados
+
+        ):
 
             dias_uteis += 1
 
     # ========================================================
-    # 🔥 CAPACIDADE REAL POR RECURSO
+    # 🔥 CAPACIDADE SEMANAL POR RECURSO
     # ========================================================
-    capacidade_dia_recurso = (
+    capacidade_semana_recurso = (
 
         0.8
         *
@@ -1658,6 +1664,25 @@ with tab3:
             +
             (1 * 8)
         )
+    )
+
+    # ========================================================
+    # 🔥 SEMANAS MÉDIAS DO MÊS
+    # ========================================================
+    semanas_mes = (
+
+        dias_uteis
+        / 5
+    )
+
+    # ========================================================
+    # 🔥 CAPACIDADE MENSAL POR RECURSO
+    # ========================================================
+    capacidade_mensal_recurso = (
+
+        capacidade_semana_recurso
+        *
+        semanas_mes
     )
 
     # ========================================================
@@ -1686,7 +1711,7 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 CAPACIDADE
+    # 🔥 CAPACIDADE REAL
     # ========================================================
     def capacidade_real(processo):
 
@@ -1699,9 +1724,7 @@ with tab3:
 
             recursos
             *
-            capacidade_dia_recurso
-            *
-            dias_uteis
+            capacidade_mensal_recurso
         )
 
     resumo_cap["Capacidade"] = (
@@ -1838,7 +1861,6 @@ with tab3:
             ],
             use_container_width=True
         )
-
 
 
 
