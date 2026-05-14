@@ -1223,21 +1223,23 @@ with tab2:
 
 
 # ============================================================
-# 🏭 PRODUÇÃO — TEMPO REAL (ATRASO DE ENTREGAS)
+# 🏭 PRODUÇÃO — TEMPO REAL (ATRASO + CARGA x CAPACIDADE)
 # ============================================================
 
 with tab3:
 
     st.header("🏭 Atraso de Entregas (Tempo Real)")
-    st.caption("PVs com data de entrega vencida e ainda em aberto")
+    st.caption(
+        "PVs com data de entrega vencida e ainda em aberto"
+    )
 
     # ========================================================
-    # 🔒 VALIDAÇÃO DA BASE
+    # 🔒 VALIDAÇÃO
     # ========================================================
     if df_aps.empty:
 
         st.warning(
-            "Abra o APS para visualizar os indicadores de produção."
+            "Abra o APS para visualizar os indicadores."
         )
 
         st.stop()
@@ -1248,13 +1250,9 @@ with tab3:
     base = df_aps.copy()
 
     # ========================================================
-    # 🔒 VALIDAÇÃO DE COLUNAS
+    # 🔒 COLUNAS
     # ========================================================
-    required_cols = [
-
-        "PV",
-        "DATA_ENTREGA_APS"
-    ]
+    required_cols = ["PV"]
 
     faltando = [
 
@@ -1266,18 +1264,13 @@ with tab3:
     if faltando:
 
         st.error(
-            f"Colunas obrigatórias não encontradas: {faltando}"
-        )
-
-        st.write(
-            "Colunas disponíveis:",
-            base.columns.tolist()
+            f"Colunas obrigatórias ausentes: {faltando}"
         )
 
         st.stop()
 
     # ========================================================
-    # 🔥 NORMALIZAÇÃO
+    # 🔥 NORMALIZAÇÃO PV
     # ========================================================
     base["PV"] = (
 
@@ -1286,9 +1279,6 @@ with tab3:
         .str.strip()
     )
 
-    # ========================================================
-    # 🔥 REMOVE INVÁLIDOS
-    # ========================================================
     base = base[
 
         base["PV"].notna()
@@ -1305,78 +1295,6 @@ with tab3:
     ]
 
     # ========================================================
-    # 📅 DATA APS
-    # ========================================================
-    base["DATA_ENTREGA_APS"] = pd.to_datetime(
-
-        base["DATA_ENTREGA_APS"],
-
-        errors="coerce"
-    )
-
-    # ========================================================
-    # 🔥 REMOVE DATAS INVÁLIDAS
-    # ========================================================
-    base = base.dropna(
-        subset=["DATA_ENTREGA_APS"]
-    )
-
-    # ========================================================
-    # 🔥 STATUS FECHADOS
-    # ========================================================
-    colunas_status = [
-
-        "STATUS",
-        "Status",
-        "SITUACAO",
-        "Situacao",
-        "Situação",
-        "STATUS_PV",
-        "STATUS APS"
-    ]
-
-    coluna_status_real = None
-
-    for c in colunas_status:
-
-        if c in base.columns:
-
-            coluna_status_real = c
-            break
-
-    # ========================================================
-    # 🔥 REMOVE ENCERRADAS
-    # ========================================================
-    if coluna_status_real is not None:
-
-        base[coluna_status_real] = (
-
-            base[coluna_status_real]
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-
-        status_fechados = [
-
-            "FINALIZADO",
-            "FINALIZADA",
-            "ENCERRADO",
-            "ENCERRADA",
-            "CONCLUÍDO",
-            "CONCLUIDO",
-            "BAIXADO",
-            "FECHADO",
-            "FATURADO"
-        ]
-
-        base = base[
-
-            ~base[coluna_status_real]
-            .isin(status_fechados)
-        ]
-
-    # ========================================================
     # 🔥 REMOVE DUPLICIDADE REAL
     # ========================================================
     colunas_chave = [
@@ -1387,8 +1305,7 @@ with tab3:
             "PROCESSO",
             "PECA",
             "CODIGO",
-            "ITEM",
-            "DESCRICAO"
+            "ITEM"
         ]
 
         if c in base.columns
@@ -1405,46 +1322,78 @@ with tab3:
         base = base.drop_duplicates()
 
     # ========================================================
-    # 📅 DATA HOJE
+    # 🔥 TOTAL REAL APS
+    # ========================================================
+    total_pvs = (
+
+        base["PV"]
+        .nunique()
+    )
+
+    # ========================================================
+    # 📅 DATA APS
+    # ========================================================
+    if "DATA_ENTREGA_APS" in base.columns:
+
+        base["DATA_ENTREGA_APS"] = pd.to_datetime(
+
+            base["DATA_ENTREGA_APS"],
+
+            errors="coerce"
+        )
+
+    else:
+
+        base["DATA_ENTREGA_APS"] = pd.NaT
+
+    # ========================================================
+    # 📅 HOJE
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
     # ========================================================
+    # 🔥 BASE COM DATA
+    # ========================================================
+    base_data = base.dropna(
+        subset=["DATA_ENTREGA_APS"]
+    ).copy()
+
+    # ========================================================
     # 🚨 ATRASO
     # ========================================================
-    base["Atraso_dias"] = (
+    base_data["Atraso_dias"] = (
 
-        hoje - base["DATA_ENTREGA_APS"]
+        hoje - base_data["DATA_ENTREGA_APS"]
 
     ).dt.days
 
-    base["Atrasada"] = (
+    base_data["Atrasada"] = (
 
-        base["Atraso_dias"] > 0
+        base_data["Atraso_dias"] > 0
     )
 
     # ========================================================
-    # 🔥 BASE ATRASADAS
+    # 🔥 ATRASADAS
     # ========================================================
-    atrasadas = base[
+    atrasadas = base_data[
 
-        base["Atrasada"]
+        base_data["Atrasada"]
     ].copy()
 
     # ========================================================
     # 📊 KPIs
     # ========================================================
-    total = len(base)
+    qtd_atrasadas = (
 
-    qtd_atrasadas = len(
-        atrasadas
+        atrasadas["PV"]
+        .nunique()
     )
 
     pct = (
 
-        (qtd_atrasadas / total) * 100
+        (qtd_atrasadas / total_pvs) * 100
 
-        if total > 0
+        if total_pvs > 0
 
         else 0
     )
@@ -1455,24 +1404,18 @@ with tab3:
     c1, c2, c3 = st.columns(3)
 
     c1.metric(
-
         "🚨 Atraso (%)",
-
         f"{pct:.1f}%"
     )
 
     c2.metric(
-
         "📦 PVs Atrasadas",
-
         qtd_atrasadas
     )
 
     c3.metric(
-
         "📦 Total PVs",
-
-        total
+        total_pvs
     )
 
     st.divider()
@@ -1572,6 +1515,155 @@ with tab3:
             "Nenhuma PV em atraso no momento"
         )
 
+    st.divider()
+
+    # ========================================================
+    # 📊 CARGA x CAPACIDADE
+    # ========================================================
+    st.subheader(
+        "📊 Carga Planejada x Capacidade Disponível"
+    )
+
+    # ========================================================
+    # 🔒 VALIDAÇÃO
+    # ========================================================
+    if not dem.empty:
+
+        base_cap = dem.copy()
+
+        # ----------------------------------------------------
+        # 🔥 NORMALIZAÇÃO
+        # ----------------------------------------------------
+        base_cap["Horas"] = pd.to_numeric(
+
+            base_cap["Horas"],
+
+            errors="coerce"
+        ).fillna(0)
+
+        base_cap["Capacidade"] = pd.to_numeric(
+
+            base_cap["Capacidade"],
+
+            errors="coerce"
+        ).fillna(0)
+
+        # ----------------------------------------------------
+        # 📊 AGRUPAMENTO
+        # ----------------------------------------------------
+        resumo_cap = (
+
+            base_cap.groupby("Processo", as_index=False)
+
+            .agg(
+
+                Carga=("Horas", "sum"),
+
+                Capacidade=("Capacidade", "sum")
+            )
+        )
+
+        # ----------------------------------------------------
+        # 📊 UTILIZAÇÃO
+        # ----------------------------------------------------
+        resumo_cap["Utilizacao"] = np.where(
+
+            resumo_cap["Capacidade"] > 0,
+
+            (
+                resumo_cap["Carga"]
+
+                /
+
+                resumo_cap["Capacidade"]
+            ) * 100,
+
+            0
+        )
+
+        resumo_cap = resumo_cap.sort_values(
+            "Utilizacao",
+            ascending=False
+        )
+
+        # ----------------------------------------------------
+        # 📊 GRÁFICO
+        # ----------------------------------------------------
+        fig2 = go.Figure()
+
+        fig2.add_bar(
+
+            name="Carga Planejada",
+
+            x=resumo_cap["Processo"],
+
+            y=resumo_cap["Carga"]
+        )
+
+        fig2.add_bar(
+
+            name="Capacidade",
+
+            x=resumo_cap["Processo"],
+
+            y=resumo_cap["Capacidade"]
+        )
+
+        # ----------------------------------------------------
+        # 📊 LAYOUT
+        # ----------------------------------------------------
+        fig2.update_layout(
+
+            barmode="group",
+
+            height=550,
+
+            xaxis_title="Processo",
+
+            yaxis_title="Horas",
+
+            title="Carga Planejada x Capacidade"
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+        # ====================================================
+        # 📋 TABELA EXECUTIVA
+        # ====================================================
+        with st.expander(
+            "📋 Detalhamento por processo"
+        ):
+
+            tabela = resumo_cap.copy()
+
+            tabela["Carga"] = (
+                tabela["Carga"]
+                .round(1)
+            )
+
+            tabela["Capacidade"] = (
+                tabela["Capacidade"]
+                .round(1)
+            )
+
+            tabela["Utilizacao"] = (
+                tabela["Utilizacao"]
+                .round(1)
+            )
+
+            st.dataframe(
+                tabela,
+                use_container_width=True
+            )
+
+    else:
+
+        st.warning(
+            "Base DEM não disponível."
+        )
 
 
 
