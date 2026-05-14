@@ -909,8 +909,11 @@ with tab3:
 
 
 
+
+
+
 # ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL COM ACUMULADOS
+# 🔧 MANUTENÇÃO — BLOCO FINAL OFICIAL
 # ============================================================
 
 with tab4:
@@ -918,23 +921,58 @@ with tab4:
     import os
     import pandas as pd
     import plotly.graph_objects as go
+    import numpy as np
 
     st.header("🔧 Custo de Manutenção")
 
-    caminho = os.path.abspath("data/Indicadores_manutencao/manutencao.xlsx")
+    # ========================================================
+    # 📁 CAMINHO
+    # ========================================================
+    caminho = os.path.abspath(
+        "data/Indicadores_manutencao/manutencao.xlsx"
+    )
 
+    # ========================================================
+    # 🚨 EXISTÊNCIA
+    # ========================================================
     if not os.path.exists(caminho):
-        st.error("Arquivo de manutenção não encontrado")
+
+        st.error(
+            "Arquivo de manutenção não encontrado"
+        )
+
         st.stop()
 
     # ========================================================
     # 📊 LEITURA
     # ========================================================
-    df = pd.read_excel(caminho, dtype=str)
-    df.columns = [str(c).strip() for c in df.columns]
+    try:
+
+        df = pd.read_excel(
+            caminho,
+            dtype=str
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Erro ao ler arquivo de manutenção: {e}"
+        )
+
+        st.stop()
 
     # ========================================================
-    # 🔍 COLUNAS
+    # 🧹 NORMALIZAÇÃO COLUNAS
+    # ========================================================
+    df.columns = [
+
+        str(c).strip()
+
+        for c in df.columns
+    ]
+
+    # ========================================================
+    # 🔍 COLUNAS OFICIAIS
     # ========================================================
     col_mes   = "Mês"
     col_fat   = "Faturamento Mensal"
@@ -944,133 +982,518 @@ with tab4:
     col_pred  = "Preditiva"
     col_melh  = "Melhoria de Máquinas"
 
+    colunas_necessarias = [
+
+        col_mes,
+        col_fat,
+        col_np,
+        col_cp,
+        col_prev,
+        col_pred,
+        col_melh
+    ]
+
     # ========================================================
-    # 🧹 LIMPEZA
+    # 🚨 VALIDAÇÃO
     # ========================================================
-    def limpar(v):
+    faltando = [
+
+        c for c in colunas_necessarias
+
+        if c not in df.columns
+    ]
+
+    if faltando:
+
+        st.error(
+            f"Colunas ausentes: {faltando}"
+        )
+
+        st.stop()
+
+    # ========================================================
+    # 🧹 LIMPEZA MONETÁRIA
+    # ========================================================
+    def limpar_moeda(v):
+
         if pd.isna(v):
             return 0.0
-        v = str(v).strip().replace("R$", "").replace(" ", "")
-        if "," in v:
-            v = v.replace(".", "").replace(",", ".")
-        try:
-            return float(v)
-        except:
+
+        v = str(v).strip()
+
+        if v == "":
             return 0.0
 
-    for col in [col_fat, col_np, col_cp, col_prev, col_pred, col_melh]:
-        df[col] = df[col].apply(limpar)
+        v = (
+            v.replace("R$", "")
+             .replace(" ", "")
+             .replace("\xa0", "")
+        )
+
+        if "," in v:
+
+            v = (
+                v.replace(".", "")
+                 .replace(",", ".")
+            )
+
+        try:
+
+            return float(v)
+
+        except:
+
+            return 0.0
 
     # ========================================================
-    # 📊 TOTAL E META
+    # 🔥 CONVERSÃO NUMÉRICA
+    # ========================================================
+    for col in [
+
+        col_fat,
+        col_np,
+        col_cp,
+        col_prev,
+        col_pred,
+        col_melh
+    ]:
+
+        df[col] = (
+
+            df[col]
+            .apply(limpar_moeda)
+            .fillna(0)
+        )
+
+    # ========================================================
+    # 🧹 REMOVE LINHAS VAZIAS
+    # ========================================================
+    df = df[
+
+        df[col_mes]
+        .notna()
+    ].copy()
+
+    # ========================================================
+    # 📊 TOTAL MENSAL
     # ========================================================
     df["Total"] = (
-        df[col_np] +
-        df[col_cp] +
-        df[col_prev] +
-        df[col_pred] +
-        df[col_melh]
+
+        df[col_np]
+
+        + df[col_cp]
+
+        + df[col_prev]
+
+        + df[col_pred]
+
+        + df[col_melh]
     )
 
-    df["Meta"] = df[col_fat] * 0.005
+    # ========================================================
+    # 🎯 META
+    # ========================================================
+    df["Meta"] = (
+
+        df[col_fat] * 0.005
+    )
 
     # ========================================================
     # 📊 ACUMULADOS
     # ========================================================
-    df["NP_acum"]   = df[col_np].cumsum()
-    df["CP_acum"]   = df[col_cp].cumsum()
-    df["Prev_acum"] = df[col_prev].cumsum()
-    df["Pred_acum"] = df[col_pred].cumsum()
-    df["Melh_acum"] = df[col_melh].cumsum()
+    df["NP_acum"] = (
+        df[col_np].cumsum()
+    )
 
-    df["Total_acum"] = df["Total"].cumsum()
-    df["Meta_acum"]  = df["Meta"].cumsum()
+    df["CP_acum"] = (
+        df[col_cp].cumsum()
+    )
+
+    df["Prev_acum"] = (
+        df[col_prev].cumsum()
+    )
+
+    df["Pred_acum"] = (
+        df[col_pred].cumsum()
+    )
+
+    df["Melh_acum"] = (
+        df[col_melh].cumsum()
+    )
+
+    df["Total_acum"] = (
+        df["Total"].cumsum()
+    )
+
+    df["Meta_acum"] = (
+        df["Meta"].cumsum()
+    )
 
     # ========================================================
     # 🚨 STATUS ISO
     # ========================================================
-    df["Status_ISO"] = df["Total"] <= df["Meta"]
-    df["Status_ISO_acum"] = df["Total_acum"] <= df["Meta_acum"]
+    df["Status_ISO"] = (
+
+        df["Total"]
+
+        <=
+
+        df["Meta"]
+    )
+
+    df["Status_ISO_acum"] = (
+
+        df["Total_acum"]
+
+        <=
+
+        df["Meta_acum"]
+    )
 
     # ========================================================
-    # 📊 ESCALA
+    # 📊 ESCALA DINÂMICA
     # ========================================================
-    max_valor = max(df["Total"].max(), df["Total_acum"].max())
-    limite_y = max_valor * 1.25 if max_valor > 0 else 1
+    max_valor = max(
+
+        df["Total"].max(),
+
+        df["Total_acum"].max(),
+
+        df["Meta"].max(),
+
+        df["Meta_acum"].max()
+    )
+
+    limite_y = (
+
+        max_valor * 1.25
+
+        if max_valor > 0
+
+        else 1
+    )
+
+    # ========================================================
+    # 💰 FORMATAÇÃO
+    # ========================================================
+    def moeda(v):
+
+        return (
+
+            f"R$ {v:,.0f}"
+            .replace(",", ".")
+        )
+
+    def moeda_kpi(v):
+
+        return (
+
+            f"R$ {v:,.2f}"
+            .replace(",", "X")
+            .replace(".", ",")
+            .replace("X", ".")
+        )
 
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
     fig = go.Figure()
 
-    def moeda(v):
-        return f"R$ {v:,.0f}".replace(",", ".")
+    # ========================================================
+    # 📊 BARRAS MENSAIS
+    # ========================================================
+    fig.add_bar(
 
-    # ===== MENSAIS =====
-    fig.add_bar(name="NP", x=df[col_mes], y=df[col_np], text=[moeda(v) for v in df[col_np]], textposition="outside")
-    fig.add_bar(name="CP", x=df[col_mes], y=df[col_cp], text=[moeda(v) for v in df[col_cp]], textposition="outside")
-    fig.add_bar(name="Prev", x=df[col_mes], y=df[col_prev], text=[moeda(v) for v in df[col_prev]], textposition="outside")
-    fig.add_bar(name="Pred", x=df[col_mes], y=df[col_pred], text=[moeda(v) for v in df[col_pred]], textposition="outside")
-    fig.add_bar(name="Melh", x=df[col_mes], y=df[col_melh], text=[moeda(v) for v in df[col_melh]], textposition="outside")
+        name="NP",
 
-    # TOTAL mensal
-    cores_total = ["green" if ok else "red" for ok in df["Status_ISO"]]
-    fig.add_bar(name="Total", x=df[col_mes], y=df["Total"],
-                text=[moeda(v) for v in df["Total"]],
-                textposition="outside",
-                marker_color=cores_total)
+        x=df[col_mes],
 
-    # ===== ACUMULADOS =====
-    fig.add_bar(name="Total Acum", x=df[col_mes], y=df["Total_acum"],
-                text=[moeda(v) for v in df["Total_acum"]],
-                textposition="outside",
-                marker_color="darkgreen")
+        y=df[col_np],
 
-    # META mensal
+        text=[
+
+            moeda(v)
+
+            for v in df[col_np]
+        ],
+
+        textposition="outside"
+    )
+
+    fig.add_bar(
+
+        name="CP",
+
+        x=df[col_mes],
+
+        y=df[col_cp],
+
+        text=[
+
+            moeda(v)
+
+            for v in df[col_cp]
+        ],
+
+        textposition="outside"
+    )
+
+    fig.add_bar(
+
+        name="Prev",
+
+        x=df[col_mes],
+
+        y=df[col_prev],
+
+        text=[
+
+            moeda(v)
+
+            for v in df[col_prev]
+        ],
+
+        textposition="outside"
+    )
+
+    fig.add_bar(
+
+        name="Pred",
+
+        x=df[col_mes],
+
+        y=df[col_pred],
+
+        text=[
+
+            moeda(v)
+
+            for v in df[col_pred]
+        ],
+
+        textposition="outside"
+    )
+
+    fig.add_bar(
+
+        name="Melh",
+
+        x=df[col_mes],
+
+        y=df[col_melh],
+
+        text=[
+
+            moeda(v)
+
+            for v in df[col_melh]
+        ],
+
+        textposition="outside"
+    )
+
+    # ========================================================
+    # 📊 TOTAL MENSAL
+    # ========================================================
+    cores_total = [
+
+        "green"
+
+        if ok
+
+        else "red"
+
+        for ok in df["Status_ISO"]
+    ]
+
+    fig.add_bar(
+
+        name="Total",
+
+        x=df[col_mes],
+
+        y=df["Total"],
+
+        text=[
+
+            moeda(v)
+
+            for v in df["Total"]
+        ],
+
+        textposition="outside",
+
+        marker_color=cores_total
+    )
+
+    # ========================================================
+    # 📊 TOTAL ACUMULADO
+    # ========================================================
+    fig.add_bar(
+
+        name="Total Acum",
+
+        x=df[col_mes],
+
+        y=df["Total_acum"],
+
+        text=[
+
+            moeda(v)
+
+            for v in df["Total_acum"]
+        ],
+
+        textposition="outside",
+
+        marker_color="darkgreen"
+    )
+
+    # ========================================================
+    # 📈 META MENSAL
+    # ========================================================
     fig.add_scatter(
+
         name="Meta",
+
         x=df[col_mes],
+
         y=df["Meta"],
+
         mode="lines+markers",
-        line=dict(color="red", dash="dash")
+
+        line=dict(
+
+            color="red",
+
+            dash="dash"
+        )
     )
 
-    # META acumulada
+    # ========================================================
+    # 📈 META ACUMULADA
+    # ========================================================
     fig.add_scatter(
+
         name="Meta Acum",
+
         x=df[col_mes],
+
         y=df["Meta_acum"],
+
         mode="lines+markers",
-        line=dict(color="orange", dash="dot")
+
+        line=dict(
+
+            color="orange",
+
+            dash="dot"
+        )
     )
 
+    # ========================================================
+    # 📊 LAYOUT
+    # ========================================================
     fig.update_layout(
+
         barmode="group",
-        height=600,
-        yaxis=dict(range=[0, limite_y]),
+
+        height=650,
+
+        yaxis=dict(
+            range=[0, limite_y]
+        ),
+
         yaxis_title="R$",
+
         xaxis_title="Mês",
+
         legend_title="Indicadores"
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
 
     # ========================================================
     # 📊 KPI FINAL
     # ========================================================
     ultimo = df.iloc[-1]
 
-    def formatar(v):
-        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    status_mes = (
 
-    status = "🟢 OK" if ultimo["Total"] <= ultimo["Meta"] else "🔴 ACIMA"
-    status_acum = "🟢 OK" if ultimo["Total_acum"] <= ultimo["Meta_acum"] else "🔴 ACIMA"
+        "🟢 OK"
 
-    c1, c2, c3 = st.columns(3)
+        if ultimo["Status_ISO"]
 
-    c1.metric("💸 Custo Mês", formatar(ultimo["Total"]))
-    c2.metric("📊 Custo Acumulado", formatar(ultimo["Total_acum"]))
-    c3.metric("Status ISO Acumulado", status_acum)
+        else "🔴 ACIMA"
+    )
+
+    status_acum = (
+
+        "🟢 OK"
+
+        if ultimo["Status_ISO_acum"]
+
+        else "🔴 ACIMA"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+
+        "💸 Custo Mês",
+
+        moeda_kpi(
+            ultimo["Total"]
+        )
+    )
+
+    c2.metric(
+
+        "🎯 Meta Mês",
+
+        moeda_kpi(
+            ultimo["Meta"]
+        )
+    )
+
+    c3.metric(
+
+        "📊 Custo Acumulado",
+
+        moeda_kpi(
+            ultimo["Total_acum"]
+        )
+    )
+
+    c4.metric(
+
+        "📈 Meta Acumulada",
+
+        moeda_kpi(
+            ultimo["Meta_acum"]
+        )
+    )
+
+    # ========================================================
+    # 🚨 STATUS FINAL
+    # ========================================================
+    if ultimo["Status_ISO_acum"]:
+
+        st.success(
+            f"Status ISO acumulado: {status_acum}"
+        )
+
+    else:
+
+        st.error(
+            f"Status ISO acumulado: {status_acum}"
+        )
+
+
+
 
 
 
