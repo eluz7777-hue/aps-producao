@@ -1228,6 +1228,7 @@ with tab2:
 
 with tab3:
 
+    import os
     import plotly.express as px
     import plotly.graph_objects as go
     import pandas as pd
@@ -1327,67 +1328,84 @@ with tab3:
         base["PV"].str.lower() != "nan"
     ]
 
-   
-
-
- # ========================================================
-# 🔥 TOTAL REAL DE PVs (ARQUIVO OFICIAL)
-# ========================================================
-
-caminho_pv = os.path.abspath(
-    "PV.xlsx"
-)
-
-if os.path.exists(caminho_pv):
-
-    try:
-
-        df_pv = pd.read_excel(
-            caminho_pv
-        )
-
-        if "PV" in df_pv.columns:
-
-            total_pvs = (
-
-                df_pv["PV"]
-
-                .astype(str)
-
-                .str.strip()
-
-                .replace("", np.nan)
-
-                .dropna()
-
-                .nunique()
-            )
-
-        else:
-
-            total_pvs = 0
-
-            st.warning(
-                "Coluna 'PV' não encontrada em PV.xlsx"
-            )
-
-    except Exception as e:
-
-        total_pvs = 0
-
-        st.error(
-            f"Erro ao ler PV.xlsx: {e}"
-        )
-
-else:
+    # ========================================================
+    # 🔥 TOTAL OFICIAL DE PVs
+    # ========================================================
+    caminho_pv = os.path.abspath(
+        "PV.xlsx"
+    )
 
     total_pvs = 0
 
-    st.warning(
-        "Arquivo PV.xlsx não encontrado."
-    )
+    if os.path.exists(caminho_pv):
 
+        try:
 
+            df_pv = pd.read_excel(
+                caminho_pv
+            )
+
+            # ------------------------------------------------
+            # 🔥 NORMALIZAÇÃO
+            # ------------------------------------------------
+            df_pv.columns = [
+
+                str(col).strip()
+
+                for col in df_pv.columns
+            ]
+
+            # ------------------------------------------------
+            # 🔥 IDENTIFICA COLUNA PV
+            # ------------------------------------------------
+            coluna_pv = None
+
+            for col in df_pv.columns:
+
+                if str(col).strip().upper() == "PV":
+
+                    coluna_pv = col
+                    break
+
+            # ------------------------------------------------
+            # 🔥 CONTAGEM OFICIAL
+            # ------------------------------------------------
+            if coluna_pv is not None:
+
+                total_pvs = (
+
+                    df_pv[coluna_pv]
+
+                    .astype(str)
+
+                    .str.strip()
+
+                    .replace("", np.nan)
+
+                    .replace("nan", np.nan)
+
+                    .dropna()
+
+                    .nunique()
+                )
+
+            else:
+
+                st.error(
+                    "Coluna PV não encontrada em PV.xlsx"
+                )
+
+        except Exception as e:
+
+            st.error(
+                f"Erro ao ler PV.xlsx: {e}"
+            )
+
+    else:
+
+        st.error(
+            "Arquivo PV.xlsx não encontrado."
+        )
 
     # ========================================================
     # 📅 DATA APS
@@ -1641,48 +1659,6 @@ else:
     }
 
     # ========================================================
-    # 🔥 MAPEAMENTO APS → RECURSO
-    # ========================================================
-    mapa_processos = {
-
-        "SOLDA": "SOLDAGEM",
-        "SOLDAGEM": "SOLDAGEM",
-
-        "ACABAMENTO": "ACABAMENTO",
-
-        "DOBRA": "DOBRADEIRA",
-        "DOBRADEIRA": "DOBRADEIRA",
-
-        "CALANDRA": "CALANDRA",
-
-        "TORNO": "TORNO CONVENCIONAL",
-        "TORNO CONVENCIONAL": "TORNO CONVENCIONAL",
-
-        "FRESA": "FRESADORAS",
-        "FRESADORAS": "FRESADORAS",
-
-        "USINAGEM": "CENTRO DE USINAGEM",
-        "CENTRO DE USINAGEM": "CENTRO DE USINAGEM",
-
-        "LASER": "CORTE-LASER",
-        "CORTE LASER": "CORTE-LASER",
-        "CORTE-LASER": "CORTE-LASER",
-
-        "PLASMA": "CORTE-PLASMA",
-        "CORTE PLASMA": "CORTE-PLASMA",
-        "CORTE-PLASMA": "CORTE-PLASMA",
-
-        "SERRA": "CORTE - SERRA",
-        "CORTE - SERRA": "CORTE - SERRA",
-
-        "PINTURA": "PINTURA",
-
-        "JATEAMENTO": "JATEAMENTO",
-
-        "MONTAGEM": "MONTAGEM"
-    }
-
-    # ========================================================
     # 🔥 CALENDÁRIO BRASILEIRO
     # ========================================================
     hoje_real = datetime.today()
@@ -1736,7 +1712,7 @@ else:
     )
 
     # ========================================================
-    # 🔥 SEMANAS MÉDIAS DO MÊS
+    # 🔥 SEMANAS DO MÊS
     # ========================================================
     semanas_mes = (
 
@@ -1770,16 +1746,6 @@ else:
     )
 
     # ========================================================
-    # 🔥 PROCESSO PADRONIZADO
-    # ========================================================
-    resumo_cap["Processo_Mapeado"] = (
-
-        resumo_cap["Processo"]
-        .map(mapa_processos)
-        .fillna(resumo_cap["Processo"])
-    )
-
-    # ========================================================
     # 🔥 CAPACIDADE REAL
     # ========================================================
     def capacidade_real(processo):
@@ -1798,7 +1764,7 @@ else:
 
     resumo_cap["Capacidade"] = (
 
-        resumo_cap["Processo_Mapeado"]
+        resumo_cap["Processo"]
         .apply(capacidade_real)
     )
 
@@ -1925,16 +1891,13 @@ else:
 
             "Capacidade": "Capacidade Disponível (h)",
 
-            "Utilizacao": "Utilização (%)",
-
-            "Processo_Mapeado": "Recurso"
+            "Utilizacao": "Utilização (%)"
         })
 
         st.dataframe(
             tabela[
                 [
                     "Processo",
-                    "Recurso",
                     "Carga Planejada (h)",
                     "Capacidade Disponível (h)",
                     "Utilização (%)"
@@ -1942,7 +1905,6 @@ else:
             ],
             use_container_width=True
         )
-
 
 
 
