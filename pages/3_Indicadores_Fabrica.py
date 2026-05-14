@@ -617,169 +617,557 @@ with tab1:
 
 
 # ============================================================
-# 🧪 QUALIDADE — COMPLETO (ISO + % + R$ + META + ACM)
+# 🧪 QUALIDADE — COMPLETO (LEITURA EXCEL OFICIAL)
 # ============================================================
 
 with tab2:
+
+    import os
+    import pandas as pd
+    import numpy as np
+    import plotly.express as px
 
     st.header("🧪 Indicadores de Qualidade")
 
     ANO = "2026"
 
-    meses_ordem = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+    meses_ordem = [
+        "Jan","Fev","Mar","Abr","Mai","Jun",
+        "Jul","Ago","Set","Out","Nov","Dez"
+    ]
 
     # ========================================================
-    # 🔧 FUNÇÃO PADRÃO (ROBUSTA E SEGURA)
+    # 📁 ARQUIVO OFICIAL
     # ========================================================
-    def montar_indicador(titulo, meta, dados, tipo="percentual", menor_melhor=True):
+    caminho_excel = os.path.abspath(
+        "data/Indicadores_qualidade/Indicadores_Qualidade_2026.xlsx"
+    )
+
+    # ========================================================
+    # 🚨 EXISTÊNCIA
+    # ========================================================
+    if not os.path.exists(caminho_excel):
+
+        st.error(
+            "Arquivo da Qualidade não encontrado."
+        )
+
+        st.stop()
+
+    # ========================================================
+    # 📊 LEITURA
+    # ========================================================
+    try:
+
+        df_excel = pd.read_excel(
+            caminho_excel,
+            header=None
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Erro ao ler Excel da Qualidade: {e}"
+        )
+
+        st.stop()
+
+    # ========================================================
+    # 🔥 MAPA DE MESES
+    # ========================================================
+    mapa_meses = {
+
+        "JANEIRO": "Jan",
+        "FEVEREIRO": "Fev",
+        "MARÇO": "Mar",
+        "MARCO": "Mar",
+        "ABRIL": "Abr",
+        "MAIO": "Mai",
+        "JUNHO": "Jun",
+        "JULHO": "Jul",
+        "AGOSTO": "Ago",
+        "SETEMBRO": "Set",
+        "OUTUBRO": "Out",
+        "NOVEMBRO": "Nov",
+        "DEZEMBRO": "Dez"
+    }
+
+    # ========================================================
+    # 🔧 FUNÇÃO LIMPEZA PERCENTUAL
+    # ========================================================
+    def limpar_percentual(v):
+
+        if pd.isna(v):
+            return None
+
+        v = str(v).strip()
+
+        if v == "":
+            return None
+
+        v = (
+            v.replace("%", "")
+             .replace(",", ".")
+             .replace(" ", "")
+        )
+
+        try:
+
+            return float(v) / 100
+
+        except:
+
+            return None
+
+    # ========================================================
+    # 🔧 FUNÇÃO LIMPEZA MOEDA
+    # ========================================================
+    def limpar_moeda(v):
+
+        if pd.isna(v):
+            return None
+
+        v = str(v).strip()
+
+        if v == "":
+            return None
+
+        v = (
+            v.replace("R$", "")
+             .replace(".", "")
+             .replace(",", ".")
+             .replace(" ", "")
+        )
+
+        try:
+
+            return float(v)
+
+        except:
+
+            return None
+
+    # ========================================================
+    # 🔥 EXTRATOR DE INDICADORES
+    # ========================================================
+    def extrair_indicador(
+
+        nome_indicador,
+        tipo="percentual"
+    ):
+
+        dados = {}
+
+        linha_indicador = None
+
+        # ----------------------------------------------------
+        # 🔍 PROCURA INDICADOR
+        # ----------------------------------------------------
+        for idx in range(len(df_excel)):
+
+            linha_texto = " ".join(
+
+                df_excel.iloc[idx]
+                .astype(str)
+                .tolist()
+            ).upper()
+
+            if nome_indicador.upper() in linha_texto:
+
+                linha_indicador = idx
+                break
+
+        if linha_indicador is None:
+
+            return dados
+
+        # ----------------------------------------------------
+        # 🔥 PROCURA LINHA DOS MESES
+        # ----------------------------------------------------
+        linha_meses = None
+
+        for idx in range(
+
+            max(0, linha_indicador - 5),
+
+            linha_indicador + 5
+        ):
+
+            linha_texto = " ".join(
+
+                df_excel.iloc[idx]
+                .astype(str)
+                .tolist()
+            ).upper()
+
+            if (
+                "JANEIRO" in linha_texto
+                or "JAN" in linha_texto
+            ):
+
+                linha_meses = idx
+                break
+
+        if linha_meses is None:
+
+            return dados
+
+        # ----------------------------------------------------
+        # 🔥 LINHAS
+        # ----------------------------------------------------
+        meses_excel = (
+
+            df_excel.iloc[linha_meses]
+            .astype(str)
+            .tolist()
+        )
+
+        valores_excel = (
+
+            df_excel.iloc[linha_indicador]
+            .tolist()
+        )
+
+        # ----------------------------------------------------
+        # 🔥 MONTA BASE ROBUSTA
+        # ----------------------------------------------------
+        for col in range(len(meses_excel)):
+
+            mes_excel = (
+                str(meses_excel[col])
+                .strip()
+                .upper()
+            )
+
+            # --------------------------------------------
+            # 🔥 VALOR
+            # --------------------------------------------
+            if col >= len(valores_excel):
+                continue
+
+            valor_excel = valores_excel[col]
+
+            # --------------------------------------------
+            # 🔥 IGNORA NÃO MESES
+            # --------------------------------------------
+            if mes_excel not in mapa_meses:
+                continue
+
+            mes_curto = (
+                mapa_meses[mes_excel]
+            )
+
+            # --------------------------------------------
+            # 🔥 LIMPEZA
+            # --------------------------------------------
+            if tipo == "percentual":
+
+                valor = limpar_percentual(
+                    valor_excel
+                )
+
+            else:
+
+                valor = limpar_moeda(
+                    valor_excel
+                )
+
+            if valor is None:
+                continue
+
+            dados[mes_curto] = valor
+
+        return dados
+
+    # ========================================================
+    # 🔧 FUNÇÃO PADRÃO DOS INDICADORES
+    # ========================================================
+    def montar_indicador(
+
+        titulo,
+        meta,
+        dados,
+        tipo="percentual",
+        menor_melhor=True
+    ):
 
         st.subheader(titulo)
 
-        valores = [dados.get(m, None) for m in meses_ordem]
-        valores_validos = [v for v in valores if v is not None]
+        valores = [
 
-        media = sum(valores_validos)/len(valores_validos) if valores_validos else None
+            dados.get(m, None)
 
+            for m in meses_ordem
+        ]
+
+        valores_validos = [
+
+            v for v in valores
+
+            if v is not None
+        ]
+
+        media = (
+
+            sum(valores_validos)
+
+            /
+
+            len(valores_validos)
+
+            if valores_validos else None
+        )
+
+        # ====================================================
+        # 📊 DATAFRAME
+        # ====================================================
         df_plot = pd.DataFrame({
+
             "Mês": meses_ordem,
+
             "Valor": valores
         })
 
         df_plot = pd.concat([
+
             df_plot,
-            pd.DataFrame([{"Mês": "ACM", "Valor": media}])
+
+            pd.DataFrame([{
+                "Mês": "ACM",
+                "Valor": media
+            }])
+
         ], ignore_index=True)
 
         # ====================================================
-        # 📊 TRATAMENTO POR TIPO
+        # 📊 CONVERSÃO
         # ====================================================
         if tipo == "percentual":
-            df_plot["Valor"] = df_plot["Valor"] * 100
+
+            df_plot["Valor"] = (
+                df_plot["Valor"] * 100
+            )
+
             meta_plot = meta * 100
+
         else:
+
             meta_plot = meta
 
         # ====================================================
-        # 📊 ORDENAÇÃO (ACM SEMPRE NO FINAL)
-        # ====================================================
-        df_meses = df_plot[df_plot["Mês"] != "ACM"].copy()
-        df_acm = df_plot[df_plot["Mês"] == "ACM"].copy()
-
-        df_meses["Mês"] = pd.Categorical(
-            df_meses["Mês"],
-            categories=meses_ordem,
-            ordered=True
-        )
-
-        df_meses = df_meses.sort_values("Mês")
-        df_plot = pd.concat([df_meses, df_acm])
-
-        # ====================================================
-        # 🏷️ RÓTULOS
+        # 🏷️ LABELS
         # ====================================================
         def label(row):
+
             if pd.isna(row["Valor"]):
                 return ""
 
             if tipo == "percentual":
-                return f"{row['Valor']:.1f}%"
-            elif tipo == "valor":
-                return f"R$ {row['Valor']:.1f}" if row["Mês"] == "ACM" else f"R$ {row['Valor']:.0f}"
-            else:
-                return f"{row['Valor']:.1f}"
 
-        df_plot["Label"] = df_plot.apply(label, axis=1)
+                return (
+                    f"{row['Valor']:.1f}%"
+                )
+
+            return (
+                f"R$ {row['Valor']:,.0f}"
+                .replace(",", ".")
+            )
+
+        df_plot["Label"] = (
+            df_plot.apply(
+                label,
+                axis=1
+            )
+        )
 
         # ====================================================
         # 📊 GRÁFICO
         # ====================================================
         fig = px.bar(
+
             df_plot,
+
             x="Mês",
+
             y="Valor",
+
             text="Label"
         )
 
-        fig.update_traces(textposition="outside")
+        fig.update_traces(
+            textposition="outside"
+        )
 
-        # 🔥 LINHA DE META
+        # ----------------------------------------------------
+        # 🔥 META
+        # ----------------------------------------------------
         fig.add_hline(
+
             y=meta_plot,
+
             line_dash="dash",
+
             line_color="red",
+
             annotation_text="Meta",
+
             annotation_position="top left"
         )
 
-        # 🔥 ESCALA CORRETA (SEM NEGATIVO)
+        # ----------------------------------------------------
+        # 🔥 ESCALA
+        # ----------------------------------------------------
         max_val = df_plot["Valor"].max()
 
         fig.update_yaxes(
-            range=[0, max(max_val * 1.2 if pd.notna(max_val) else 1, meta_plot * 1.2)],
-            tickformat=".1f"
+
+            range=[
+                0,
+                max(
+                    max_val * 1.2
+                    if pd.notna(max_val)
+                    else 1,
+
+                    meta_plot * 1.2
+                )
+            ]
         )
 
+        # ----------------------------------------------------
+        # 🔥 LAYOUT
+        # ----------------------------------------------------
         fig.update_layout(
+
             title=f"{titulo} - {ANO}",
+
             showlegend=False,
+
             height=450
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
         # ====================================================
-        # 🚨 REGRA ISO (3 MESES FORA DA META)
+        # 🚨 REGRA ISO
         # ====================================================
         if len(valores_validos) >= 3:
-            ultimos_3 = valores_validos[-3:]
+
+            ultimos_3 = (
+                valores_validos[-3:]
+            )
 
             if menor_melhor:
-                fora_meta = all(v > meta for v in ultimos_3)
+
+                fora_meta = all(
+                    v > meta
+                    for v in ultimos_3
+                )
+
             else:
-                fora_meta = all(v < meta for v in ultimos_3)
+
+                fora_meta = all(
+                    v < meta
+                    for v in ultimos_3
+                )
 
             if fora_meta:
-                st.error("🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA")
+
+                st.error(
+                    "🚨 3 meses consecutivos fora da meta — AÇÃO OBRIGATÓRIA"
+                )
+
             else:
-                st.success("Indicador sob controle recente")
+
+                st.success(
+                    "Indicador sob controle recente"
+                )
 
         st.divider()
 
     # ========================================================
+    # 📊 EXTRAÇÃO DOS INDICADORES
+    # ========================================================
+    dados_nc = extrair_indicador(
+        "NC EXTERNAS",
+        tipo="percentual"
+    )
+
+    dados_custo = extrair_indicador(
+        "CUSTO TOTAL DE NC",
+        tipo="valor"
+    )
+
+    dados_refugo = extrair_indicador(
+        "REFUGO",
+        tipo="percentual"
+    )
+
+    dados_retrabalho = extrair_indicador(
+        "RETRABALHO",
+        tipo="percentual"
+    )
+
+    # ========================================================
     # 📊 INDICADORES
     # ========================================================
-
     montar_indicador(
+
         "🧪 NC Externas (%)",
+
         0.02,
-        {"Jan":0.012,"Fev":0.018,"Mar":0.015},
+
+        dados_nc,
+
         tipo="percentual",
+
         menor_melhor=True
     )
 
     montar_indicador(
+
         "💰 Custo Total de NC (R$)",
+
         15000,
-        {"Jan":12000,"Fev":18000,"Mar":14000},
+
+        dados_custo,
+
         tipo="valor",
+
         menor_melhor=True
     )
 
     montar_indicador(
+
         "♻️ Refugo (%)",
+
         0.03,
-        {"Jan":0.025,"Fev":0.028,"Mar":0.031},
+
+        dados_refugo,
+
         tipo="percentual",
+
         menor_melhor=True
     )
 
     montar_indicador(
+
         "🔧 Retrabalho (%)",
+
         0.05,
-        {"Jan":0.04,"Fev":0.045,"Mar":0.052},
+
+        dados_retrabalho,
+
         tipo="percentual",
+
         menor_melhor=True
     )
+
+
+
+
 
 
 
