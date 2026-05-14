@@ -160,13 +160,12 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 # ============================================================
-# 💰 COMERCIAL — LEITURA VIA EXCEL OFICIAL
+# 💰 COMERCIAL — LEITURA DIRETA DA TABELA EXCEL
 # ============================================================
 
 with tab1:
 
     import os
-    import re
 
     st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
     st.caption("Meta: ≥ 25%")
@@ -190,9 +189,31 @@ with tab1:
     ]
 
     # ========================================================
+    # 🔥 MAPA MESES
+    # ========================================================
+    mapa_meses = {
+
+        "JANEIRO": "Jan",
+        "FEVEREIRO": "Fev",
+        "MARÇO": "Mar",
+        "MARCO": "Mar",
+        "ABRIL": "Abr",
+        "MAIO": "Mai",
+        "JUNHO": "Jun",
+        "JULHO": "Jul",
+        "AGOSTO": "Ago",
+        "SETEMBRO": "Set",
+        "OUTUBRO": "Out",
+        "NOVEMBRO": "Nov",
+        "DEZEMBRO": "Dez"
+    }
+
+    # ========================================================
     # 🔥 BASE OFICIAL
     # ========================================================
     indicador_comercial = {}
+
+    media_acm = None
 
     # ========================================================
     # 🔥 LEITURA EXCEL
@@ -202,114 +223,82 @@ with tab1:
         try:
 
             # ------------------------------------------------
-            # 🔥 LEITURA BRUTA
+            # 🔥 LEITURA DA PLANILHA
             # ------------------------------------------------
             df_excel = pd.read_excel(
+
                 caminho_excel,
+
                 header=None
             )
 
             # ------------------------------------------------
-            # 🔥 TRANSFORMA EM TEXTO
+            # 🔥 PERCORRE LINHAS
             # ------------------------------------------------
-            texto_excel = " ".join(
+            for _, row in df_excel.iterrows():
 
-                df_excel.astype(str)
-                .fillna("")
-                .values
-                .flatten()
-                .tolist()
-            )
+                col_mes = str(
+                    row[0]
+                ).strip().upper()
 
-            # ------------------------------------------------
-            # 🔥 EXTRAI PERCENTUAIS
-            # ------------------------------------------------
-            percentuais = re.findall(
-
-                r"(\d+)%",
-
-                texto_excel
-            )
-
-            # ------------------------------------------------
-            # 🔥 CONVERSÃO NUMÉRICA
-            # ------------------------------------------------
-            percentuais = [
-
-                int(p)
-
-                for p in percentuais
-            ]
-
-            # ------------------------------------------------
-            # 🔥 REMOVE ESCALA DO EIXO Y
-            # ------------------------------------------------
-            # Estrutura:
-            #
-            # 0,5,10...100
-            # = 21 valores
-            # ------------------------------------------------
-            if len(percentuais) > 21:
-
-                percentuais = (
-                    percentuais[21:]
-                )
-
-            else:
-
-                percentuais = []
-
-            # ------------------------------------------------
-            # 🔥 ACM EXTRAÍDO
-            # ------------------------------------------------
-            acm_extraido = None
-
-            if len(percentuais) >= 1:
-
-                acm_extraido = (
-                    percentuais[-1] / 100
-                )
-
-            # ------------------------------------------------
-            # 🔥 REMOVE ACM DOS MESES
-            # ------------------------------------------------
-            percentuais_meses = (
-                percentuais[:-1]
-            )
-
-            # ------------------------------------------------
-            # 🔥 GARANTE 12 POSIÇÕES
-            # ------------------------------------------------
-            while len(percentuais_meses) < 12:
-
-                percentuais_meses.append(0)
-
-            # ------------------------------------------------
-            # 🔥 MONTA BASE OFICIAL
-            # ------------------------------------------------
-            for idx, mes in enumerate(meses_ordem):
-
-                if idx >= len(percentuais_meses):
-                    continue
-
-                valor = (
-                    percentuais_meses[idx] / 100
-                )
+                col_valor = row[1]
 
                 # --------------------------------------------
-                # 🔥 IGNORA FUTUROS ZERADOS
+                # 🔥 IGNORA VAZIOS
                 # --------------------------------------------
-                if valor <= 0:
+                if (
+                    col_mes == "NAN"
+                    or pd.isna(col_valor)
+                ):
                     continue
 
-                indicador_comercial[mes] = {
+                # --------------------------------------------
+                # 🔥 ACM
+                # --------------------------------------------
+                if "MÉDIA ACUMULADA" in col_mes:
 
-                    "valor": valor,
+                    try:
 
-                    "arquivo": (
-                        "INDICADOR  COMERCIAL.xlsx"
-                    )
-                }
+                        media_acm = (
+                            float(col_valor) / 100
+                        )
+
+                    except:
+                        pass
+
+                    continue
+
+                # --------------------------------------------
+                # 🔥 MESES
+                # --------------------------------------------
+                if col_mes in mapa_meses:
+
+                    try:
+
+                        valor = (
+                            float(col_valor) / 100
+                        )
+
+                        if valor <= 0:
+                            continue
+
+                        mes_curto = (
+                            mapa_meses[col_mes]
+                        )
+
+                        indicador_comercial[
+                            mes_curto
+                        ] = {
+
+                            "valor": valor,
+
+                            "arquivo": (
+                                "INDICADOR  COMERCIAL.xlsx"
+                            )
+                        }
+
+                    except:
+                        continue
 
         except Exception as e:
 
@@ -369,30 +358,20 @@ with tab1:
     ]
 
     # --------------------------------------------------------
-    # 🔥 GARANTE EXISTÊNCIA
+    # 🔥 FALLBACK ACM
     # --------------------------------------------------------
-    acm_extraido = None
+    if media_acm is None:
 
-    # --------------------------------------------------------
-    # 🔥 ACM CALCULADO
-    # --------------------------------------------------------
-    media_acm = (
+        media_acm = (
 
-        sum(valores_validos)
+            sum(valores_validos)
 
-        /
+            /
 
-        len(valores_validos)
+            len(valores_validos)
 
-        if valores_validos else None
-    )
-
-    # --------------------------------------------------------
-    # 🔥 PRIORIZA ACM EXTRAÍDO
-    # --------------------------------------------------------
-    if acm_extraido is not None:
-
-        media_acm = acm_extraido
+            if valores_validos else None
+        )
 
     # ========================================================
     # 📊 DATAFRAME
@@ -631,6 +610,7 @@ with tab1:
             st.success(
                 "Indicador sob controle recente"
             )
+
 
 
 
