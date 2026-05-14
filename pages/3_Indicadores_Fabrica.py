@@ -1286,9 +1286,9 @@ with tab3:
         .str.strip()
     )
 
-    # --------------------------------------------------------
-    # 🔥 REMOVE VAZIOS
-    # --------------------------------------------------------
+    # ========================================================
+    # 🔥 REMOVE INVÁLIDOS
+    # ========================================================
     base = base[
 
         base["PV"].notna()
@@ -1315,7 +1315,14 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 STATUS DE BAIXA
+    # 🔥 REMOVE DATAS INVÁLIDAS
+    # ========================================================
+    base = base.dropna(
+        subset=["DATA_ENTREGA_APS"]
+    )
+
+    # ========================================================
+    # 🔥 STATUS FECHADOS
     # ========================================================
     colunas_status = [
 
@@ -1338,7 +1345,7 @@ with tab3:
             break
 
     # ========================================================
-    # 🔥 REMOVE FINALIZADAS / ENCERRADAS
+    # 🔥 REMOVE ENCERRADAS
     # ========================================================
     if coluna_status_real is not None:
 
@@ -1370,29 +1377,32 @@ with tab3:
         ]
 
     # ========================================================
-    # 🔥 REMOVE DUPLICIDADES REAIS
+    # 🔥 REMOVE DUPLICIDADE REAL
     # ========================================================
-    base = base.drop_duplicates()
+    colunas_chave = [
 
-    # ========================================================
-    # 📦 AGRUPAMENTO POR PV
-    # ========================================================
-    pv = (
+        c for c in [
 
-        base.groupby("PV", as_index=False)
+            "PV",
+            "PROCESSO",
+            "PECA",
+            "CODIGO",
+            "ITEM",
+            "DESCRICAO"
+        ]
 
-        .agg(
+        if c in base.columns
+    ]
 
-            data_entrega=("DATA_ENTREGA_APS", "min")
+    if colunas_chave:
+
+        base = base.drop_duplicates(
+            subset=colunas_chave
         )
-    )
 
-    # ========================================================
-    # 🔥 REMOVE DATAS INVÁLIDAS
-    # ========================================================
-    pv = pv.dropna(
-        subset=["data_entrega"]
-    )
+    else:
+
+        base = base.drop_duplicates()
 
     # ========================================================
     # 📅 DATA HOJE
@@ -1400,31 +1410,31 @@ with tab3:
     hoje = pd.Timestamp.today().normalize()
 
     # ========================================================
-    # 🚨 REGRA DE ATRASO
+    # 🚨 ATRASO
     # ========================================================
-    pv["Atraso_dias"] = (
+    base["Atraso_dias"] = (
 
-        hoje - pv["data_entrega"]
+        hoje - base["DATA_ENTREGA_APS"]
 
     ).dt.days
 
-    pv["Atrasada"] = (
+    base["Atrasada"] = (
 
-        pv["Atraso_dias"] > 0
+        base["Atraso_dias"] > 0
     )
 
     # ========================================================
     # 🔥 BASE ATRASADAS
     # ========================================================
-    atrasadas = pv[
+    atrasadas = base[
 
-        pv["Atrasada"]
+        base["Atrasada"]
     ].copy()
 
     # ========================================================
     # 📊 KPIs
     # ========================================================
-    total = len(pv)
+    total = len(base)
 
     qtd_atrasadas = len(
         atrasadas
@@ -1468,7 +1478,7 @@ with tab3:
     st.divider()
 
     # ========================================================
-    # 📊 DISTRIBUIÇÃO POR FAIXA
+    # 📊 DISTRIBUIÇÃO
     # ========================================================
     st.subheader(
         "📊 Distribuição do atraso por faixa (dias)"
@@ -1476,43 +1486,20 @@ with tab3:
 
     if qtd_atrasadas > 0:
 
-        # ----------------------------------------------------
-        # 🔥 GARANTE INTEIRO
-        # ----------------------------------------------------
         atrasadas["Atraso_dias"] = (
 
             atrasadas["Atraso_dias"]
             .astype(int)
         )
 
-        # ----------------------------------------------------
-        # 🔥 FAIXAS FIXAS
-        # ----------------------------------------------------
         bins = [
-
-            0,
-            2,
-            4,
-            6,
-            8,
-            10,
-            15,
-            20,
-            30,
-            9999
+            0,2,4,6,8,10,15,20,30,9999
         ]
 
         labels = [
-
-            "1-2",
-            "3-4",
-            "5-6",
-            "7-8",
-            "9-10",
-            "11-15",
-            "16-20",
-            "21-30",
-            "30+"
+            "1-2","3-4","5-6","7-8",
+            "9-10","11-15","16-20",
+            "21-30","30+"
         ]
 
         atrasadas["Faixa"] = pd.cut(
@@ -1526,9 +1513,6 @@ with tab3:
             right=True
         )
 
-        # ----------------------------------------------------
-        # 📊 RESUMO
-        # ----------------------------------------------------
         resumo = (
 
             atrasadas.groupby("Faixa")
@@ -1545,9 +1529,6 @@ with tab3:
             )
         )
 
-        # ----------------------------------------------------
-        # 📊 GRÁFICO
-        # ----------------------------------------------------
         fig = px.bar(
 
             resumo,
@@ -1573,7 +1554,7 @@ with tab3:
 
             xaxis_title="Faixa de atraso (dias)",
 
-            yaxis_title="Quantidade de PVs",
+            yaxis_title="Quantidade",
 
             coloraxis_showscale=False,
 
@@ -1581,48 +1562,9 @@ with tab3:
         )
 
         st.plotly_chart(
-
             fig,
-
             use_container_width=True
         )
-
-        # ====================================================
-        # 📋 TABELA DETALHADA
-        # ====================================================
-        with st.expander(
-            "📋 PVs em atraso"
-        ):
-
-            tabela = (
-
-                atrasadas
-
-                .sort_values(
-                    "Atraso_dias",
-                    ascending=False
-                )
-
-                .rename(columns={
-
-                    "PV": "PV",
-
-                    "data_entrega": "Entrega APS",
-
-                    "Atraso_dias": "Dias em atraso"
-                })
-            )
-
-            st.dataframe(
-
-                tabela[[
-                    "PV",
-                    "Entrega APS",
-                    "Dias em atraso"
-                ]],
-
-                use_container_width=True
-            )
 
     else:
 
