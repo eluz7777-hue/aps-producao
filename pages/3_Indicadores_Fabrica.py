@@ -157,12 +157,15 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 
 # ============================================================
-# 💰 COMERCIAL — COMPLETO (SQLITE + ISO + EVIDÊNCIA + KPI)
+# 💰 COMERCIAL — COMPLETO (LEITURA AUTOMÁTICA DOCX)
 # ============================================================
 
 with tab1:
 
     import os
+    import re
+
+    from docx import Document
 
     st.subheader("💰 Indicador Comercial (Orçamentos → Pedidos)")
     st.caption("Meta: ≥ 25%")
@@ -171,135 +174,9 @@ with tab1:
     META = 0.25
 
     # ========================================================
-    # 🗄️ SQLITE — COMERCIAL
+    # 📁 PASTA OFICIAL
     # ========================================================
-
-    conn_ind = get_conn_indicadores()
-
-    cursor = conn_ind.cursor()
-
-    # --------------------------------------------------------
-    # 🔥 VERIFICA EXISTÊNCIA
-    # --------------------------------------------------------
-    cursor.execute("""
-
-        SELECT COUNT(*)
-
-        FROM indicadores_iso
-
-        WHERE setor = 'Comercial'
-        AND indicador = 'Conversão'
-        AND ano = 2026
-
-    """)
-
-    qtd_existente = cursor.fetchone()[0]
-
-    # --------------------------------------------------------
-    # 🔥 CARGA INICIAL AUTOMÁTICA
-    # --------------------------------------------------------
-    if qtd_existente == 0:
-
-        dados_iniciais = [
-
-            (
-                "Comercial",
-                "Conversão",
-                2026,
-                "Jan",
-                0.1463,
-                0.25,
-                "percentual",
-                "INDC. COMERCIAL - JANEIRO.docx"
-            ),
-
-            (
-                "Comercial",
-                "Conversão",
-                2026,
-                "Fev",
-                0.1282,
-                0.25,
-                "percentual",
-                "INDI. COMERCIAL - FEVEREIRO.docx"
-            ),
-
-            (
-                "Comercial",
-                "Conversão",
-                2026,
-                "Mar",
-                0.1875,
-                0.25,
-                "percentual",
-                "INDC. COMERCIAL - MARÇO.docx"
-            ),
-
-            (
-                "Comercial",
-                "Conversão",
-                2026,
-                "Abr",
-                0.2210,
-                0.25,
-                "percentual",
-                "INDC. COMERCIAL - ABRIL.docx"
-            )
-
-        ]
-
-        cursor.executemany("""
-
-            INSERT INTO indicadores_iso (
-
-                setor,
-                indicador,
-                ano,
-                mes,
-                valor,
-                meta,
-                tipo,
-                arquivo_evidencia
-
-            )
-
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-
-        """, dados_iniciais)
-
-        conn_ind.commit()
-
-    # --------------------------------------------------------
-    # 🔥 LEITURA OFICIAL SQLITE
-    # --------------------------------------------------------
-    df_ind_comercial = pd.read_sql_query("""
-
-        SELECT *
-
-        FROM indicadores_iso
-
-        WHERE setor = 'Comercial'
-        AND indicador = 'Conversão'
-        AND ano = 2026
-
-    """, conn_ind)
-
-    conn_ind.close()
-
-    # --------------------------------------------------------
-    # 🔥 CONVERSÃO PARA O FORMATO ORIGINAL
-    # --------------------------------------------------------
-    indicador_comercial = {}
-
-    for _, row in df_ind_comercial.iterrows():
-
-        indicador_comercial[row["mes"]] = {
-
-            "valor": row["valor"],
-
-            "arquivo": row["arquivo_evidencia"]
-
-        }
+    caminho_base = "data/Indicadores Comerciais"
 
     # ========================================================
     # 📊 ORDEM DOS MESES
@@ -309,6 +186,180 @@ with tab1:
         "Jul","Ago","Set","Out","Nov","Dez"
     ]
 
+    # ========================================================
+    # 🔥 MAPA OFICIAL
+    # ========================================================
+    mapa_meses_docx = {
+        "Jan/26": "Jan",
+        "Fev/26": "Fev",
+        "Mar/26": "Mar",
+        "Abr/26": "Abr",
+        "Mai/26": "Mai",
+        "Jun/26": "Jun",
+        "Jul/26": "Jul",
+        "Ago/26": "Ago",
+        "Set/26": "Set",
+        "Out/26": "Out",
+        "Nov/26": "Nov",
+        "Dez/26": "Dez"
+    }
+
+    # ========================================================
+    # 🔥 LEITURA AUTOMÁTICA DOCX
+    # ========================================================
+    indicador_comercial = {}
+
+    arquivos_docx = []
+
+    if os.path.exists(caminho_base):
+
+        arquivos_docx = [
+
+            arq for arq in os.listdir(caminho_base)
+
+            if arq.lower().endswith(".docx")
+        ]
+
+    # --------------------------------------------------------
+    # 🔥 PROCESSA TODOS OS DOCX
+    # --------------------------------------------------------
+    for arquivo_docx in arquivos_docx:
+
+        caminho_docx = os.path.join(
+            caminho_base,
+            arquivo_docx
+        )
+
+        try:
+
+            doc = Document(caminho_docx)
+
+            texto_completo = []
+
+            # ------------------------------------------------
+            # 🔥 PARÁGRAFOS
+            # ------------------------------------------------
+            for paragrafo in doc.paragraphs:
+
+                texto = (
+                    paragrafo.text
+                    .strip()
+                )
+
+                if texto:
+
+                    texto_completo.append(texto)
+
+            # ------------------------------------------------
+            # 🔥 TABELAS
+            # ------------------------------------------------
+            for tabela in doc.tables:
+
+                for linha in tabela.rows:
+
+                    for celula in linha.cells:
+
+                        texto = (
+                            celula.text
+                            .strip()
+                        )
+
+                        if texto:
+
+                            texto_completo.append(texto)
+
+            texto_completo = " ".join(
+                texto_completo
+            )
+
+            # ------------------------------------------------
+            # 🔥 IDENTIFICA MESES
+            # ------------------------------------------------
+            meses_encontrados = re.findall(
+
+                r"(Jan\/26|Fev\/26|Mar\/26|Abr\/26|Mai\/26|Jun\/26|Jul\/26|Ago\/26|Set\/26|Out\/26|Nov\/26|Dez\/26)",
+
+                texto_completo
+            )
+
+            # ------------------------------------------------
+            # 🔥 IDENTIFICA PERCENTUAIS
+            # ------------------------------------------------
+            percentuais = re.findall(
+
+                r"(\d+)%",
+
+                texto_completo
+            )
+
+            # ------------------------------------------------
+            # 🔥 CONVERSÃO NUMÉRICA
+            # ------------------------------------------------
+            percentuais = [
+
+                int(p) / 100
+
+                for p in percentuais
+            ]
+
+            # ------------------------------------------------
+            # 🔥 REMOVE ACM
+            # ------------------------------------------------
+            if len(percentuais) >= 13:
+
+                percentuais = percentuais[:12]
+
+            # ------------------------------------------------
+            # 🔥 MONTA BASE
+            # ------------------------------------------------
+            for idx, mes_docx in enumerate(meses_encontrados):
+
+                if idx >= len(percentuais):
+                    continue
+
+                mes_curto = mapa_meses_docx.get(
+                    mes_docx
+                )
+
+                if not mes_curto:
+                    continue
+
+                valor = percentuais[idx]
+
+                # --------------------------------------------
+                # 🔥 IGNORA ZEROS FUTUROS
+                # --------------------------------------------
+                if valor <= 0:
+                    continue
+
+                indicador_comercial[mes_curto] = {
+
+                    "valor": valor,
+
+                    "arquivo": arquivo_docx
+                }
+
+        except Exception as e:
+
+            st.warning(
+                f"Erro ao ler {arquivo_docx}: {e}"
+            )
+
+    # ========================================================
+    # 🔥 GARANTE ORDEM
+    # ========================================================
+    indicador_comercial = {
+
+        mes: indicador_comercial[mes]
+
+        for mes in meses_ordem
+
+        if mes in indicador_comercial
+    }
+
+    # ========================================================
+    # 📊 VALORES
+    # ========================================================
     valores = []
     arquivos = []
 
@@ -333,17 +384,25 @@ with tab1:
     # 📊 MÉDIA ACUMULADA (ACM)
     # ========================================================
     valores_validos = [
+
         v for v in valores
+
         if v is not None
     ]
 
     media_acm = (
-        sum(valores_validos) / len(valores_validos)
+
+        sum(valores_validos)
+
+        /
+
+        len(valores_validos)
+
         if valores_validos else None
     )
 
     # ========================================================
-    # 📊 DATAFRAME DO GRÁFICO
+    # 📊 DATAFRAME
     # ========================================================
     df_plot = pd.DataFrame({
 
@@ -368,10 +427,12 @@ with tab1:
     # 🔥 PERCENTUAL
     # --------------------------------------------------------
     df_plot["Valor"] = (
+
         pd.to_numeric(
             df_plot["Valor"],
             errors="coerce"
         )
+
         * 100
     )
 
@@ -384,6 +445,7 @@ with tab1:
             return ""
 
         if row["Mês"] == "ACM":
+
             return f"{row['Valor']:.1f}%"
 
         return f"{row['Valor']:.0f}%"
@@ -407,7 +469,6 @@ with tab1:
         y="Valor",
 
         text="Label"
-
     )
 
     fig.update_traces(
@@ -468,7 +529,7 @@ with tab1:
     )
 
     # ========================================================
-    # 🎯 SELECT MÊS
+    # 🎯 SELECT
     # ========================================================
     meses_com_dado = [
 
@@ -538,10 +599,6 @@ with tab1:
     # ========================================================
     # 📎 EVIDÊNCIA ISO
     # ========================================================
-    caminho_base = (
-        "data/Indicadores Comerciais"
-    )
-
     caminho_arquivo = os.path.join(
         caminho_base,
         arquivo
@@ -584,6 +641,7 @@ with tab1:
             st.success(
                 "Indicador sob controle recente"
             )
+
 
 
 
