@@ -1327,19 +1327,67 @@ with tab3:
         base["PV"].str.lower() != "nan"
     ]
 
-    # ========================================================
-    # 🔥 TOTAL REAL DE PVs
-    # ========================================================
-    total_pvs = (
+   
 
-        base["PV"]
 
-        .astype(str)
+ # ========================================================
+# 🔥 TOTAL REAL DE PVs (ARQUIVO OFICIAL)
+# ========================================================
 
-        .str.strip()
+caminho_pv = os.path.abspath(
+    "PV.xlsx"
+)
 
-        .nunique()
+if os.path.exists(caminho_pv):
+
+    try:
+
+        df_pv = pd.read_excel(
+            caminho_pv
+        )
+
+        if "PV" in df_pv.columns:
+
+            total_pvs = (
+
+                df_pv["PV"]
+
+                .astype(str)
+
+                .str.strip()
+
+                .replace("", np.nan)
+
+                .dropna()
+
+                .nunique()
+            )
+
+        else:
+
+            total_pvs = 0
+
+            st.warning(
+                "Coluna 'PV' não encontrada em PV.xlsx"
+            )
+
+    except Exception as e:
+
+        total_pvs = 0
+
+        st.error(
+            f"Erro ao ler PV.xlsx: {e}"
+        )
+
+else:
+
+    total_pvs = 0
+
+    st.warning(
+        "Arquivo PV.xlsx não encontrado."
     )
+
+
 
     # ========================================================
     # 📅 DATA APS
