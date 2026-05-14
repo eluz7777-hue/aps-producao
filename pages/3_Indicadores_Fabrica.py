@@ -306,30 +306,33 @@ with tab1:
             ]
 
             # ------------------------------------------------
-            # 🔥 REMOVE ESCALA DO EIXO Y
+            # 🔥 REMOVE ESCALA DO EIXO Y POR POSIÇÃO
             # ------------------------------------------------
-            # Escala padrão:
+            # Estrutura padrão do DOCX:
+            #
+            # 1️⃣ Escala eixo Y:
             # 0,5,10,15...100
-            # Total = 21 valores
+            #
+            # 2️⃣ Depois:
+            # valores reais das barras
+            #
+            # Portanto removemos os
+            # 21 primeiros percentuais.
             # ------------------------------------------------
-            escala_eixo_y = [
-                0,5,10,15,20,25,30,35,40,45,
-                50,55,60,65,70,75,80,85,90,95,100
-            ]
-
             percentuais_reais = []
 
-            for valor in todos_percentuais:
+            if len(todos_percentuais) > 21:
 
-                if valor in escala_eixo_y:
-                    continue
+                percentuais_reais = (
+                    todos_percentuais[21:]
+                )
 
-                percentuais_reais.append(valor)
+            else:
+
+                percentuais_reais = []
 
             # ------------------------------------------------
-            # 🔥 REMOVE ACM FINAL
-            # ------------------------------------------------
-            # O último percentual é o ACM
+            # 🔥 ACM EXTRAÍDO
             # ------------------------------------------------
             acm_extraido = None
 
@@ -340,9 +343,11 @@ with tab1:
                 )
 
             # ------------------------------------------------
-            # 🔥 SOMENTE MESES
+            # 🔥 REMOVE ACM DOS MESES
             # ------------------------------------------------
-            percentuais_meses = percentuais_reais[:-1]
+            percentuais_meses = (
+                percentuais_reais[:-1]
+            )
 
             # ------------------------------------------------
             # 🔥 GARANTE 12 POSIÇÕES
@@ -699,7 +704,6 @@ with tab1:
             st.success(
                 "Indicador sob controle recente"
             )
-
 
 
 
