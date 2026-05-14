@@ -617,7 +617,7 @@ with tab1:
 
 
 # ============================================================
-# 🧪 QUALIDADE — COMPLETO (LEITURA EXCEL OFICIAL)
+# 🧪 QUALIDADE — BLOCO FINAL OFICIAL
 # ============================================================
 
 with tab2:
@@ -631,57 +631,48 @@ with tab2:
 
     ANO = "2026"
 
-    meses_ordem = [
-        "Jan","Fev","Mar","Abr","Mai","Jun",
-        "Jul","Ago","Set","Out","Nov","Dez"
+    # ========================================================
+    # 📁 ARQUIVO OFICIAL
+    # ========================================================
+    pastas_possiveis = [
+
+        os.path.abspath(
+            "data/Indicadores de Qualidade"
+        ),
+
+        os.path.abspath(
+            "data/Indicadores_qualidade"
+        )
     ]
 
-   
+    caminho_excel = None
 
-# ========================================================
-# 📁 ARQUIVO OFICIAL
-# ========================================================
-pastas_possiveis = [
+    # ========================================================
+    # 🔍 PROCURA AUTOMÁTICA
+    # ========================================================
+    for pasta in pastas_possiveis:
 
-    os.path.abspath(
-        "data/Indicadores de Qualidade"
-    ),
+        if not os.path.exists(pasta):
+            continue
 
-    os.path.abspath(
-        "data/Indicadores_qualidade"
-    )
-]
+        arquivos_xlsx = [
 
-caminho_excel = None
+            arq for arq in os.listdir(pasta)
 
-# ========================================================
-# 🔍 PROCURA AUTOMÁTICA
-# ========================================================
-for pasta in pastas_possiveis:
+            if arq.lower().endswith(".xlsx")
+        ]
 
-    if not os.path.exists(pasta):
-        continue
+        if not arquivos_xlsx:
+            continue
 
-    arquivos_xlsx = [
+        caminho_excel = os.path.join(
 
-        arq for arq in os.listdir(pasta)
+            pasta,
 
-        if arq.lower().endswith(".xlsx")
-    ]
+            arquivos_xlsx[0]
+        )
 
-    if not arquivos_xlsx:
-        continue
-
-    caminho_excel = os.path.join(
-
-        pasta,
-
-        arquivos_xlsx[0]
-    )
-
-    break
-
-
+        break
 
     # ========================================================
     # 🚨 EXISTÊNCIA
@@ -695,232 +686,50 @@ for pasta in pastas_possiveis:
         st.stop()
 
     # ========================================================
-    # 📊 LEITURA
+    # 📊 LEITURA EXCEL
     # ========================================================
     try:
 
-        df_excel = pd.read_excel(
-            caminho_excel,
-            header=None
+        xls = pd.ExcelFile(
+            caminho_excel
         )
 
     except Exception as e:
 
         st.error(
-            f"Erro ao ler Excel da Qualidade: {e}"
+            f"Erro ao abrir Excel da Qualidade: {e}"
         )
 
         st.stop()
 
     # ========================================================
-    # 🔥 MAPA DE MESES
+    # 📊 ORDEM DOS MESES
     # ========================================================
-    mapa_meses = {
+    meses_ordem = [
+        "Jan","Fev","Mar","Abr","Mai","Jun",
+        "Jul","Ago","Set","Out","Nov","Dez"
+    ]
 
-        "JANEIRO": "Jan",
-        "FEVEREIRO": "Fev",
-        "MARÇO": "Mar",
-        "MARCO": "Mar",
-        "ABRIL": "Abr",
-        "MAIO": "Mai",
-        "JUNHO": "Jun",
-        "JULHO": "Jul",
-        "AGOSTO": "Ago",
-        "SETEMBRO": "Set",
-        "OUTUBRO": "Out",
-        "NOVEMBRO": "Nov",
-        "DEZEMBRO": "Dez"
+    # ========================================================
+    # 🔥 MAPA DATAS
+    # ========================================================
+    mapa_datas = {
+        1: "Jan",
+        2: "Fev",
+        3: "Mar",
+        4: "Abr",
+        5: "Mai",
+        6: "Jun",
+        7: "Jul",
+        8: "Ago",
+        9: "Set",
+        10: "Out",
+        11: "Nov",
+        12: "Dez"
     }
 
     # ========================================================
-    # 🔧 FUNÇÃO LIMPEZA PERCENTUAL
-    # ========================================================
-    def limpar_percentual(v):
-
-        if pd.isna(v):
-            return None
-
-        v = str(v).strip()
-
-        if v == "":
-            return None
-
-        v = (
-            v.replace("%", "")
-             .replace(",", ".")
-             .replace(" ", "")
-        )
-
-        try:
-
-            return float(v) / 100
-
-        except:
-
-            return None
-
-    # ========================================================
-    # 🔧 FUNÇÃO LIMPEZA MOEDA
-    # ========================================================
-    def limpar_moeda(v):
-
-        if pd.isna(v):
-            return None
-
-        v = str(v).strip()
-
-        if v == "":
-            return None
-
-        v = (
-            v.replace("R$", "")
-             .replace(".", "")
-             .replace(",", ".")
-             .replace(" ", "")
-        )
-
-        try:
-
-            return float(v)
-
-        except:
-
-            return None
-
-    # ========================================================
-    # 🔥 EXTRATOR DE INDICADORES
-    # ========================================================
-    def extrair_indicador(
-
-        nome_indicador,
-        tipo="percentual"
-    ):
-
-        dados = {}
-
-        linha_indicador = None
-
-        # ----------------------------------------------------
-        # 🔍 PROCURA INDICADOR
-        # ----------------------------------------------------
-        for idx in range(len(df_excel)):
-
-            linha_texto = " ".join(
-
-                df_excel.iloc[idx]
-                .astype(str)
-                .tolist()
-            ).upper()
-
-            if nome_indicador.upper() in linha_texto:
-
-                linha_indicador = idx
-                break
-
-        if linha_indicador is None:
-
-            return dados
-
-        # ----------------------------------------------------
-        # 🔥 PROCURA LINHA DOS MESES
-        # ----------------------------------------------------
-        linha_meses = None
-
-        for idx in range(
-
-            max(0, linha_indicador - 5),
-
-            linha_indicador + 5
-        ):
-
-            linha_texto = " ".join(
-
-                df_excel.iloc[idx]
-                .astype(str)
-                .tolist()
-            ).upper()
-
-            if (
-                "JANEIRO" in linha_texto
-                or "JAN" in linha_texto
-            ):
-
-                linha_meses = idx
-                break
-
-        if linha_meses is None:
-
-            return dados
-
-        # ----------------------------------------------------
-        # 🔥 LINHAS
-        # ----------------------------------------------------
-        meses_excel = (
-
-            df_excel.iloc[linha_meses]
-            .astype(str)
-            .tolist()
-        )
-
-        valores_excel = (
-
-            df_excel.iloc[linha_indicador]
-            .tolist()
-        )
-
-        # ----------------------------------------------------
-        # 🔥 MONTA BASE ROBUSTA
-        # ----------------------------------------------------
-        for col in range(len(meses_excel)):
-
-            mes_excel = (
-                str(meses_excel[col])
-                .strip()
-                .upper()
-            )
-
-            # --------------------------------------------
-            # 🔥 VALOR
-            # --------------------------------------------
-            if col >= len(valores_excel):
-                continue
-
-            valor_excel = valores_excel[col]
-
-            # --------------------------------------------
-            # 🔥 IGNORA NÃO MESES
-            # --------------------------------------------
-            if mes_excel not in mapa_meses:
-                continue
-
-            mes_curto = (
-                mapa_meses[mes_excel]
-            )
-
-            # --------------------------------------------
-            # 🔥 LIMPEZA
-            # --------------------------------------------
-            if tipo == "percentual":
-
-                valor = limpar_percentual(
-                    valor_excel
-                )
-
-            else:
-
-                valor = limpar_moeda(
-                    valor_excel
-                )
-
-            if valor is None:
-                continue
-
-            dados[mes_curto] = valor
-
-        return dados
-
-    # ========================================================
-    # 🔧 FUNÇÃO PADRÃO DOS INDICADORES
+    # 🔧 FUNÇÃO PADRÃO
     # ========================================================
     def montar_indicador(
 
@@ -1005,10 +814,11 @@ for pasta in pastas_possiveis:
             if tipo == "percentual":
 
                 return (
-                    f"{row['Valor']:.1f}%"
+                    f"{row['Valor']:.2f}%"
                 )
 
             return (
+
                 f"R$ {row['Valor']:,.0f}"
                 .replace(",", ".")
             )
@@ -1128,27 +938,229 @@ for pasta in pastas_possiveis:
         st.divider()
 
     # ========================================================
-    # 📊 EXTRAÇÃO DOS INDICADORES
+    # 🧪 NC EXTERNAS
     # ========================================================
-    dados_nc = extrair_indicador(
-        "NC EXTERNAS",
-        tipo="percentual"
-    )
+    dados_nc = {}
 
-    dados_custo = extrair_indicador(
-        "CUSTO TOTAL DE NC",
-        tipo="valor"
-    )
+    try:
 
-    dados_refugo = extrair_indicador(
-        "REFUGO",
-        tipo="percentual"
-    )
+        df_nc = pd.read_excel(
 
-    dados_retrabalho = extrair_indicador(
-        "RETRABALHO",
-        tipo="percentual"
-    )
+            caminho_excel,
+
+            sheet_name="NC - EXTERNAS",
+
+            header=None
+        )
+
+        for idx in range(4, 16):
+
+            mes = str(
+                df_nc.iloc[idx, 1]
+            ).strip().upper()
+
+            total = df_nc.iloc[idx, 5]
+
+            mapa = {
+
+                "JAN": "Jan",
+                "FEV": "Fev",
+                "MAR": "Mar",
+                "ABR": "Abr",
+                "MAI": "Mai",
+                "JUN": "Jun",
+                "JUL": "Jul",
+                "AGO": "Ago",
+                "SET": "Set",
+                "OUT": "Out",
+                "NOV": "Nov",
+                "DEZ": "Dez"
+            }
+
+            if mes not in mapa:
+                continue
+
+            try:
+
+                valor = float(total)
+
+            except:
+
+                valor = 0
+
+            dados_nc[
+                mapa[mes]
+            ] = valor / 100
+
+    except Exception as e:
+
+        st.warning(
+            f"Erro NC Externas: {e}"
+        )
+
+    # ========================================================
+    # 💰 CUSTO NC TOTAL
+    # ========================================================
+    dados_custo = {}
+
+    try:
+
+        df_custo = pd.read_excel(
+
+            caminho_excel,
+
+            sheet_name="Custo NC Total"
+        )
+
+        for _, row in df_custo.iterrows():
+
+            data = row.iloc[0]
+
+            if pd.isna(data):
+                continue
+
+            if not hasattr(data, "month"):
+                continue
+
+            mes = mapa_datas.get(
+                data.month
+            )
+
+            if mes is None:
+                continue
+
+            externa = row.iloc[1]
+            interna = row.iloc[2]
+
+            externa = (
+                0 if pd.isna(externa)
+                else float(externa)
+            )
+
+            interna = (
+                0 if pd.isna(interna)
+                else float(interna)
+            )
+
+            dados_custo[mes] = (
+                externa + interna
+            )
+
+    except Exception as e:
+
+        st.warning(
+            f"Erro Custo NC: {e}"
+        )
+
+    # ========================================================
+    # ♻️ REFUGO
+    # ========================================================
+    dados_refugo = {}
+
+    try:
+
+        df_refugo = pd.read_excel(
+
+            caminho_excel,
+
+            sheet_name="Refugo Produto x R$"
+        )
+
+        for _, row in df_refugo.iterrows():
+
+            data = row.iloc[0]
+
+            if pd.isna(data):
+                continue
+
+            if not hasattr(data, "month"):
+                continue
+
+            mes = mapa_datas.get(
+                data.month
+            )
+
+            if mes is None:
+                continue
+
+            valor_total = row.iloc[1]
+            faturamento = row.iloc[5]
+
+            if (
+                pd.isna(valor_total)
+                or
+                pd.isna(faturamento)
+                or
+                faturamento == 0
+            ):
+                continue
+
+            dados_refugo[mes] = (
+                float(valor_total)
+                /
+                float(faturamento)
+            )
+
+    except Exception as e:
+
+        st.warning(
+            f"Erro Refugo: {e}"
+        )
+
+    # ========================================================
+    # 🔧 RETRABALHO
+    # ========================================================
+    dados_retrabalho = {}
+
+    try:
+
+        df_retrabalho = pd.read_excel(
+
+            caminho_excel,
+
+            sheet_name="Retrabalho Produto x R$"
+        )
+
+        for _, row in df_retrabalho.iterrows():
+
+            data = row.iloc[0]
+
+            if pd.isna(data):
+                continue
+
+            if not hasattr(data, "month"):
+                continue
+
+            mes = mapa_datas.get(
+                data.month
+            )
+
+            if mes is None:
+                continue
+
+            valor_total = row.iloc[1]
+            faturamento = row.iloc[5]
+
+            if (
+                pd.isna(valor_total)
+                or
+                pd.isna(faturamento)
+                or
+                faturamento == 0
+            ):
+                continue
+
+            dados_retrabalho[mes] = (
+                float(valor_total)
+                /
+                float(faturamento)
+            )
+
+    except Exception as e:
+
+        st.warning(
+            f"Erro Retrabalho: {e}"
+        )
 
     # ========================================================
     # 📊 INDICADORES
@@ -1183,7 +1195,7 @@ for pasta in pastas_possiveis:
 
         "♻️ Refugo (%)",
 
-        0.03,
+        0.0025,
 
         dados_refugo,
 
@@ -1196,7 +1208,7 @@ for pasta in pastas_possiveis:
 
         "🔧 Retrabalho (%)",
 
-        0.05,
+        0.005,
 
         dados_retrabalho,
 
@@ -1204,7 +1216,6 @@ for pasta in pastas_possiveis:
 
         menor_melhor=True
     )
-
 
 
 
