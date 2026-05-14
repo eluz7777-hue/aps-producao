@@ -1256,16 +1256,33 @@ with tab3:
     base = df_aps.copy()
 
     # ========================================================
-    # 🔥 NORMALIZAÇÃO
+    # 🔒 COLUNAS OBRIGATÓRIAS
     # ========================================================
-    if "PV" not in base.columns:
+    required_cols = [
+
+        "PV",
+        "Processo",
+        "Horas"
+    ]
+
+    faltando = [
+
+        c for c in required_cols
+
+        if c not in base.columns
+    ]
+
+    if faltando:
 
         st.error(
-            "Coluna PV não encontrada."
+            f"Colunas obrigatórias ausentes: {faltando}"
         )
 
         st.stop()
 
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO
+    # ========================================================
     base["PV"] = (
 
         base["PV"]
@@ -1273,6 +1290,23 @@ with tab3:
         .str.strip()
     )
 
+    base["Processo"] = (
+
+        base["Processo"]
+        .astype(str)
+        .str.strip()
+    )
+
+    base["Horas"] = pd.to_numeric(
+
+        base["Horas"],
+
+        errors="coerce"
+    ).fillna(0)
+
+    # ========================================================
+    # 🔥 REMOVE INVÁLIDOS
+    # ========================================================
     base = base[
 
         base["PV"].notna()
@@ -1291,7 +1325,11 @@ with tab3:
     # ========================================================
     # 🔥 TOTAL REAL APS
     # ========================================================
-    total_pvs = len(base)
+    total_pvs = (
+
+        base["PV"]
+        .nunique()
+    )
 
     # ========================================================
     # 📅 DATA APS
@@ -1310,7 +1348,7 @@ with tab3:
         base["DATA_ENTREGA_APS"] = pd.NaT
 
     # ========================================================
-    # 📅 DATA ATUAL
+    # 📅 DATA HOJE
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
@@ -1343,13 +1381,15 @@ with tab3:
         base_data["Atrasada"]
     ].copy()
 
-    qtd_atrasadas = len(
-        atrasadas
+    # ========================================================
+    # 📊 KPIs
+    # ========================================================
+    qtd_atrasadas = (
+
+        atrasadas["PV"]
+        .nunique()
     )
 
-    # ========================================================
-    # 📊 %
-    # ========================================================
     pct = (
 
         (qtd_atrasadas / total_pvs) * 100
@@ -1360,7 +1400,7 @@ with tab3:
     )
 
     # ========================================================
-    # 📊 KPIs
+    # 📊 CARDS
     # ========================================================
     c1, c2, c3 = st.columns(3)
 
@@ -1382,7 +1422,7 @@ with tab3:
     st.divider()
 
     # ========================================================
-    # 📊 DISTRIBUIÇÃO
+    # 📊 DISTRIBUIÇÃO DE ATRASO
     # ========================================================
     st.subheader(
         "📊 Distribuição do atraso por faixa (dias)"
@@ -1397,8 +1437,8 @@ with tab3:
         )
 
         bins = [
-            0,2,4,6,8,10,
-            15,20,30,9999
+            0, 2, 4, 6, 8, 10,
+            15, 20, 30, 9999
         ]
 
         labels = [
@@ -1493,189 +1533,157 @@ with tab3:
     )
 
     # ========================================================
-    # 🔒 VALIDAÇÃO
+    # 📊 AGRUPAMENTO
     # ========================================================
-    required_cols = [
+    resumo_cap = (
 
-        "Processo",
-        "Horas"
-    ]
-
-    faltando = [
-
-        c for c in required_cols
-
-        if c not in base.columns
-    ]
-
-    if faltando:
-
-        st.warning(
-            f"Colunas não encontradas para gráfico: {faltando}"
+        base.groupby(
+            "Processo",
+            as_index=False
         )
 
-    else:
+        .agg(
+            Carga=("Horas", "sum")
+        )
+    )
 
-        # ----------------------------------------------------
-        # 🔥 NORMALIZAÇÃO
-        # ----------------------------------------------------
-        base["Horas"] = pd.to_numeric(
+    # ========================================================
+    # 🔥 CAPACIDADE ESTIMADA
+    # ========================================================
+    media_carga = (
 
-            base["Horas"],
+        resumo_cap["Carga"]
+        .mean()
+    )
 
-            errors="coerce"
-        ).fillna(0)
+    if pd.isna(media_carga):
 
-        base["Processo"] = (
+        media_carga = 0
 
-            base["Processo"]
-            .astype(str)
-            .str.strip()
+    resumo_cap["Capacidade"] = np.where(
+
+        resumo_cap["Carga"] > 0,
+
+        media_carga * 1.35,
+
+        media_carga
+    )
+
+    # ========================================================
+    # 📊 UTILIZAÇÃO
+    # ========================================================
+    resumo_cap["Utilizacao"] = np.where(
+
+        resumo_cap["Capacidade"] > 0,
+
+        (
+            resumo_cap["Carga"]
+            /
+            resumo_cap["Capacidade"]
+        ) * 100,
+
+        0
+    )
+
+    resumo_cap = resumo_cap.sort_values(
+
+        "Utilizacao",
+
+        ascending=False
+    )
+
+    # ========================================================
+    # 📊 GRÁFICO
+    # ========================================================
+    fig2 = go.Figure()
+
+    fig2.add_bar(
+
+        name="Carga Planejada",
+
+        x=resumo_cap["Processo"],
+
+        y=resumo_cap["Carga"],
+
+        text=(
+            resumo_cap["Carga"]
+            .round(1)
+        ),
+
+        textposition="outside"
+    )
+
+    fig2.add_bar(
+
+        name="Capacidade Disponível",
+
+        x=resumo_cap["Processo"],
+
+        y=resumo_cap["Capacidade"],
+
+        text=(
+            resumo_cap["Capacidade"]
+            .round(1)
+        ),
+
+        textposition="outside"
+    )
+
+    fig2.update_layout(
+
+        barmode="group",
+
+        height=600,
+
+        title="Carga Planejada x Capacidade Disponível",
+
+        xaxis_title="Processo",
+
+        yaxis_title="Horas"
+    )
+
+    st.plotly_chart(
+        fig2,
+        use_container_width=True
+    )
+
+    # ========================================================
+    # 📋 DETALHAMENTO
+    # ========================================================
+    with st.expander(
+        "📋 Detalhamento por Processo"
+    ):
+
+        tabela = resumo_cap.copy()
+
+        tabela["Carga"] = (
+            tabela["Carga"]
+            .round(1)
         )
 
-        # ----------------------------------------------------
-        # 🔥 CAPACIDADE
-        # ----------------------------------------------------
-        def capacidade_real(processo):
-
-            recursos = MAQUINAS.get(
-                processo,
-                0
-            )
-
-            if recursos <= 0:
-                return 0
-
-            return (
-                HORAS_DIA_UTIL_MEDIA
-                *
-                recursos
-                *
-                EFICIENCIA
-            )
-
-        # ----------------------------------------------------
-        # 📊 AGRUPAMENTO
-        # ----------------------------------------------------
-        resumo_cap = (
-
-            base.groupby(
-                "Processo",
-                as_index=False
-            )
-
-            .agg(
-                Carga=("Horas", "sum")
-            )
+        tabela["Capacidade"] = (
+            tabela["Capacidade"]
+            .round(1)
         )
 
-        resumo_cap["Capacidade"] = (
-
-            resumo_cap["Processo"]
-            .apply(capacidade_real)
+        tabela["Utilizacao"] = (
+            tabela["Utilizacao"]
+            .round(1)
         )
 
-        resumo_cap["Utilizacao"] = np.where(
+        tabela = tabela.rename(columns={
 
-            resumo_cap["Capacidade"] > 0,
+            "Carga": "Carga Planejada (h)",
 
-            (
-                resumo_cap["Carga"]
-                /
-                resumo_cap["Capacidade"]
-            ) * 100,
+            "Capacidade": "Capacidade Disponível (h)",
 
-            0
-        )
+            "Utilizacao": "Utilização (%)"
+        })
 
-        resumo_cap = resumo_cap.sort_values(
-            "Utilizacao",
-            ascending=False
-        )
-
-        # ----------------------------------------------------
-        # 📊 GRÁFICO
-        # ----------------------------------------------------
-        fig2 = go.Figure()
-
-        fig2.add_bar(
-
-            name="Carga Planejada",
-
-            x=resumo_cap["Processo"],
-
-            y=resumo_cap["Carga"],
-
-            text=(
-                resumo_cap["Carga"]
-                .round(1)
-            ),
-
-            textposition="outside"
-        )
-
-        fig2.add_bar(
-
-            name="Capacidade Disponível",
-
-            x=resumo_cap["Processo"],
-
-            y=resumo_cap["Capacidade"],
-
-            text=(
-                resumo_cap["Capacidade"]
-                .round(1)
-            ),
-
-            textposition="outside"
-        )
-
-        fig2.update_layout(
-
-            barmode="group",
-
-            height=600,
-
-            title="Carga Planejada x Capacidade Disponível",
-
-            xaxis_title="Processo",
-
-            yaxis_title="Horas"
-        )
-
-        st.plotly_chart(
-            fig2,
+        st.dataframe(
+            tabela,
             use_container_width=True
         )
-
-        # ====================================================
-        # 📋 DETALHAMENTO
-        # ====================================================
-        with st.expander(
-            "📋 Detalhamento por Processo"
-        ):
-
-            tabela = resumo_cap.copy()
-
-            tabela["Carga"] = (
-                tabela["Carga"]
-                .round(1)
-            )
-
-            tabela["Capacidade"] = (
-                tabela["Capacidade"]
-                .round(1)
-            )
-
-            tabela["Utilizacao"] = (
-                tabela["Utilizacao"]
-                .round(1)
-            )
-
-            st.dataframe(
-                tabela,
-                use_container_width=True
-            )
 
 
 
