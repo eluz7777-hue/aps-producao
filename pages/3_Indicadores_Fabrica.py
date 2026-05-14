@@ -1327,9 +1327,10 @@ with tab3:
     # ========================================================
     total_pvs = (
 
-        base[["PV"]]
-        .drop_duplicates()
-        .shape[0]
+        base["PV"]
+        .astype(str)
+        .str.strip()
+        .nunique()
     )
 
     # ========================================================
@@ -1387,9 +1388,10 @@ with tab3:
     # ========================================================
     qtd_atrasadas = (
 
-        atrasadas[["PV"]]
-        .drop_duplicates()
-        .shape[0]
+        atrasadas["PV"]
+        .astype(str)
+        .str.strip()
+        .nunique()
     )
 
     pct = (
@@ -1545,13 +1547,7 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 HORAS DISPONÍVEIS POR RECURSO
-    # ========================================================
-    HORAS_DIA_UTIL = 8.375
-    DIAS_UTEIS_MES = 20
-
-    # ========================================================
-    # 📊 AGRUPAMENTO
+    # 🔥 BASE AGRUPADA
     # ========================================================
     resumo_cap = (
 
@@ -1566,13 +1562,54 @@ with tab3:
     )
 
     # ========================================================
+    # 🔥 CAPACIDADE REAL POR RECURSO
+    # ========================================================
+    HORAS_DIA_UTIL = 8.375
+    DIAS_UTEIS_MES = 20
+
+    maquinas = {
+
+        "CORTE - SERRA": 2,
+        "CORTE-PLASMA": 1,
+        "CORTE-LASER": 1,
+        "CORTE-GUILHOTINA": 0,
+        "TORNO CONVENCIONAL": 2,
+        "TORNO CNC": 0,
+        "CENTRO DE USINAGEM": 1,
+        "FRESADORAS": 2,
+        "PRENSA (AMASSAMENTO)": 1,
+        "CALANDRA": 2,
+        "DOBRADEIRA": 2,
+        "ROSQUEADEIRA": 1,
+        "METALEIRA": 1,
+        "FURADEIRA DE BANCADA": 1,
+        "SOLDAGEM": 4,
+        "ACABAMENTO": 4,
+        "JATEAMENTO": 1,
+        "PINTURA": 1,
+        "MONTAGEM": 1,
+        "DIVERSOS": 0
+    }
+
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO PROCESSO
+    # ========================================================
+    resumo_cap["Processo"] = (
+
+        resumo_cap["Processo"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    # ========================================================
     # 🔥 CAPACIDADE REAL
     # ========================================================
     def capacidade_real(processo):
 
-        recursos = MAQUINAS.get(
+        recursos = maquinas.get(
             processo,
-            0
+            1
         )
 
         return (
