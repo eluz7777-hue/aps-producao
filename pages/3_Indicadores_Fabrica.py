@@ -283,13 +283,33 @@ with tab1:
             )
 
             # ------------------------------------------------
-            # 🔥 IDENTIFICA PERCENTUAIS
+            # 🔥 LOCALIZA BLOCO REAL DO GRÁFICO
+            # ------------------------------------------------
+            bloco_indicador = ""
+
+            match_bloco = re.search(
+
+                r"Jan\/26.*?ACM\/2026(.*?)Indicador Comercial",
+
+                texto_completo,
+
+                re.DOTALL
+            )
+
+            if match_bloco:
+
+                bloco_indicador = (
+                    match_bloco.group(1)
+                )
+
+            # ------------------------------------------------
+            # 🔥 IDENTIFICA SOMENTE PERCENTUAIS DAS BARRAS
             # ------------------------------------------------
             percentuais = re.findall(
 
                 r"(\d+)%",
 
-                texto_completo
+                bloco_indicador
             )
 
             # ------------------------------------------------
@@ -303,14 +323,21 @@ with tab1:
             ]
 
             # ------------------------------------------------
-            # 🔥 REMOVE ACM
+            # 🔥 REMOVE ACM FINAL
             # ------------------------------------------------
             if len(percentuais) >= 13:
 
                 percentuais = percentuais[:12]
 
             # ------------------------------------------------
-            # 🔥 MONTA BASE
+            # 🔥 GARANTE 12 MESES
+            # ------------------------------------------------
+            while len(percentuais) < 12:
+
+                percentuais.append(0)
+
+            # ------------------------------------------------
+            # 🔥 MONTA BASE OFICIAL
             # ------------------------------------------------
             for idx, mes_docx in enumerate(meses_encontrados):
 
@@ -327,7 +354,7 @@ with tab1:
                 valor = percentuais[idx]
 
                 # --------------------------------------------
-                # 🔥 IGNORA ZEROS FUTUROS
+                # 🔥 IGNORA MESES FUTUROS ZERADOS
                 # --------------------------------------------
                 if valor <= 0:
                     continue
@@ -540,6 +567,14 @@ with tab1:
             and indicador_comercial[m]["valor"] is not None
         )
     ]
+
+    if not meses_com_dado:
+
+        st.warning(
+            "Nenhum dado válido encontrado nos arquivos DOCX."
+        )
+
+        st.stop()
 
     mes_sel = st.selectbox(
 
