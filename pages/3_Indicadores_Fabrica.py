@@ -1232,6 +1232,9 @@ with tab3:
     import plotly.graph_objects as go
     import pandas as pd
     import numpy as np
+    import holidays
+    import calendar
+    from datetime import datetime
 
     st.header("🏭 Atraso de Entregas (Tempo Real)")
 
@@ -1294,6 +1297,7 @@ with tab3:
 
         base["Processo"]
         .astype(str)
+        .str.upper()
         .str.strip()
     )
 
@@ -1328,9 +1332,8 @@ with tab3:
     total_pvs = (
 
         base["PV"]
-        .astype(str)
-        .str.strip()
-        .nunique()
+        .drop_duplicates()
+        .shape[0]
     )
 
     # ========================================================
@@ -1350,7 +1353,7 @@ with tab3:
         base["DATA_ENTREGA_APS"] = pd.NaT
 
     # ========================================================
-    # 📅 DATA HOJE
+    # 📅 DATA ATUAL
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
@@ -1389,9 +1392,8 @@ with tab3:
     qtd_atrasadas = (
 
         atrasadas["PV"]
-        .astype(str)
-        .str.strip()
-        .nunique()
+        .drop_duplicates()
+        .shape[0]
     )
 
     pct = (
@@ -1547,26 +1549,8 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 BASE AGRUPADA
+    # 🔥 RECURSOS FABRICA
     # ========================================================
-    resumo_cap = (
-
-        base.groupby(
-            "Processo",
-            as_index=False
-        )
-
-        .agg(
-            Carga=("Horas", "sum")
-        )
-    )
-
-    # ========================================================
-    # 🔥 CAPACIDADE REAL POR RECURSO
-    # ========================================================
-    HORAS_DIA_UTIL = 8.375
-    DIAS_UTEIS_MES = 20
-
     maquinas = {
 
         "CORTE - SERRA": 2,
@@ -1592,18 +1576,117 @@ with tab3:
     }
 
     # ========================================================
-    # 🔥 NORMALIZAÇÃO PROCESSO
+    # 🔥 MAPEAMENTO APS → RECURSO
     # ========================================================
-    resumo_cap["Processo"] = (
+    mapa_processos = {
 
-        resumo_cap["Processo"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
+        "SOLDA": "SOLDAGEM",
+        "SOLDAGEM": "SOLDAGEM",
+
+        "ACABAMENTO": "ACABAMENTO",
+
+        "DOBRA": "DOBRADEIRA",
+        "DOBRADEIRA": "DOBRADEIRA",
+
+        "CALANDRA": "CALANDRA",
+
+        "TORNO": "TORNO CONVENCIONAL",
+        "TORNO CONVENCIONAL": "TORNO CONVENCIONAL",
+
+        "FRESA": "FRESADORAS",
+        "FRESADORAS": "FRESADORAS",
+
+        "USINAGEM": "CENTRO DE USINAGEM",
+        "CENTRO DE USINAGEM": "CENTRO DE USINAGEM",
+
+        "LASER": "CORTE-LASER",
+        "CORTE LASER": "CORTE-LASER",
+        "CORTE-LASER": "CORTE-LASER",
+
+        "PLASMA": "CORTE-PLASMA",
+        "CORTE PLASMA": "CORTE-PLASMA",
+        "CORTE-PLASMA": "CORTE-PLASMA",
+
+        "SERRA": "CORTE - SERRA",
+        "CORTE - SERRA": "CORTE - SERRA",
+
+        "PINTURA": "PINTURA",
+
+        "JATEAMENTO": "JATEAMENTO",
+
+        "MONTAGEM": "MONTAGEM"
+    }
+
+    # ========================================================
+    # 🔥 CALENDÁRIO BRASILEIRO
+    # ========================================================
+    hoje_real = datetime.today()
+
+    ano = hoje_real.year
+    mes = hoje_real.month
+
+    brasil_feriados = holidays.Brazil(years=ano)
+
+    total_dias_mes = calendar.monthrange(
+        ano,
+        mes
+    )[1]
+
+    dias_uteis = 0
+
+    for dia in range(1, total_dias_mes + 1):
+
+        data = datetime(
+            ano,
+            mes,
+            dia
+        )
+
+        if data.weekday() < 5 and data.date() not in brasil_feriados:
+
+            dias_uteis += 1
+
+    # ========================================================
+    # 🔥 CAPACIDADE REAL POR RECURSO
+    # ========================================================
+    capacidade_dia_recurso = (
+
+        0.8
+        *
+        (
+            (4 * 9)
+            +
+            (1 * 8)
+        )
     )
 
     # ========================================================
-    # 🔥 CAPACIDADE REAL
+    # 📊 AGRUPAMENTO
+    # ========================================================
+    resumo_cap = (
+
+        base.groupby(
+            "Processo",
+            as_index=False
+        )
+
+        .agg(
+            Carga=("Horas", "sum")
+        )
+    )
+
+    # ========================================================
+    # 🔥 PROCESSO PADRONIZADO
+    # ========================================================
+    resumo_cap["Processo_Mapeado"] = (
+
+        resumo_cap["Processo"]
+        .map(mapa_processos)
+        .fillna(resumo_cap["Processo"])
+    )
+
+    # ========================================================
+    # 🔥 CAPACIDADE
     # ========================================================
     def capacidade_real(processo):
 
@@ -1613,16 +1696,17 @@ with tab3:
         )
 
         return (
+
             recursos
             *
-            HORAS_DIA_UTIL
+            capacidade_dia_recurso
             *
-            DIAS_UTEIS_MES
+            dias_uteis
         )
 
     resumo_cap["Capacidade"] = (
 
-        resumo_cap["Processo"]
+        resumo_cap["Processo_Mapeado"]
         .apply(capacidade_real)
     )
 
@@ -1690,9 +1774,12 @@ with tab3:
 
         barmode="group",
 
-        height=650,
+        height=700,
 
-        title="Carga Planejada x Capacidade Disponível",
+        title=(
+            f"Carga Planejada x Capacidade Disponível "
+            f"({dias_uteis} dias úteis)"
+        ),
 
         xaxis_title="Processo",
 
@@ -1734,11 +1821,21 @@ with tab3:
 
             "Capacidade": "Capacidade Disponível (h)",
 
-            "Utilizacao": "Utilização (%)"
+            "Utilizacao": "Utilização (%)",
+
+            "Processo_Mapeado": "Recurso"
         })
 
         st.dataframe(
-            tabela,
+            tabela[
+                [
+                    "Processo",
+                    "Recurso",
+                    "Carga Planejada (h)",
+                    "Capacidade Disponível (h)",
+                    "Utilização (%)"
+                ]
+            ],
             use_container_width=True
         )
 
