@@ -1327,8 +1327,9 @@ with tab3:
     # ========================================================
     total_pvs = (
 
-        base["PV"]
-        .nunique()
+        base[["PV"]]
+        .drop_duplicates()
+        .shape[0]
     )
 
     # ========================================================
@@ -1386,8 +1387,9 @@ with tab3:
     # ========================================================
     qtd_atrasadas = (
 
-        atrasadas["PV"]
-        .nunique()
+        atrasadas[["PV"]]
+        .drop_duplicates()
+        .shape[0]
     )
 
     pct = (
@@ -1429,6 +1431,16 @@ with tab3:
     )
 
     if qtd_atrasadas > 0:
+
+        atrasadas = (
+
+            atrasadas[[
+                "PV",
+                "Atraso_dias"
+            ]]
+
+            .drop_duplicates()
+        )
 
         atrasadas["Atraso_dias"] = (
 
@@ -1533,6 +1545,12 @@ with tab3:
     )
 
     # ========================================================
+    # 🔥 HORAS DISPONÍVEIS POR RECURSO
+    # ========================================================
+    HORAS_DIA_UTIL = 8.375
+    DIAS_UTEIS_MES = 20
+
+    # ========================================================
     # 📊 AGRUPAMENTO
     # ========================================================
     resumo_cap = (
@@ -1548,25 +1566,27 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 CAPACIDADE ESTIMADA
+    # 🔥 CAPACIDADE REAL
     # ========================================================
-    media_carga = (
+    def capacidade_real(processo):
 
-        resumo_cap["Carga"]
-        .mean()
-    )
+        recursos = MAQUINAS.get(
+            processo,
+            0
+        )
 
-    if pd.isna(media_carga):
+        return (
+            recursos
+            *
+            HORAS_DIA_UTIL
+            *
+            DIAS_UTEIS_MES
+        )
 
-        media_carga = 0
+    resumo_cap["Capacidade"] = (
 
-    resumo_cap["Capacidade"] = np.where(
-
-        resumo_cap["Carga"] > 0,
-
-        media_carga * 1.35,
-
-        media_carga
+        resumo_cap["Processo"]
+        .apply(capacidade_real)
     )
 
     # ========================================================
@@ -1633,7 +1653,7 @@ with tab3:
 
         barmode="group",
 
-        height=600,
+        height=650,
 
         title="Carga Planejada x Capacidade Disponível",
 
