@@ -1327,15 +1327,28 @@ with tab3:
         base["PV"].str.lower() != "nan"
     ]
 
-    # ========================================================
-    # 🔥 TOTAL REAL APS
-    # ========================================================
-    #
-    # 🔥 IMPORTANTE:
-    # Painel Executivo usa quantidade de registros válidos
-    # e não PV única consolidada.
-    #
-    total_pvs = len(base)
+
+
+
+# ========================================================
+# 🔥 TOTAL REAL DE PVs
+# ========================================================
+#
+# O APS possui múltiplas linhas por processo.
+# Precisamos consolidar PV única.
+#
+total_pvs = (
+
+    base["PV"]
+
+    .astype(str)
+
+    .str.strip()
+
+    .nunique()
+)
+
+
 
     # ========================================================
     # 📅 DATA APS
