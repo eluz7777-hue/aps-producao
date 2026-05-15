@@ -1418,14 +1418,14 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔥 COLUNAS FIXAS REAIS DO SEU EXCEL
+    # 🔥 COLUNAS REAIS
     # ========================================================
     coluna_pv = "PV"
     coluna_data = "DATA DE ENTREGA"
     coluna_qtd = "QUANTIDADE"
 
     # ========================================================
-    # 🔒 VALIDAÇÃO COLUNAS
+    # 🔒 VALIDAÇÃO
     # ========================================================
     colunas_necessarias = [
 
@@ -1700,7 +1700,7 @@ with tab3:
     # ========================================================
     # 🔥 RECURSOS
     # ========================================================
-    maquinas = {
+    MAQUINAS = {
 
         "CORTE - SERRA": 2,
         "CORTE-PLASMA": 1,
@@ -1742,12 +1742,12 @@ with tab3:
         mes
     )[1]
 
+    # ========================================================
+    # 🔥 DIAS ÚTEIS RESTANTES
+    # ========================================================
     dias_uteis_restantes = 0
 
-    # ========================================================
-    # 🔥 MÊS ATUAL x FUTURO
-    # ========================================================
-    if mes == datetime.today().month:
+    if mes == hoje_real.month:
 
         dia_inicio = hoje_real.day
 
@@ -1782,29 +1782,25 @@ with tab3:
             dias_uteis_restantes += 1
 
     # ========================================================
-    # 🔥 CAPACIDADE DIÁRIA
+    # 🔥 CAPACIDADE REAL POR RECURSO
     # ========================================================
-    capacidade_dia_recurso = (
-
-        0.8
-        *
-        (
-            (4 * 9)
-            +
-            (1 * 8)
-        )
-        /
-        5
-    )
+    #
+    # 0,8 × ((4×9)+(1×8))
+    #
+    # = 35,2h por semana
+    #
+    # dividido por 5 dias úteis
+    #
+    # = 7,04h/dia por recurso
+    #
+    # ========================================================
+    capacidade_dia_recurso = 7.04
 
     # ========================================================
-    # 🔥 BASE DE CARGA
+    # 🔥 BASE MENSAL
     # ========================================================
     carga = df_pv.copy()
 
-    # ========================================================
-    # 🔥 DATA
-    # ========================================================
     carga[coluna_data] = pd.to_datetime(
 
         carga[coluna_data],
@@ -1816,9 +1812,6 @@ with tab3:
         subset=[coluna_data]
     )
 
-    # ========================================================
-    # 🔥 FILTRO MENSAL
-    # ========================================================
     carga = carga[
 
         (
@@ -1832,9 +1825,6 @@ with tab3:
         )
     ]
 
-    # ========================================================
-    # 🔥 QUANTIDADE
-    # ========================================================
     carga[coluna_qtd] = pd.to_numeric(
 
         carga[coluna_qtd],
@@ -1844,7 +1834,7 @@ with tab3:
     ).fillna(0)
 
     # ========================================================
-    # 🔥 PROCESSOS DIRETO DAS COLUNAS
+    # 🔥 PROCESSOS
     # ========================================================
     processos_excel = [
 
@@ -1871,7 +1861,7 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔥 RESUMO CARGA
+    # 🔥 CÁLCULO REAL
     # ========================================================
     lista_resumo = []
 
@@ -1890,21 +1880,29 @@ with tab3:
         ).fillna(0)
 
         # ====================================================
-        # 🔥 CARGA TOTAL PROCESSO
+        # 🔥 TEMPO UNITÁRIO DO PROCESSO
         # ====================================================
+        #
+        # A coluna do processo no PV.xlsx
+        # já representa o TEMPO UNITÁRIO
+        #
+        # Então:
+        #
+        # HORAS = QUANTIDADE × TEMPO
+        #
+        # ====================================================
+
         carga_total = (
 
             carga[coluna_qtd]
             *
             carga[processo]
+
         ).sum()
 
-        # ====================================================
-        # 🔥 CAPACIDADE
-        # ====================================================
-        recursos = maquinas.get(
+        recursos = MAQUINAS.get(
             processo,
-            1
+            0
         )
 
         capacidade = (
@@ -1929,16 +1927,32 @@ with tab3:
 
             "PROCESSO_REAL": processo,
 
-            "Carga": carga_total,
+            "Carga": round(carga_total, 1),
 
-            "Capacidade": capacidade,
+            "Capacidade": round(capacidade, 1),
 
-            "Utilizacao": utilizacao
+            "Utilizacao": round(utilizacao, 1)
         })
 
     resumo_cap = pd.DataFrame(
         lista_resumo
     )
+
+    # ========================================================
+    # 🔥 REMOVE ZERADOS
+    # ========================================================
+    resumo_cap = resumo_cap[
+
+        (
+            resumo_cap["Carga"] > 0
+        )
+
+        |
+
+        (
+            resumo_cap["Capacidade"] > 0
+        )
+    ]
 
     # ========================================================
     # 🔥 ORDENA
@@ -1968,7 +1982,6 @@ with tab3:
 
         text=(
             resumo_cap["Carga"]
-            .round(1)
         ),
 
         textposition="outside"
@@ -1987,7 +2000,6 @@ with tab3:
 
         text=(
             resumo_cap["Capacidade"]
-            .round(1)
         ),
 
         textposition="outside"
@@ -2025,21 +2037,6 @@ with tab3:
 
         tabela = resumo_cap.copy()
 
-        tabela["Carga"] = (
-            tabela["Carga"]
-            .round(1)
-        )
-
-        tabela["Capacidade"] = (
-            tabela["Capacidade"]
-            .round(1)
-        )
-
-        tabela["Utilizacao"] = (
-            tabela["Utilizacao"]
-            .round(1)
-        )
-
         tabela = tabela.rename(columns={
 
             "PROCESSO_REAL": "Processo",
@@ -2064,6 +2061,7 @@ with tab3:
 
             use_container_width=True
         )
+
 
 
 
