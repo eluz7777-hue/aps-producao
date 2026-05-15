@@ -1222,6 +1222,7 @@ with tab2:
 
 
 
+
 # ============================================================
 # 🏭 PRODUÇÃO — TEMPO REAL (ATRASO + CARGA x CAPACIDADE)
 # ============================================================
@@ -1806,10 +1807,12 @@ with tab3:
         0.8
     )
 
-    horas_dia_recurso = (
+    horas_dia_recurso = round(
 
         horas_semana_efetiva
-        / 5
+        / 5,
+
+        2
     )
 
     # ========================================================
@@ -1898,18 +1901,18 @@ with tab3:
     # 🔥 SOMA TEMPOS ROTEIRO
     # ========================================================
     #
-    # REGRA CORRETA:
+    # TEMPOS DO PV.xlsx ESTÃO EM MINUTOS
     #
-    # CARGA =
+    # REGRA:
     #
-    # QUANTIDADE
+    # quantidade × soma dos tempos
     #
-    # ×
+    # depois:
     #
-    # SOMA DE TODOS OS TEMPOS
-    # DO ROTEIRO
+    # ÷ 60 para converter em horas
     #
     # ========================================================
+
     carga["TEMPO_TOTAL_ROTEIRO"] = (
 
         carga[processos_excel]
@@ -1917,42 +1920,64 @@ with tab3:
         .sum(axis=1)
     )
 
+    # ========================================================
+    # 🔥 CARGA TOTAL DA PV (HORAS)
+    # ========================================================
+
     carga["CARGA_TOTAL_PV"] = (
 
-        carga[coluna_qtd]
+        (
+            carga[coluna_qtd]
 
-        *
+            *
 
-        carga["TEMPO_TOTAL_ROTEIRO"]
-    )
+            carga["TEMPO_TOTAL_ROTEIRO"]
+        )
+
+        / 60
+    ).round(2)
 
     # ========================================================
     # 🔥 RESUMO PROCESSOS
     # ========================================================
+
     lista_resumo = []
 
     for processo in processos_excel:
 
         # ====================================================
-        # 🔥 HORAS PROCESSO
+        # 🔥 HORAS PLANEJADAS DO PROCESSO
         # ====================================================
         #
-        # quantidade × tempo processo
+        # quantidade × tempo do processo
+        #
+        # dividido por 60
         #
         # ====================================================
+
         horas_processo = (
 
-            carga[coluna_qtd]
+            (
+                carga[coluna_qtd]
 
-            *
+                *
 
-            carga[processo]
+                carga[processo]
+            )
+
+            / 60
 
         ).sum()
 
+        horas_processo = round(
+            horas_processo,
+            2
+        )
+
         # ====================================================
-        # 🔥 CAPACIDADE
+        # 🔥 CAPACIDADE DISPONÍVEL
         # ====================================================
+
         recursos = MAQUINAS.get(
             processo,
             0
@@ -1971,6 +1996,15 @@ with tab3:
             recursos
         )
 
+        capacidade_total = round(
+            capacidade_total,
+            2
+        )
+
+        # ====================================================
+        # 🔥 UTILIZAÇÃO
+        # ====================================================
+
         utilizacao = (
 
             (
@@ -1984,25 +2018,37 @@ with tab3:
             else 0
         )
 
+        utilizacao = round(
+            utilizacao,
+            2
+        )
+
+        # ====================================================
+        # 🔥 RESUMO
+        # ====================================================
+
         lista_resumo.append({
 
             "PROCESSO_REAL": processo,
 
-            "Carga": round(horas_processo, 1),
+            "Carga": horas_processo,
 
-            "Capacidade": round(capacidade_total, 1),
+            "Capacidade": capacidade_total,
 
-            "Utilizacao": round(utilizacao, 1),
+            "Utilizacao": utilizacao,
 
             "Recursos": recursos
         })
 
+    # ========================================================
+    # 🔥 DATAFRAME FINAL
+    # ========================================================
     resumo_cap = pd.DataFrame(
         lista_resumo
     )
 
     # ========================================================
-    # 🔥 REMOVE LINHAS ZERADAS
+    # 🔥 REMOVE ZERADOS
     # ========================================================
     resumo_cap = resumo_cap[
 
@@ -2098,14 +2144,14 @@ with tab3:
 
         carga["CARGA_TOTAL_PV"].sum(),
 
-        1
+        2
     )
 
     total_capacidade_mes = round(
 
         resumo_cap["Capacidade"].sum(),
 
-        1
+        2
     )
 
     utilizacao_global = round(
@@ -2116,7 +2162,7 @@ with tab3:
             total_capacidade_mes
         ) * 100,
 
-        1
+        2
 
     ) if total_capacidade_mes > 0 else 0
 
@@ -2124,17 +2170,17 @@ with tab3:
 
     r1.metric(
         "🔥 Carga Planejada Total",
-        f"{total_carga_mes:,.1f} h"
+        f"{total_carga_mes:,.2f} h"
     )
 
     r2.metric(
         "⚙️ Capacidade Disponível",
-        f"{total_capacidade_mes:,.1f} h"
+        f"{total_capacidade_mes:,.2f} h"
     )
 
     r3.metric(
         "📈 Utilização Global",
-        f"{utilizacao_global:.1f}%"
+        f"{utilizacao_global:.2f}%"
     )
 
     # ========================================================
@@ -2173,7 +2219,6 @@ with tab3:
 
             use_container_width=True
         )
-
 
 
 
