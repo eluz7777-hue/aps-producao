@@ -1418,7 +1418,7 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔥 COLUNAS REAIS
+    # 🔥 COLUNAS FIXAS
     # ========================================================
     coluna_pv = "PV"
     coluna_data = "DATA DE ENTREGA"
@@ -1782,10 +1782,10 @@ with tab3:
             dias_uteis_restantes += 1
 
     # ========================================================
-    # 🔥 CÁLCULO REAL CAPACIDADE
+    # 🔥 CAPACIDADE REAL
     # ========================================================
     #
-    # 1 RECURSO:
+    # 1 recurso:
     #
     # (4×9)+(1×8)
     # = 44h semana
@@ -1794,25 +1794,10 @@ with tab3:
     # = 35.2h semana
     #
     # 35.2 / 5
-    # = 7.04h dia por recurso
-    #
-    # capacidade mês =
-    #
-    # 7.04 × dias úteis × qtd recursos
+    # = 7.04h dia
     #
     # ========================================================
-    horas_semana_recurso = (
-
-        (
-            4 * 9
-        )
-
-        +
-
-        (
-            1 * 8
-        )
-    )
+    horas_semana_recurso = 44
 
     horas_semana_efetiva = (
 
@@ -1856,6 +1841,9 @@ with tab3:
         )
     ]
 
+    # ========================================================
+    # 🔥 QUANTIDADE
+    # ========================================================
     carga[coluna_qtd] = pd.to_numeric(
 
         carga[coluna_qtd],
@@ -1892,40 +1880,67 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔥 RESUMO
+    # 🔥 NORMALIZAÇÃO TEMPOS
+    # ========================================================
+    for proc in processos_excel:
+
+        if proc in carga.columns:
+
+            carga[proc] = pd.to_numeric(
+
+                carga[proc],
+
+                errors="coerce"
+
+            ).fillna(0)
+
+    # ========================================================
+    # 🔥 SOMA TEMPOS ROTEIRO
+    # ========================================================
+    #
+    # REGRA CORRETA:
+    #
+    # CARGA =
+    #
+    # QUANTIDADE
+    #
+    # ×
+    #
+    # SOMA DE TODOS OS TEMPOS
+    # DO ROTEIRO
+    #
+    # ========================================================
+    carga["TEMPO_TOTAL_ROTEIRO"] = (
+
+        carga[processos_excel]
+
+        .sum(axis=1)
+    )
+
+    carga["CARGA_TOTAL_PV"] = (
+
+        carga[coluna_qtd]
+
+        *
+
+        carga["TEMPO_TOTAL_ROTEIRO"]
+    )
+
+    # ========================================================
+    # 🔥 RESUMO PROCESSOS
     # ========================================================
     lista_resumo = []
 
     for processo in processos_excel:
 
-        if processo not in carga.columns:
-
-            continue
-
-        carga[processo] = pd.to_numeric(
-
-            carga[processo],
-
-            errors="coerce"
-
-        ).fillna(0)
-
         # ====================================================
-        # 🔥 TEMPO TOTAL PROCESSO
+        # 🔥 HORAS PROCESSO
         # ====================================================
         #
-        # A COLUNA DO PROCESSO
-        # É O TEMPO UNITÁRIO
-        #
-        # Então:
-        #
-        # TEMPO TOTAL =
-        #
-        # QUANTIDADE × TEMPO PROCESSO
+        # quantidade × tempo processo
         #
         # ====================================================
-
-        carga_total = (
+        horas_processo = (
 
             carga[coluna_qtd]
 
@@ -1936,16 +1951,13 @@ with tab3:
         ).sum()
 
         # ====================================================
-        # 🔥 RECURSOS PROCESSO
+        # 🔥 CAPACIDADE
         # ====================================================
         recursos = MAQUINAS.get(
             processo,
             0
         )
 
-        # ====================================================
-        # 🔥 CAPACIDADE REAL PROCESSO
-        # ====================================================
         capacidade_total = (
 
             horas_dia_recurso
@@ -1959,13 +1971,10 @@ with tab3:
             recursos
         )
 
-        # ====================================================
-        # 🔥 UTILIZAÇÃO
-        # ====================================================
         utilizacao = (
 
             (
-                carga_total
+                horas_processo
                 /
                 capacidade_total
             ) * 100
@@ -1979,7 +1988,7 @@ with tab3:
 
             "PROCESSO_REAL": processo,
 
-            "Carga": round(carga_total, 1),
+            "Carga": round(horas_processo, 1),
 
             "Capacidade": round(capacidade_total, 1),
 
@@ -1993,7 +2002,7 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 REMOVE PROCESSOS ZERADOS
+    # 🔥 REMOVE LINHAS ZERADAS
     # ========================================================
     resumo_cap = resumo_cap[
 
@@ -2023,7 +2032,7 @@ with tab3:
     # ========================================================
     fig2 = go.Figure()
 
-    # 🔴 CARGA PLANEJADA
+    # 🔴 CARGA
     fig2.add_bar(
 
         name="Carga Planejada",
@@ -2076,6 +2085,56 @@ with tab3:
     st.plotly_chart(
         fig2,
         use_container_width=True
+    )
+
+    # ========================================================
+    # 📋 RESUMO EXECUTIVO
+    # ========================================================
+    st.markdown(
+        "### 📋 Resumo Executivo"
+    )
+
+    total_carga_mes = round(
+
+        carga["CARGA_TOTAL_PV"].sum(),
+
+        1
+    )
+
+    total_capacidade_mes = round(
+
+        resumo_cap["Capacidade"].sum(),
+
+        1
+    )
+
+    utilizacao_global = round(
+
+        (
+            total_carga_mes
+            /
+            total_capacidade_mes
+        ) * 100,
+
+        1
+
+    ) if total_capacidade_mes > 0 else 0
+
+    r1, r2, r3 = st.columns(3)
+
+    r1.metric(
+        "🔥 Carga Planejada Total",
+        f"{total_carga_mes:,.1f} h"
+    )
+
+    r2.metric(
+        "⚙️ Capacidade Disponível",
+        f"{total_capacidade_mes:,.1f} h"
+    )
+
+    r3.metric(
+        "📈 Utilização Global",
+        f"{utilizacao_global:.1f}%"
     )
 
     # ========================================================
