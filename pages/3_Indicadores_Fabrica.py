@@ -1384,6 +1384,7 @@ with tab3:
 
         # PV
         if nome == "PV":
+
             coluna_pv = col
 
         # Quantidade
@@ -1394,10 +1395,12 @@ with tab3:
             or
             "PEÇ" in nome
         ):
+
             coluna_qtd = col
 
         # Processo
         if "PROCESSO" in nome:
+
             coluna_processo = col
 
         # Horas
@@ -1408,6 +1411,7 @@ with tab3:
             or
             "HR" in nome
         ):
+
             coluna_horas = col
 
         # Data
@@ -1416,6 +1420,7 @@ with tab3:
             or
             "DATA" in nome
         ):
+
             coluna_data = col
 
     # ========================================================
@@ -1819,8 +1824,9 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 BASE DE CARGA
+    # 🔥 BASE DE CARGA PLANEJADA
     # ========================================================
+
     if (
 
         coluna_qtd is not None
@@ -1828,11 +1834,16 @@ with tab3:
         coluna_processo is not None
         and
         coluna_horas is not None
+        and
+        coluna_data is not None
 
     ):
 
         carga = df_pv.copy()
 
+        # ====================================================
+        # 🔥 NORMALIZAÇÃO
+        # ====================================================
         carga[coluna_qtd] = pd.to_numeric(
 
             carga[coluna_qtd],
@@ -1847,13 +1858,39 @@ with tab3:
             errors="coerce"
         ).fillna(0)
 
-        carga["Carga_Real"] = (
+        carga[coluna_data] = pd.to_datetime(
 
-            carga[coluna_qtd]
-            *
-            carga[coluna_horas]
+            carga[coluna_data],
+
+            errors="coerce"
         )
 
+        # ====================================================
+        # 🔥 REMOVE DATAS INVÁLIDAS
+        # ====================================================
+        carga = carga.dropna(
+            subset=[coluna_data]
+        )
+
+        # ====================================================
+        # 🔥 FILTRO EXCLUSIVO DO MÊS
+        # ====================================================
+        carga = carga[
+
+            (
+                carga[coluna_data].dt.month == mes
+            )
+
+            &
+
+            (
+                carga[coluna_data].dt.year == ano
+            )
+        ]
+
+        # ====================================================
+        # 🔥 PROCESSO
+        # ====================================================
         carga["PROCESSO_REAL"] = (
 
             carga[coluna_processo]
@@ -1866,22 +1903,18 @@ with tab3:
         )
 
         # ====================================================
-        # 🔥 FILTRO POR MÊS
+        # 🔥 CARGA REAL
         # ====================================================
-        if coluna_data is not None:
+        carga["Carga_Real"] = (
 
-            carga[coluna_data] = pd.to_datetime(
+            carga[coluna_qtd]
+            *
+            carga[coluna_horas]
+        )
 
-                carga[coluna_data],
-
-                errors="coerce"
-            )
-
-            carga = carga[
-
-                carga[coluna_data].dt.month == mes
-            ]
-
+        # ====================================================
+        # 🔥 AGRUPAMENTO
+        # ====================================================
         resumo_cap = (
 
             carga.groupby(
@@ -1896,20 +1929,15 @@ with tab3:
 
     else:
 
-        resumo_cap = (
-
-            base.groupby(
-                "Processo",
-                as_index=False
-            )
-
-            .agg(
-                Carga=("Horas", "sum")
-            )
+        st.warning(
+            "Colunas necessárias da carga planejada "
+            "não foram encontradas no PV.xlsx"
         )
 
-        resumo_cap = resumo_cap.rename(columns={
-            "Processo": "PROCESSO_REAL"
+        resumo_cap = pd.DataFrame({
+
+            "PROCESSO_REAL": [],
+            "Carga": []
         })
 
     # ========================================================
@@ -2075,7 +2103,6 @@ with tab3:
 
             use_container_width=True
         )
-
 
 
 
