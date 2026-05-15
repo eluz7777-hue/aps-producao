@@ -1661,6 +1661,54 @@ with tab3:
     st.divider()
 
     # ========================================================
+    # 📅 SELEÇÃO DE MÊS PLANEJADO
+    # ========================================================
+
+    meses_nomes = {
+
+        1: "Janeiro",
+        2: "Fevereiro",
+        3: "Março",
+        4: "Abril",
+        5: "Maio",
+        6: "Junho",
+        7: "Julho",
+        8: "Agosto",
+        9: "Setembro",
+        10: "Outubro",
+        11: "Novembro",
+        12: "Dezembro"
+    }
+
+    st.markdown(
+        "### 📅 Planejamento por Mês"
+    )
+
+    col_mes, col_info = st.columns([1, 3])
+
+    with col_mes:
+
+        mes_selecionado = st.selectbox(
+
+            "Selecionar mês planejado",
+
+            options=list(meses_nomes.keys()),
+
+            format_func=lambda x: meses_nomes[x],
+
+            index=datetime.today().month - 1
+        )
+
+    with col_info:
+
+        st.info(
+            "A capacidade disponível e a carga planejada "
+            "serão recalculadas conforme o mês selecionado."
+        )
+
+    st.divider()
+
+    # ========================================================
     # 📊 CARGA x CAPACIDADE
     # ========================================================
     st.subheader(
@@ -1700,7 +1748,8 @@ with tab3:
     hoje_real = datetime.today()
 
     ano = hoje_real.year
-    mes = hoje_real.month
+
+    mes = mes_selecionado
 
     brasil_feriados = holidays.Brazil(
         years=ano
@@ -1713,9 +1762,23 @@ with tab3:
 
     dias_uteis_restantes = 0
 
+    # ========================================================
+    # 🔥 REGRA:
+    # MÊS ATUAL = capacidade restante
+    # MÊS FUTURO = capacidade total do mês
+    # ========================================================
+
+    if mes == datetime.today().month:
+
+        dia_inicio = hoje_real.day
+
+    else:
+
+        dia_inicio = 1
+
     for dia in range(
 
-        hoje_real.day,
+        dia_inicio,
 
         total_dias_mes + 1
 
@@ -1801,6 +1864,23 @@ with tab3:
 
             .str.strip()
         )
+
+        # ====================================================
+        # 🔥 FILTRO POR MÊS
+        # ====================================================
+        if coluna_data is not None:
+
+            carga[coluna_data] = pd.to_datetime(
+
+                carga[coluna_data],
+
+                errors="coerce"
+            )
+
+            carga = carga[
+
+                carga[coluna_data].dt.month == mes
+            ]
 
         resumo_cap = (
 
