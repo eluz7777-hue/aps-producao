@@ -1261,7 +1261,7 @@ with tab3:
     base = df_aps.copy()
 
     # ========================================================
-    # 🔒 VALIDAÇÃO COLUNAS APS
+    # 🔒 COLUNAS OBRIGATÓRIAS APS
     # ========================================================
     required_cols = [
 
@@ -1418,82 +1418,36 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔍 DEBUG OPCIONAL
+    # 🔥 COLUNAS FIXAS REAIS DO SEU EXCEL
     # ========================================================
-    # st.write(df_pv.columns.tolist())
-
-    # ========================================================
-    # 🔥 IDENTIFICAÇÃO FLEXÍVEL
-    # ========================================================
-    coluna_pv = None
-    coluna_qtd = None
-    coluna_processo = None
-    coluna_horas = None
-    coluna_data = None
-
-    for col in df_pv.columns:
-
-        nome = str(col).upper().strip()
-
-        # PV
-        if nome == "PV":
-
-            coluna_pv = col
-
-        # QUANTIDADE
-        if (
-
-            "QTD" in nome
-            or
-            "QUANT" in nome
-            or
-            "PECA" in nome
-            or
-            "PEÇA" in nome
-
-        ):
-
-            coluna_qtd = col
-
-        # PROCESSO
-        if "PROCESSO" in nome:
-
-            coluna_processo = col
-
-        # HORAS
-        if (
-
-            "HORA" in nome
-            or
-            "TEMPO" in nome
-            or
-            "HR" in nome
-
-        ):
-
-            coluna_horas = col
-
-        # DATA ENTREGA
-        if (
-
-            "ENTREGA" in nome
-            or
-            "DATA" in nome
-            or
-            "PRAZO" in nome
-
-        ):
-
-            coluna_data = col
+    coluna_pv = "PV"
+    coluna_data = "DATA DE ENTREGA"
+    coluna_qtd = "QUANTIDADE"
 
     # ========================================================
-    # 🔒 VALIDAÇÕES
+    # 🔒 VALIDAÇÃO COLUNAS
     # ========================================================
-    if coluna_pv is None:
+    colunas_necessarias = [
+
+        coluna_pv,
+        coluna_data,
+        coluna_qtd
+    ]
+
+    faltando_excel = [
+
+        c for c in colunas_necessarias
+
+        if c not in df_pv.columns
+    ]
+
+    if faltando_excel:
 
         st.error(
-            "Coluna PV não encontrada no PV.xlsx"
+            f"Colunas ausentes no PV.xlsx: {faltando_excel}"
         )
+
+        st.write(df_pv.columns.tolist())
 
         st.stop()
 
@@ -1844,55 +1798,13 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 VALIDAÇÃO COLUNAS CARGA
-    # ========================================================
-    if (
-
-        coluna_qtd is None
-        or
-        coluna_processo is None
-        or
-        coluna_horas is None
-        or
-        coluna_data is None
-
-    ):
-
-        st.error(
-            "Colunas necessárias da carga planejada "
-            "não foram encontradas no PV.xlsx"
-        )
-
-        st.write("Colunas encontradas:")
-
-        st.write(df_pv.columns.tolist())
-
-        st.stop()
-
-    # ========================================================
-    # 🔥 BASE CARGA
+    # 🔥 BASE DE CARGA
     # ========================================================
     carga = df_pv.copy()
 
     # ========================================================
-    # 🔥 NORMALIZAÇÃO
+    # 🔥 DATA
     # ========================================================
-    carga[coluna_qtd] = pd.to_numeric(
-
-        carga[coluna_qtd],
-
-        errors="coerce"
-
-    ).fillna(0)
-
-    carga[coluna_horas] = pd.to_numeric(
-
-        carga[coluna_horas],
-
-        errors="coerce"
-
-    ).fillna(0)
-
     carga[coluna_data] = pd.to_datetime(
 
         carga[coluna_data],
@@ -1900,15 +1812,12 @@ with tab3:
         errors="coerce"
     )
 
-    # ========================================================
-    # 🔥 REMOVE DATAS INVÁLIDAS
-    # ========================================================
     carga = carga.dropna(
         subset=[coluna_data]
     )
 
     # ========================================================
-    # 🔥 FILTRO EXCLUSIVO MÊS
+    # 🔥 FILTRO MENSAL
     # ========================================================
     carga = carga[
 
@@ -1924,55 +1833,81 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔥 PROCESSO
+    # 🔥 QUANTIDADE
     # ========================================================
-    carga["PROCESSO_REAL"] = (
+    carga[coluna_qtd] = pd.to_numeric(
 
-        carga[coluna_processo]
+        carga[coluna_qtd],
 
-        .astype(str)
+        errors="coerce"
 
-        .str.upper()
-
-        .str.strip()
-    )
+    ).fillna(0)
 
     # ========================================================
-    # 🔥 CARGA PLANEJADA
+    # 🔥 PROCESSOS DIRETO DAS COLUNAS
     # ========================================================
-    carga["Carga_Real"] = (
+    processos_excel = [
 
-        carga[coluna_qtd]
-        *
-        carga[coluna_horas]
-    )
+        "CORTE - SERRA",
+        "CORTE-PLASMA",
+        "CORTE-LASER",
+        "CORTE-GUILHOTINA",
+        "TORNO CONVENCIONAL",
+        "TORNO CNC",
+        "CENTRO DE USINAGEM",
+        "FRESADORAS",
+        "PRENSA (AMASSAMENTO)",
+        "CALANDRA",
+        "DOBRADEIRA",
+        "ROSQUEADEIRA",
+        "METALEIRA",
+        "FURADEIRA DE BANCADA",
+        "SOLDAGEM",
+        "ACABAMENTO",
+        "JATEAMENTO",
+        "PINTURA",
+        "MONTAGEM",
+        "DIVERSOS"
+    ]
 
     # ========================================================
-    # 🔥 AGRUPAMENTO
+    # 🔥 RESUMO CARGA
     # ========================================================
-    resumo_cap = (
+    lista_resumo = []
 
-        carga.groupby(
-            "PROCESSO_REAL",
-            as_index=False
-        )
+    for processo in processos_excel:
 
-        .agg(
-            Carga=("Carga_Real", "sum")
-        )
-    )
+        if processo not in carga.columns:
 
-    # ========================================================
-    # 🔥 CAPACIDADE
-    # ========================================================
-    def capacidade_real(processo):
+            continue
 
+        carga[processo] = pd.to_numeric(
+
+            carga[processo],
+
+            errors="coerce"
+
+        ).fillna(0)
+
+        # ====================================================
+        # 🔥 CARGA TOTAL PROCESSO
+        # ====================================================
+        carga_total = (
+
+            carga[coluna_qtd]
+            *
+            carga[processo]
+        ).sum()
+
+        # ====================================================
+        # 🔥 CAPACIDADE
+        # ====================================================
         recursos = maquinas.get(
             processo,
             1
         )
 
-        return (
+        capacidade = (
 
             recursos
             *
@@ -1981,29 +1916,33 @@ with tab3:
             dias_uteis_restantes
         )
 
-    resumo_cap["Capacidade"] = (
+        utilizacao = (
 
-        resumo_cap["PROCESSO_REAL"]
+            (carga_total / capacidade) * 100
 
-        .apply(capacidade_real)
+            if capacidade > 0
+
+            else 0
+        )
+
+        lista_resumo.append({
+
+            "PROCESSO_REAL": processo,
+
+            "Carga": carga_total,
+
+            "Capacidade": capacidade,
+
+            "Utilizacao": utilizacao
+        })
+
+    resumo_cap = pd.DataFrame(
+        lista_resumo
     )
 
     # ========================================================
-    # 📊 UTILIZAÇÃO
+    # 🔥 ORDENA
     # ========================================================
-    resumo_cap["Utilizacao"] = np.where(
-
-        resumo_cap["Capacidade"] > 0,
-
-        (
-            resumo_cap["Carga"]
-            /
-            resumo_cap["Capacidade"]
-        ) * 100,
-
-        0
-    )
-
     resumo_cap = resumo_cap.sort_values(
 
         "Utilizacao",
@@ -2016,7 +1955,7 @@ with tab3:
     # ========================================================
     fig2 = go.Figure()
 
-    # 🔴 CARGA PLANEJADA
+    # 🔴 CARGA
     fig2.add_bar(
 
         name="Carga Planejada",
@@ -2035,7 +1974,7 @@ with tab3:
         textposition="outside"
     )
 
-    # 🔵 CAPACIDADE DISPONÍVEL
+    # 🔵 CAPACIDADE
     fig2.add_bar(
 
         name="Capacidade Disponível",
@@ -2125,6 +2064,7 @@ with tab3:
 
             use_container_width=True
         )
+
 
 
 
