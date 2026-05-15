@@ -1684,8 +1684,8 @@ with tab3:
     with col_info:
 
         st.info(
-            "A capacidade disponível e a carga planejada "
-            "serão recalculadas conforme o mês selecionado."
+            "A capacidade disponível diminui automaticamente "
+            "conforme os dias úteis restantes do mês."
         )
 
     st.divider()
@@ -1782,19 +1782,50 @@ with tab3:
             dias_uteis_restantes += 1
 
     # ========================================================
-    # 🔥 CAPACIDADE REAL POR RECURSO
+    # 🔥 CÁLCULO REAL CAPACIDADE
     # ========================================================
     #
-    # 0,8 × ((4×9)+(1×8))
+    # 1 RECURSO:
     #
-    # = 35,2h por semana
+    # (4×9)+(1×8)
+    # = 44h semana
     #
-    # dividido por 5 dias úteis
+    # 44 × 0.8
+    # = 35.2h semana
     #
-    # = 7,04h/dia por recurso
+    # 35.2 / 5
+    # = 7.04h dia por recurso
+    #
+    # capacidade mês =
+    #
+    # 7.04 × dias úteis × qtd recursos
     #
     # ========================================================
-    capacidade_dia_recurso = 7.04
+    horas_semana_recurso = (
+
+        (
+            4 * 9
+        )
+
+        +
+
+        (
+            1 * 8
+        )
+    )
+
+    horas_semana_efetiva = (
+
+        horas_semana_recurso
+        *
+        0.8
+    )
+
+    horas_dia_recurso = (
+
+        horas_semana_efetiva
+        / 5
+    )
 
     # ========================================================
     # 🔥 BASE MENSAL
@@ -1861,7 +1892,7 @@ with tab3:
     ]
 
     # ========================================================
-    # 🔥 CÁLCULO REAL
+    # 🔥 RESUMO
     # ========================================================
     lista_resumo = []
 
@@ -1880,45 +1911,66 @@ with tab3:
         ).fillna(0)
 
         # ====================================================
-        # 🔥 TEMPO UNITÁRIO DO PROCESSO
+        # 🔥 TEMPO TOTAL PROCESSO
         # ====================================================
         #
-        # A coluna do processo no PV.xlsx
-        # já representa o TEMPO UNITÁRIO
+        # A COLUNA DO PROCESSO
+        # É O TEMPO UNITÁRIO
         #
         # Então:
         #
-        # HORAS = QUANTIDADE × TEMPO
+        # TEMPO TOTAL =
+        #
+        # QUANTIDADE × TEMPO PROCESSO
         #
         # ====================================================
 
         carga_total = (
 
             carga[coluna_qtd]
+
             *
+
             carga[processo]
 
         ).sum()
 
+        # ====================================================
+        # 🔥 RECURSOS PROCESSO
+        # ====================================================
         recursos = MAQUINAS.get(
             processo,
             0
         )
 
-        capacidade = (
+        # ====================================================
+        # 🔥 CAPACIDADE REAL PROCESSO
+        # ====================================================
+        capacidade_total = (
+
+            horas_dia_recurso
+
+            *
+
+            dias_uteis_restantes
+
+            *
 
             recursos
-            *
-            capacidade_dia_recurso
-            *
-            dias_uteis_restantes
         )
 
+        # ====================================================
+        # 🔥 UTILIZAÇÃO
+        # ====================================================
         utilizacao = (
 
-            (carga_total / capacidade) * 100
+            (
+                carga_total
+                /
+                capacidade_total
+            ) * 100
 
-            if capacidade > 0
+            if capacidade_total > 0
 
             else 0
         )
@@ -1929,9 +1981,11 @@ with tab3:
 
             "Carga": round(carga_total, 1),
 
-            "Capacidade": round(capacidade, 1),
+            "Capacidade": round(capacidade_total, 1),
 
-            "Utilizacao": round(utilizacao, 1)
+            "Utilizacao": round(utilizacao, 1),
+
+            "Recursos": recursos
         })
 
     resumo_cap = pd.DataFrame(
@@ -1939,7 +1993,7 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 REMOVE ZERADOS
+    # 🔥 REMOVE PROCESSOS ZERADOS
     # ========================================================
     resumo_cap = resumo_cap[
 
@@ -1969,7 +2023,7 @@ with tab3:
     # ========================================================
     fig2 = go.Figure()
 
-    # 🔴 CARGA
+    # 🔴 CARGA PLANEJADA
     fig2.add_bar(
 
         name="Carga Planejada",
@@ -1980,9 +2034,7 @@ with tab3:
 
         marker_color="#d62728",
 
-        text=(
-            resumo_cap["Carga"]
-        ),
+        text=resumo_cap["Carga"],
 
         textposition="outside"
     )
@@ -1998,9 +2050,7 @@ with tab3:
 
         marker_color="#1f77b4",
 
-        text=(
-            resumo_cap["Capacidade"]
-        ),
+        text=resumo_cap["Capacidade"],
 
         textposition="outside"
     )
@@ -2045,7 +2095,9 @@ with tab3:
 
             "Capacidade": "Capacidade Disponível (h)",
 
-            "Utilizacao": "Utilização (%)"
+            "Utilizacao": "Utilização (%)",
+
+            "Recursos": "Qtd Recursos"
         })
 
         st.dataframe(
@@ -2053,6 +2105,7 @@ with tab3:
             tabela[
                 [
                     "Processo",
+                    "Qtd Recursos",
                     "Carga Planejada (h)",
                     "Capacidade Disponível (h)",
                     "Utilização (%)"
@@ -2061,6 +2114,7 @@ with tab3:
 
             use_container_width=True
         )
+
 
 
 
