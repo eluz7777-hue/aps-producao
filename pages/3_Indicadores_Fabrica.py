@@ -1236,7 +1236,7 @@ with tab3:
     import holidays
     import calendar
 
-    from datetime import datetime, timedelta
+    from datetime import datetime
 
     st.header("🏭 Atraso de Entregas (Tempo Real)")
 
@@ -1245,7 +1245,7 @@ with tab3:
     )
 
     # ========================================================
-    # 🔒 VALIDAÇÃO
+    # 🔒 VALIDAÇÃO APS
     # ========================================================
     if df_aps.empty:
 
@@ -1261,7 +1261,7 @@ with tab3:
     base = df_aps.copy()
 
     # ========================================================
-    # 🔒 COLUNAS OBRIGATÓRIAS APS
+    # 🔒 VALIDAÇÃO COLUNAS APS
     # ========================================================
     required_cols = [
 
@@ -1291,15 +1291,20 @@ with tab3:
     base["PV"] = (
 
         base["PV"]
+
         .astype(str)
+
         .str.strip()
     )
 
     base["Processo"] = (
 
         base["Processo"]
+
         .astype(str)
+
         .str.upper()
+
         .str.strip()
     )
 
@@ -1308,10 +1313,11 @@ with tab3:
         base["Horas"],
 
         errors="coerce"
+
     ).fillna(0)
 
     # ========================================================
-    # 🔥 REMOVE INVÁLIDOS
+    # 🔥 REMOVE PVs INVÁLIDAS
     # ========================================================
     base = base[
 
@@ -1327,129 +1333,6 @@ with tab3:
 
         base["PV"].str.lower() != "nan"
     ]
-
-    # ========================================================
-    # 🔥 LEITURA PV.xlsx
-    # ========================================================
-    caminho_pv = os.path.abspath(
-        "PV.xlsx"
-    )
-
-    total_pvs = 0
-
-    if not os.path.exists(caminho_pv):
-
-        st.error(
-            "Arquivo PV.xlsx não encontrado."
-        )
-
-        st.stop()
-
-    try:
-
-        df_pv = pd.read_excel(
-            caminho_pv
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Erro ao ler PV.xlsx: {e}"
-        )
-
-        st.stop()
-
-    # ========================================================
-    # 🔥 NORMALIZAÇÃO COLUNAS PV
-    # ========================================================
-    df_pv.columns = [
-
-        str(col).strip()
-
-        for col in df_pv.columns
-    ]
-
-    # ========================================================
-    # 🔥 IDENTIFICAÇÃO FLEXÍVEL
-    # ========================================================
-    coluna_pv = None
-    coluna_qtd = None
-    coluna_processo = None
-    coluna_horas = None
-    coluna_data = None
-
-    for col in df_pv.columns:
-
-        nome = str(col).upper().strip()
-
-        # PV
-        if nome == "PV":
-
-            coluna_pv = col
-
-        # Quantidade
-        if (
-            "QTD" in nome
-            or
-            "QUANT" in nome
-            or
-            "PEÇ" in nome
-        ):
-
-            coluna_qtd = col
-
-        # Processo
-        if "PROCESSO" in nome:
-
-            coluna_processo = col
-
-        # Horas
-        if (
-            "HORA" in nome
-            or
-            "TEMPO" in nome
-            or
-            "HR" in nome
-        ):
-
-            coluna_horas = col
-
-        # Data
-        if (
-            "ENTREGA" in nome
-            or
-            "DATA" in nome
-        ):
-
-            coluna_data = col
-
-    # ========================================================
-    # 🔥 VALIDAÇÃO
-    # ========================================================
-    if coluna_pv is None:
-
-        st.error(
-            "Coluna PV não encontrada no PV.xlsx"
-        )
-
-        st.stop()
-
-    total_pvs = (
-
-        df_pv[coluna_pv]
-
-        .astype(str)
-
-        .str.strip()
-
-        .replace("", np.nan)
-
-        .replace("nan", np.nan)
-
-        .dropna()
-
-        .nunique()
-    )
 
     # ========================================================
     # 📅 DATA APS
@@ -1473,15 +1356,12 @@ with tab3:
     hoje = pd.Timestamp.today().normalize()
 
     # ========================================================
-    # 🔥 BASE COM DATA
+    # 🚨 ATRASOS
     # ========================================================
     base_data = base.dropna(
         subset=["DATA_ENTREGA_APS"]
     ).copy()
 
-    # ========================================================
-    # 🚨 ATRASO
-    # ========================================================
     base_data["Atraso_dias"] = (
 
         hoje - base_data["DATA_ENTREGA_APS"]
@@ -1497,6 +1377,145 @@ with tab3:
 
         base_data["Atrasada"]
     ].copy()
+
+    # ========================================================
+    # 🔥 LEITURA PV.xlsx
+    # ========================================================
+    caminho_pv = os.path.abspath(
+        "PV.xlsx"
+    )
+
+    if not os.path.exists(caminho_pv):
+
+        st.error(
+            f"Arquivo PV.xlsx não encontrado em: {caminho_pv}"
+        )
+
+        st.stop()
+
+    try:
+
+        df_pv = pd.read_excel(
+            caminho_pv
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Erro ao ler PV.xlsx: {e}"
+        )
+
+        st.stop()
+
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO COLUNAS
+    # ========================================================
+    df_pv.columns = [
+
+        str(c).strip()
+
+        for c in df_pv.columns
+    ]
+
+    # ========================================================
+    # 🔍 DEBUG OPCIONAL
+    # ========================================================
+    # st.write(df_pv.columns.tolist())
+
+    # ========================================================
+    # 🔥 IDENTIFICAÇÃO FLEXÍVEL
+    # ========================================================
+    coluna_pv = None
+    coluna_qtd = None
+    coluna_processo = None
+    coluna_horas = None
+    coluna_data = None
+
+    for col in df_pv.columns:
+
+        nome = str(col).upper().strip()
+
+        # PV
+        if nome == "PV":
+
+            coluna_pv = col
+
+        # QUANTIDADE
+        if (
+
+            "QTD" in nome
+            or
+            "QUANT" in nome
+            or
+            "PECA" in nome
+            or
+            "PEÇA" in nome
+
+        ):
+
+            coluna_qtd = col
+
+        # PROCESSO
+        if "PROCESSO" in nome:
+
+            coluna_processo = col
+
+        # HORAS
+        if (
+
+            "HORA" in nome
+            or
+            "TEMPO" in nome
+            or
+            "HR" in nome
+
+        ):
+
+            coluna_horas = col
+
+        # DATA ENTREGA
+        if (
+
+            "ENTREGA" in nome
+            or
+            "DATA" in nome
+            or
+            "PRAZO" in nome
+
+        ):
+
+            coluna_data = col
+
+    # ========================================================
+    # 🔒 VALIDAÇÕES
+    # ========================================================
+    if coluna_pv is None:
+
+        st.error(
+            "Coluna PV não encontrada no PV.xlsx"
+        )
+
+        st.stop()
+
+    # ========================================================
+    # 🔥 TOTAL REAL DE PVs
+    # ========================================================
+    total_pvs = (
+
+        df_pv[coluna_pv]
+
+        .astype(str)
+
+        .str.strip()
+
+        .replace("", np.nan)
+
+        .replace("nan", np.nan)
+
+        .dropna()
+
+        .nunique()
+    )
 
     # ========================================================
     # 📊 KPIs
@@ -1554,10 +1573,12 @@ with tab3:
 
         atrasadas = (
 
-            atrasadas[[
-                "PV",
-                "Atraso_dias"
-            ]]
+            atrasadas[
+                [
+                    "PV",
+                    "Atraso_dias"
+                ]
+            ]
 
             .drop_duplicates()
         )
@@ -1565,10 +1586,12 @@ with tab3:
         atrasadas["Atraso_dias"] = (
 
             atrasadas["Atraso_dias"]
+
             .astype(int)
         )
 
         bins = [
+
             0,
             2,
             4,
@@ -1582,6 +1605,7 @@ with tab3:
         ]
 
         labels = [
+
             "1-2",
             "3-4",
             "5-6",
@@ -1666,9 +1690,8 @@ with tab3:
     st.divider()
 
     # ========================================================
-    # 📅 SELEÇÃO DE MÊS PLANEJADO
+    # 📅 SELEÇÃO DE MÊS
     # ========================================================
-
     meses_nomes = {
 
         1: "Janeiro",
@@ -1768,11 +1791,8 @@ with tab3:
     dias_uteis_restantes = 0
 
     # ========================================================
-    # 🔥 REGRA:
-    # MÊS ATUAL = capacidade restante
-    # MÊS FUTURO = capacidade total do mês
+    # 🔥 MÊS ATUAL x FUTURO
     # ========================================================
-
     if mes == datetime.today().month:
 
         dia_inicio = hoje_real.day
@@ -1808,7 +1828,7 @@ with tab3:
             dias_uteis_restantes += 1
 
     # ========================================================
-    # 🔥 CAPACIDADE DIÁRIA POR RECURSO
+    # 🔥 CAPACIDADE DIÁRIA
     # ========================================================
     capacidade_dia_recurso = (
 
@@ -1824,124 +1844,126 @@ with tab3:
     )
 
     # ========================================================
-    # 🔥 BASE DE CARGA PLANEJADA
+    # 🔥 VALIDAÇÃO COLUNAS CARGA
     # ========================================================
-
     if (
 
-        coluna_qtd is not None
-        and
-        coluna_processo is not None
-        and
-        coluna_horas is not None
-        and
-        coluna_data is not None
+        coluna_qtd is None
+        or
+        coluna_processo is None
+        or
+        coluna_horas is None
+        or
+        coluna_data is None
 
     ):
 
-        carga = df_pv.copy()
-
-        # ====================================================
-        # 🔥 NORMALIZAÇÃO
-        # ====================================================
-        carga[coluna_qtd] = pd.to_numeric(
-
-            carga[coluna_qtd],
-
-            errors="coerce"
-        ).fillna(0)
-
-        carga[coluna_horas] = pd.to_numeric(
-
-            carga[coluna_horas],
-
-            errors="coerce"
-        ).fillna(0)
-
-        carga[coluna_data] = pd.to_datetime(
-
-            carga[coluna_data],
-
-            errors="coerce"
-        )
-
-        # ====================================================
-        # 🔥 REMOVE DATAS INVÁLIDAS
-        # ====================================================
-        carga = carga.dropna(
-            subset=[coluna_data]
-        )
-
-        # ====================================================
-        # 🔥 FILTRO EXCLUSIVO DO MÊS
-        # ====================================================
-        carga = carga[
-
-            (
-                carga[coluna_data].dt.month == mes
-            )
-
-            &
-
-            (
-                carga[coluna_data].dt.year == ano
-            )
-        ]
-
-        # ====================================================
-        # 🔥 PROCESSO
-        # ====================================================
-        carga["PROCESSO_REAL"] = (
-
-            carga[coluna_processo]
-
-            .astype(str)
-
-            .str.upper()
-
-            .str.strip()
-        )
-
-        # ====================================================
-        # 🔥 CARGA REAL
-        # ====================================================
-        carga["Carga_Real"] = (
-
-            carga[coluna_qtd]
-            *
-            carga[coluna_horas]
-        )
-
-        # ====================================================
-        # 🔥 AGRUPAMENTO
-        # ====================================================
-        resumo_cap = (
-
-            carga.groupby(
-                "PROCESSO_REAL",
-                as_index=False
-            )
-
-            .agg(
-                Carga=("Carga_Real", "sum")
-            )
-        )
-
-    else:
-
-        st.warning(
+        st.error(
             "Colunas necessárias da carga planejada "
             "não foram encontradas no PV.xlsx"
         )
 
-        resumo_cap = pd.DataFrame({
+        st.write("Colunas encontradas:")
 
-            "PROCESSO_REAL": [],
-            "Carga": []
-        })
+        st.write(df_pv.columns.tolist())
+
+        st.stop()
 
     # ========================================================
-    # 🔥 CAPACIDADE DISPONÍVEL RESTANTE
+    # 🔥 BASE CARGA
+    # ========================================================
+    carga = df_pv.copy()
+
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO
+    # ========================================================
+    carga[coluna_qtd] = pd.to_numeric(
+
+        carga[coluna_qtd],
+
+        errors="coerce"
+
+    ).fillna(0)
+
+    carga[coluna_horas] = pd.to_numeric(
+
+        carga[coluna_horas],
+
+        errors="coerce"
+
+    ).fillna(0)
+
+    carga[coluna_data] = pd.to_datetime(
+
+        carga[coluna_data],
+
+        errors="coerce"
+    )
+
+    # ========================================================
+    # 🔥 REMOVE DATAS INVÁLIDAS
+    # ========================================================
+    carga = carga.dropna(
+        subset=[coluna_data]
+    )
+
+    # ========================================================
+    # 🔥 FILTRO EXCLUSIVO MÊS
+    # ========================================================
+    carga = carga[
+
+        (
+            carga[coluna_data].dt.month == mes
+        )
+
+        &
+
+        (
+            carga[coluna_data].dt.year == ano
+        )
+    ]
+
+    # ========================================================
+    # 🔥 PROCESSO
+    # ========================================================
+    carga["PROCESSO_REAL"] = (
+
+        carga[coluna_processo]
+
+        .astype(str)
+
+        .str.upper()
+
+        .str.strip()
+    )
+
+    # ========================================================
+    # 🔥 CARGA PLANEJADA
+    # ========================================================
+    carga["Carga_Real"] = (
+
+        carga[coluna_qtd]
+        *
+        carga[coluna_horas]
+    )
+
+    # ========================================================
+    # 🔥 AGRUPAMENTO
+    # ========================================================
+    resumo_cap = (
+
+        carga.groupby(
+            "PROCESSO_REAL",
+            as_index=False
+        )
+
+        .agg(
+            Carga=("Carga_Real", "sum")
+        )
+    )
+
+    # ========================================================
+    # 🔥 CAPACIDADE
     # ========================================================
     def capacidade_real(processo):
 
