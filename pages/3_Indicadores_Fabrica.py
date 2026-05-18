@@ -3306,7 +3306,9 @@ with tab6:
     # ========================================================
     if not os.path.exists(caminho_excel):
 
-        st.error("❌ Arquivo Indicadores_RH_2026 ATUAL.xlsx não encontrado.")
+        st.error(
+            "❌ Arquivo Indicadores_RH_2026 ATUAL.xlsx não encontrado."
+        )
 
     else:
 
@@ -3319,40 +3321,79 @@ with tab6:
 
             df_abs = pd.read_excel(
                 xls,
-                sheet_name="ABSENTEISMO X HHT"
+                sheet_name="ABSENTEISMO X HHT",
+                header=None
             )
 
             df_trein = pd.read_excel(
                 xls,
-                sheet_name="HORAS TERINAMENTOS X HHT"
+                sheet_name="HORAS TERINAMENTOS X HHT",
+                header=None
             )
 
             df_faltas = pd.read_excel(
                 xls,
-                sheet_name="FALTAS INJUSTIFICADAS X HHT"
+                sheet_name="FALTAS INJUSTIFICADAS X HHT",
+                header=None
             )
 
             df_extra = pd.read_excel(
                 xls,
-                sheet_name="HORAS EXTRAS X HHT"
+                sheet_name="HORAS EXTRAS X HHT",
+                header=None
             )
 
             # ====================================================
-            # 🧹 LIMPEZA PADRÃO
+            # 🧹 FUNÇÃO PADRÃO LIMPEZA
             # ====================================================
             def preparar_df(df):
 
+                # remove linhas vazias
                 df = df.dropna(
                     how="all"
                 ).reset_index(drop=True)
 
-                df.columns = [
-                    str(c).strip()
-                    for c in df.columns
-                ]
+                # =================================================
+                # 🔥 LOCALIZA LINHA 2026
+                # =================================================
+                linha_2026 = None
 
-                # remove cabeçalhos extras
-                df = df.iloc[2:].copy()
+                for idx in range(len(df)):
+
+                    linha_texto = " ".join(
+                        [
+                            str(v)
+                            for v in df.iloc[idx].tolist()
+                        ]
+                    )
+
+                    if "2026" in linha_texto:
+
+                        linha_2026 = idx
+                        break
+
+                if linha_2026 is None:
+
+                    return pd.DataFrame(
+                        columns=[
+                            "MES",
+                            "VALOR",
+                            "META"
+                        ]
+                    )
+
+                # =================================================
+                # 🔥 PEGA SOMENTE 2026
+                # =================================================
+                df = df.iloc[
+                    linha_2026 + 1:
+                    linha_2026 + 13
+                ].copy()
+
+                # =================================================
+                # 🔥 RENOMEIA COLUNAS
+                # =================================================
+                df = df.iloc[:, 0:3]
 
                 df.columns = [
                     "MES",
@@ -3360,13 +3401,16 @@ with tab6:
                     "META"
                 ]
 
+                # =================================================
+                # 🔥 LIMPEZA MESES
+                # =================================================
                 df["MES"] = (
                     df["MES"]
                     .astype(str)
                     .str.strip()
+                    .str[:3]
                 )
 
-                # remove linhas inválidas
                 meses_validos = [
                     "Jan","Fev","Mar","Abr",
                     "Mai","Jun","Jul","Ago",
@@ -3379,6 +3423,9 @@ with tab6:
                     )
                 ].copy()
 
+                # =================================================
+                # 🔥 CONVERSÃO NUMÉRICA
+                # =================================================
                 df["VALOR"] = (
                     pd.to_numeric(
                         df["VALOR"],
@@ -3395,6 +3442,9 @@ with tab6:
 
                 return df
 
+            # ====================================================
+            # 🧹 PREPARAÇÃO
+            # ====================================================
             df_abs = preparar_df(df_abs)
             df_trein = preparar_df(df_trein)
             df_faltas = preparar_df(df_faltas)
@@ -3420,7 +3470,7 @@ with tab6:
                 )
 
             # ====================================================
-            # 📊 FUNÇÃO PADRÃO ISO
+            # 📊 FUNÇÃO GRÁFICO ISO
             # ====================================================
             def grafico_iso(
                 titulo,
@@ -3429,7 +3479,18 @@ with tab6:
                 tipo_meta
             ):
 
-                meses = df["MES"].tolist()
+                if df.empty:
+
+                    st.warning(
+                        f"⚠️ Sem dados válidos para {titulo}"
+                    )
+
+                    return
+
+                meses = (
+                    df["MES"]
+                    .tolist()
+                )
 
                 valores = (
                     df["VALOR"]
@@ -3464,7 +3525,9 @@ with tab6:
                 # ================================================
                 # 📊 GRÁFICO
                 # ================================================
-                st.subheader(titulo)
+                st.subheader(
+                    titulo
+                )
 
                 fig = go.Figure()
 
