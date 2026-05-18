@@ -2897,8 +2897,6 @@ with tab5:
             # ====================================================
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
-            # 🔥 LEITURA CORRETA:
-            # % SEM DEVOLUÇÕES
             percentual_sem_devolucao = (
                 pd.to_numeric(
                     df_devolucao.iloc[:, 2],
@@ -2917,16 +2915,6 @@ with tab5:
             # 📊 DADOS VISÃO GERAL
             # ====================================================
             meses_geral = df_geral.iloc[:, 0].astype(str).tolist()
-
-            total_pedidos = pd.to_numeric(
-                df_geral.iloc[:, 1],
-                errors="coerce"
-            ).fillna(0).tolist()
-
-            pedidos_no_prazo = pd.to_numeric(
-                df_geral.iloc[:, 2],
-                errors="coerce"
-            ).fillna(0).tolist()
 
             percentual_prazo_geral = (
                 pd.to_numeric(
@@ -3075,22 +3063,13 @@ with tab5:
 
             fig3 = go.Figure()
 
-            # 🔶 TOTAL PEDIDOS
+            # 🔵 BARRAS % ENTREGUE NO PRAZO
             fig3.add_trace(go.Bar(
-                name="Total Pedidos",
                 x=meses_geral,
-                y=total_pedidos,
-                text=[str(int(v)) for v in total_pedidos],
-                textposition="outside"
-            ))
-
-            # 🔷 PEDIDOS NO PRAZO
-            fig3.add_trace(go.Bar(
-                name="Pedidos no Prazo",
-                x=meses_geral,
-                y=pedidos_no_prazo,
-                text=[str(int(v)) for v in pedidos_no_prazo],
-                textposition="outside"
+                y=percentual_prazo_geral,
+                text=[f"{v:.1f}%" for v in percentual_prazo_geral],
+                textposition="outside",
+                name="% Entregue no Prazo"
             ))
 
             # 🔴 META
@@ -3108,21 +3087,13 @@ with tab5:
                 )
             ))
 
-            # 🔵 % ENTREGUE NO PRAZO
-            fig3.add_trace(go.Scatter(
-                x=meses_geral,
-                y=percentual_prazo_geral,
-                mode="lines+markers+text",
-                name="% Entregue no Prazo",
-                text=[f"{v:.1f}%" for v in percentual_prazo_geral],
-                textposition="top center"
-            ))
-
             fig3.update_layout(
-                barmode="group",
                 height=550,
-                yaxis_title="Quantidade / %",
+                yaxis_title="% Entregas no Prazo",
                 xaxis_title="Mês",
+                yaxis=dict(
+                    range=[0, 110]
+                ),
                 xaxis=dict(
                     type="category"
                 )
