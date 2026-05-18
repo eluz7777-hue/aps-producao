@@ -5063,21 +5063,100 @@ fila_detalhe["Horas"] = (
 
 
 # ============================================================
-# 🔥 ENTREGA FORMATADA
+# 🔥 TRATAMENTO ENTREGA
 # ============================================================
 if "ENTREGA" in fila_detalhe.columns:
 
     fila_detalhe["ENTREGA"] = pd.to_datetime(
 
         fila_detalhe["ENTREGA"],
+
         errors="coerce"
     )
+
+    hoje = pd.Timestamp.today().normalize()
+
+    fila_detalhe["Dias para Entrega"] = (
+
+        fila_detalhe["ENTREGA"] - hoje
+
+    ).dt.days
 
     fila_detalhe["ENTREGA"] = (
 
         fila_detalhe["ENTREGA"]
+
         .dt.strftime("%d/%m/%Y")
     )
+
+
+# ============================================================
+# 🚦 SEMÁFORO OPERACIONAL
+# ============================================================
+def definir_semaforo(dias):
+
+    try:
+
+        dias = float(dias)
+
+    except:
+        return "⚪"
+
+    if dias < 0:
+        return "🔴"
+
+    elif dias <= 2:
+        return "🟡"
+
+    else:
+        return "🟢"
+
+
+if "Dias para Entrega" in fila_detalhe.columns:
+
+    fila_detalhe["Semáforo"] = fila_detalhe[
+        "Dias para Entrega"
+    ].apply(definir_semaforo)
+
+else:
+
+    fila_detalhe["Semáforo"] = "⚪"
+
+
+# ============================================================
+# 🔥 ORDENAÇÃO EXECUTIVA
+# ============================================================
+ordem_status = {
+
+    "🔴": 0,
+    "🟡": 1,
+    "🟢": 2,
+    "⚪": 3
+}
+
+fila_detalhe["ordem_status"] = fila_detalhe[
+    "Semáforo"
+].map(ordem_status)
+
+
+# ============================================================
+# 🔥 ORDENAÇÃO DA FILA
+# ============================================================
+colunas_ordenacao = ["ordem_status"]
+
+if "Dias para Entrega" in fila_detalhe.columns:
+
+    colunas_ordenacao.append(
+        "Dias para Entrega"
+    )
+
+
+fila_detalhe = fila_detalhe.sort_values(
+
+    by=colunas_ordenacao,
+
+    ascending=True
+)
 
 
 # ============================================================
@@ -5109,7 +5188,9 @@ colunas_fila = [
 fila_detalhe_exib = (
 
     fila_detalhe[colunas_fila]
+
     .copy()
+
     .reset_index(drop=True)
 )
 
@@ -5136,22 +5217,30 @@ df_operacional["Saldo_Horas"] = (
     df_operacional["Horas"] - df_operacional["Horas_Baixadas"]
 )
 
-df_operacional["Saldo_Horas"] = df_operacional["Saldo_Horas"].clip(lower=0)
+df_operacional["Saldo_Horas"] = (
+    df_operacional["Saldo_Horas"]
+    .clip(lower=0)
+)
 
 
 # ============================================================
 # 🔥 STATUS OPERACIONAL
 # ============================================================
 df_operacional["Status Operacional"] = np.where(
+
     df_operacional["Saldo_Horas"] <= 0,
+
     "✅ Baixado",
+
     np.where(
+
         df_operacional["Horas_Baixadas"] > 0,
+
         "🟡 Parcial",
+
         "⏳ Pendente"
     )
 )
-
 
 
 # ============================================================
