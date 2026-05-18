@@ -2897,21 +2897,25 @@ with tab5:
             # ====================================================
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
-            # 🔥 CORREÇÃO DA LEITURA
-            percentual_devolucao = pd.to_numeric(
-                df_devolucao.iloc[:, 3],
-                errors="coerce"
-            ).fillna(0).round(2).tolist()
+            # 🔥 LEITURA CORRETA:
+            # % SEM DEVOLUÇÕES
+            percentual_sem_devolucao = (
+                pd.to_numeric(
+                    df_devolucao.iloc[:, 2],
+                    errors="coerce"
+                ).fillna(0) * 100
+            ).round(1).tolist()
 
-            meta_dev = pd.to_numeric(
-                df_devolucao.iloc[:, 4],
-                errors="coerce"
-            ).fillna(0).round(2).tolist()
+            meta_dev = (
+                pd.to_numeric(
+                    df_devolucao.iloc[:, 4],
+                    errors="coerce"
+                ).fillna(0) * 100
+            ).round(1).tolist()
 
             # ====================================================
             # 📊 DADOS VISÃO GERAL
             # ====================================================
-            # 🔥 NÃO REMOVE MAIS JANEIRO
             meses_geral = df_geral.iloc[:, 0].astype(str).tolist()
 
             total_pedidos = pd.to_numeric(
@@ -2951,29 +2955,31 @@ with tab5:
                 return sum(vals) / len(vals)
 
             acm_prazo = media(prazo_ok)
-            acm_devolucao = media(percentual_devolucao)
+            acm_devolucao = media(percentual_sem_devolucao)
             acm_geral = media(percentual_prazo_geral)
 
             # ====================================================
             # 📊 1 - PRAZO DO PROVEDOR
             # ====================================================
-            st.subheader("📊 Índice de Entrega do Provedor no Prazo")
+            st.subheader("📊 Índice de Entrega do Provedor Externo no Prazo")
 
             fig1 = go.Figure()
 
+            # 🔶 BARRAS
             fig1.add_trace(go.Bar(
                 x=meses_prazo,
                 y=prazo_ok,
-                text=[f"{v:.1f}%" for v in prazo_ok],
+                text=[f"{v:.0f}%" for v in prazo_ok],
                 textposition="outside",
-                name="Prazo (%)"
+                name="% Prazo e Antecipado"
             ))
 
+            # 🔴 META
             fig1.add_trace(go.Scatter(
                 x=meses_prazo,
                 y=meta_prazo,
-                mode="lines+text",
-                text=[f"{v:.1f}%" for v in meta_prazo],
+                mode="lines+markers+text",
+                text=[f"{v:.0f}%" for v in meta_prazo],
                 textposition="top center",
                 name="Meta",
                 line=dict(
@@ -2987,7 +2993,9 @@ with tab5:
                 height=450,
                 yaxis_title="%",
                 xaxis_title="Mês",
-                yaxis=dict(range=[0, 110]),
+                yaxis=dict(
+                    range=[0, 110]
+                ),
                 xaxis=dict(
                     type="category"
                 )
@@ -2996,8 +3004,11 @@ with tab5:
             st.plotly_chart(fig1, use_container_width=True)
 
             if prazo_ok[-1] >= meta_prazo[-1]:
+
                 st.success("🟢 Fornecedor dentro do prazo")
+
             else:
+
                 st.error("🔴 Problemas de prazo")
 
             st.info(f"ACM Prazo: {acm_prazo:.1f}%")
@@ -3009,19 +3020,21 @@ with tab5:
 
             fig2 = go.Figure()
 
+            # 🔶 BARRAS
             fig2.add_trace(go.Bar(
                 x=meses_dev,
-                y=percentual_devolucao,
-                text=[f"{v:.2f}%" for v in percentual_devolucao],
+                y=percentual_sem_devolucao,
+                text=[f"{v:.0f}%" for v in percentual_sem_devolucao],
                 textposition="outside",
-                name="Devoluções (%)"
+                name="% Sem Devoluções"
             ))
 
+            # 🔴 META
             fig2.add_trace(go.Scatter(
                 x=meses_dev,
                 y=meta_dev,
-                mode="lines+text",
-                text=[f"{v:.2f}%" for v in meta_dev],
+                mode="lines+markers+text",
+                text=[f"{v:.0f}%" for v in meta_dev],
                 textposition="top center",
                 name="Meta",
                 line=dict(
@@ -3035,6 +3048,9 @@ with tab5:
                 height=450,
                 yaxis_title="%",
                 xaxis_title="Mês",
+                yaxis=dict(
+                    range=[0, 110]
+                ),
                 xaxis=dict(
                     type="category"
                 )
@@ -3042,12 +3058,15 @@ with tab5:
 
             st.plotly_chart(fig2, use_container_width=True)
 
-            if percentual_devolucao[-1] <= meta_dev[-1]:
+            if percentual_sem_devolucao[-1] >= meta_dev[-1]:
+
                 st.success("🟢 Qualidade adequada")
+
             else:
+
                 st.error("🔴 Problema de qualidade")
 
-            st.info(f"ACM Devolução: {acm_devolucao:.2f}%")
+            st.info(f"ACM Devolução: {acm_devolucao:.1f}%")
 
             # ====================================================
             # 📊 3 - VISÃO COMPLETA
@@ -3056,6 +3075,7 @@ with tab5:
 
             fig3 = go.Figure()
 
+            # 🔶 TOTAL PEDIDOS
             fig3.add_trace(go.Bar(
                 name="Total Pedidos",
                 x=meses_geral,
@@ -3064,6 +3084,7 @@ with tab5:
                 textposition="outside"
             ))
 
+            # 🔷 PEDIDOS NO PRAZO
             fig3.add_trace(go.Bar(
                 name="Pedidos no Prazo",
                 x=meses_geral,
@@ -3072,11 +3093,12 @@ with tab5:
                 textposition="outside"
             ))
 
+            # 🔴 META
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
                 y=meta_geral,
-                mode="lines+text",
-                text=[f"{v:.1f}%" for v in meta_geral],
+                mode="lines+markers+text",
+                text=[f"{v:.0f}%" for v in meta_geral],
                 textposition="top center",
                 name="Meta",
                 line=dict(
@@ -3086,6 +3108,7 @@ with tab5:
                 )
             ))
 
+            # 🔵 % ENTREGUE NO PRAZO
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
                 y=percentual_prazo_geral,
@@ -3108,8 +3131,11 @@ with tab5:
             st.plotly_chart(fig3, use_container_width=True)
 
             if percentual_prazo_geral[-1] >= meta_geral[-1]:
+
                 st.success("🟢 Performance dentro da meta")
+
             else:
+
                 st.error("🔴 Performance abaixo da meta")
 
             st.info(f"ACM Geral: {acm_geral:.1f}%")
