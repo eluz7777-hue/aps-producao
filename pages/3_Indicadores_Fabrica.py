@@ -3391,7 +3391,7 @@ with tab6:
                 ].copy()
 
                 # =================================================
-                # 🔥 RENOMEIA COLUNAS
+                # 🔥 MANTÉM SOMENTE 3 COLUNAS
                 # =================================================
                 df = df.iloc[:, 0:3]
 
@@ -3402,7 +3402,7 @@ with tab6:
                 ]
 
                 # =================================================
-                # 🔥 LIMPEZA MESES
+                # 🔥 LIMPEZA DOS MESES
                 # =================================================
                 df["MES"] = (
                     df["MES"]
@@ -3430,15 +3430,37 @@ with tab6:
                     pd.to_numeric(
                         df["VALOR"],
                         errors="coerce"
-                    ).fillna(0) * 100
-                ).round(2)
+                    ).fillna(0)
+                )
 
                 df["META"] = (
                     pd.to_numeric(
                         df["META"],
                         errors="coerce"
-                    ).fillna(0) * 100
-                ).round(2)
+                    ).fillna(0)
+                )
+
+                # =================================================
+                # 🔥 ZERA MESES FUTUROS
+                # Maio, Junho e Julho devem permanecer zerados
+                # =================================================
+                meses_sem_dados = [
+                    "Mai",
+                    "Jun",
+                    "Jul",
+                    "Ago",
+                    "Set",
+                    "Out",
+                    "Nov",
+                    "Dez"
+                ]
+
+                df.loc[
+                    df["MES"].isin(
+                        meses_sem_dados
+                    ),
+                    "VALOR"
+                ] = 0
 
                 return df
 
@@ -3493,14 +3515,12 @@ with tab6:
                 )
 
                 valores = (
-                    df["VALOR"]
-                    .tolist()
-                )
+                    df["VALOR"] * 100
+                ).round(2).tolist()
 
                 metas = (
-                    df["META"]
-                    .tolist()
-                )
+                    df["META"] * 100
+                ).round(2).tolist()
 
                 # ================================================
                 # 📊 ACM
