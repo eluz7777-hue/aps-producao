@@ -2810,7 +2810,6 @@ with tab4:
 
 
 
-
 # ============================================================
 # 📦 Indicadores de Compras & Fornecedores
 # ============================================================
@@ -2906,7 +2905,7 @@ with tab5:
             # 🔥 ACM
             acm_prazo = media_apenas_com_dados(prazo_ok)
 
-            # 🔥 ADICIONA ACUMULADO
+            # 🔥 ACUMULADO
             meses_prazo.append("ACM")
             prazo_ok.append(acm_prazo)
             meta_prazo.append(90)
@@ -2914,20 +2913,43 @@ with tab5:
             # ====================================================
             # 📊 DADOS DEVOLUÇÕES
             # ====================================================
+
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
-            percentual_sem_devolucao = (
-                pd.to_numeric(
-                    df_devolucao.iloc[:, 2],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(1).tolist()
+            entregas_total = pd.to_numeric(
+                df_devolucao.iloc[:, 1],
+                errors="coerce"
+            ).fillna(0)
 
-            # 🔥 GARANTE EXIBIÇÃO DAS COLUNAS ZERO
-            percentual_sem_devolucao = [
-                0.01 if v == 0 else v
-                for v in percentual_sem_devolucao
-            ]
+            qtd_devolucoes = pd.to_numeric(
+                df_devolucao.iloc[:, 2],
+                errors="coerce"
+            ).fillna(0)
+
+            # 🔥 CÁLCULO CORRETO:
+            # % SEM DEVOLUÇÕES = ((B - C) / B) * 100
+
+            percentual_sem_devolucao = []
+
+            for total, devolucao in zip(
+                entregas_total,
+                qtd_devolucoes
+            ):
+
+                if total > 0:
+
+                    valor = (
+                        (total - devolucao)
+                        / total
+                    ) * 100
+
+                else:
+
+                    valor = 0
+
+                percentual_sem_devolucao.append(
+                    round(valor, 1)
+                )
 
             # 🔥 META FIXA
             meta_dev = [90] * len(meses_dev)
@@ -2937,9 +2959,11 @@ with tab5:
                 percentual_sem_devolucao
             )
 
-            # 🔥 ADICIONA ACUMULADO
+            # 🔥 ACUMULADO
             meses_dev.append("ACM")
-            percentual_sem_devolucao.append(acm_devolucao)
+            percentual_sem_devolucao.append(
+                acm_devolucao
+            )
             meta_dev.append(90)
 
             # ====================================================
@@ -2962,21 +2986,23 @@ with tab5:
                 percentual_prazo_geral
             )
 
-            # 🔥 ADICIONA ACUMULADO
+            # 🔥 ACUMULADO
             meses_geral.append("ACM")
-            percentual_prazo_geral.append(acm_geral)
+            percentual_prazo_geral.append(
+                acm_geral
+            )
             meta_geral.append(98)
 
             # ====================================================
             # 📊 1 - PRAZO DO PROVEDOR
             # ====================================================
-            st.subheader("📊 Índice de Entrega do Provedor Externo no Prazo")
+            st.subheader(
+                "📊 Índice de Entrega do Provedor Externo no Prazo"
+            )
 
             fig1 = go.Figure()
 
-            # ====================================================
             # 🔶 BARRAS
-            # ====================================================
             fig1.add_trace(go.Bar(
                 x=meses_prazo,
                 y=prazo_ok,
@@ -2988,9 +3014,7 @@ with tab5:
                 name="% Prazo e Antecipado"
             ))
 
-            # ====================================================
             # 🔴 META
-            # ====================================================
             fig1.add_trace(go.Scatter(
                 x=meses_prazo,
                 y=meta_prazo,
@@ -3027,40 +3051,42 @@ with tab5:
 
             if prazo_ok[-2] >= 90:
 
-                st.success("🟢 Fornecedor dentro do prazo")
+                st.success(
+                    "🟢 Fornecedor dentro do prazo"
+                )
 
             else:
 
-                st.error("🔴 Problemas de prazo")
+                st.error(
+                    "🔴 Problemas de prazo"
+                )
 
-            st.info(f"ACM Prazo: {acm_prazo:.1f}%")
+            st.info(
+                f"ACM Prazo: {acm_prazo:.1f}%"
+            )
 
             # ====================================================
             # 📊 2 - DEVOLUÇÕES
             # ====================================================
-            st.subheader("📊 Índice de Devoluções ao Provedor Externo")
+            st.subheader(
+                "📊 Índice de Devoluções ao Provedor Externo"
+            )
 
             fig2 = go.Figure()
 
-            # ====================================================
             # 🔶 BARRAS
-            # ====================================================
             fig2.add_trace(go.Bar(
                 x=meses_dev,
                 y=percentual_sem_devolucao,
                 text=[
-                    "0%"
-                    if v == 0.01
-                    else f"{v:.0f}%"
+                    f"{v:.1f}%"
                     for v in percentual_sem_devolucao
                 ],
                 textposition="outside",
                 name="% Sem Devoluções"
             ))
 
-            # ====================================================
             # 🔴 META
-            # ====================================================
             fig2.add_trace(go.Scatter(
                 x=meses_dev,
                 y=meta_dev,
@@ -3097,24 +3123,30 @@ with tab5:
 
             if percentual_sem_devolucao[-2] >= 90:
 
-                st.success("🟢 Qualidade adequada")
+                st.success(
+                    "🟢 Qualidade adequada"
+                )
 
             else:
 
-                st.error("🔴 Problema de qualidade")
+                st.error(
+                    "🔴 Problema de qualidade"
+                )
 
-            st.info(f"ACM Devolução: {acm_devolucao:.1f}%")
+            st.info(
+                f"ACM Devolução: {acm_devolucao:.1f}%"
+            )
 
             # ====================================================
             # 📊 3 - VISÃO COMPLETA
             # ====================================================
-            st.subheader("📊 Entregas no Prazo (Visão Completa) - GE")
+            st.subheader(
+                "📊 Entregas no Prazo (Visão Completa) - GE"
+            )
 
             fig3 = go.Figure()
 
-            # ====================================================
             # 🔵 BARRAS
-            # ====================================================
             fig3.add_trace(go.Bar(
                 x=meses_geral,
                 y=percentual_prazo_geral,
@@ -3126,9 +3158,7 @@ with tab5:
                 name="% Entregue no Prazo"
             ))
 
-            # ====================================================
             # 🔴 META
-            # ====================================================
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
                 y=meta_geral,
@@ -3165,18 +3195,27 @@ with tab5:
 
             if percentual_prazo_geral[-2] >= 98:
 
-                st.success("🟢 Performance dentro da meta")
+                st.success(
+                    "🟢 Performance dentro da meta"
+                )
 
             else:
 
-                st.error("🔴 Performance abaixo da meta")
+                st.error(
+                    "🔴 Performance abaixo da meta"
+                )
 
-            st.info(f"ACM Geral: {acm_geral:.1f}%")
+            st.info(
+                f"ACM Geral: {acm_geral:.1f}%"
+            )
 
             # ====================================================
             # 📎 DOWNLOAD EVIDÊNCIA
             # ====================================================
-            with open(caminho_excel, "rb") as f:
+            with open(
+                caminho_excel,
+                "rb"
+            ) as f:
 
                 st.download_button(
                     "📎 Baixar evidência",
@@ -3189,7 +3228,6 @@ with tab5:
             st.error(
                 f"❌ Erro ao carregar indicadores: {e}"
             )
-
 
 
 
