@@ -2899,13 +2899,12 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            # 🔥 META FIXA
             meta_prazo = [90] * len(meses_prazo)
 
-            # 🔥 ACM
-            acm_prazo = media_apenas_com_dados(prazo_ok)
+            acm_prazo = media_apenas_com_dados(
+                prazo_ok
+            )
 
-            # 🔥 ACUMULADO
             meses_prazo.append("ACM")
             prazo_ok.append(acm_prazo)
             meta_prazo.append(90)
@@ -2913,7 +2912,6 @@ with tab5:
             # ====================================================
             # 📊 DADOS DEVOLUÇÕES
             # ====================================================
-
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
             entregas_total = pd.to_numeric(
@@ -2925,9 +2923,6 @@ with tab5:
                 df_devolucao.iloc[:, 2],
                 errors="coerce"
             ).fillna(0)
-
-            # 🔥 CÁLCULO CORRETO:
-            # % SEM DEVOLUÇÕES = ((B - C) / B) * 100
 
             percentual_sem_devolucao = []
 
@@ -2951,15 +2946,12 @@ with tab5:
                     round(valor, 1)
                 )
 
-            # 🔥 META FIXA
             meta_dev = [90] * len(meses_dev)
 
-            # 🔥 ACM
             acm_devolucao = media_apenas_com_dados(
                 percentual_sem_devolucao
             )
 
-            # 🔥 ACUMULADO
             meses_dev.append("ACM")
             percentual_sem_devolucao.append(
                 acm_devolucao
@@ -2978,15 +2970,12 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            # 🔥 META FIXA
             meta_geral = [98] * len(meses_geral)
 
-            # 🔥 ACM
             acm_geral = media_apenas_com_dados(
                 percentual_prazo_geral
             )
 
-            # 🔥 ACUMULADO
             meses_geral.append("ACM")
             percentual_prazo_geral.append(
                 acm_geral
@@ -3011,6 +3000,10 @@ with tab5:
                     for v in prazo_ok
                 ],
                 textposition="outside",
+                textfont=dict(
+                    size=14
+                ),
+                cliponaxis=False,
                 name="% Prazo e Antecipado"
             ))
 
@@ -3024,6 +3017,11 @@ with tab5:
                     for v in meta_prazo
                 ],
                 textposition="top center",
+                textfont=dict(
+                    size=12
+                ),
+                texttemplate="%{text}",
+                textfont_color="white",
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3033,11 +3031,14 @@ with tab5:
             ))
 
             fig1.update_layout(
-                height=450,
+                height=500,
+                margin=dict(
+                    t=80
+                ),
                 yaxis_title="%",
                 xaxis_title="Mês",
                 yaxis=dict(
-                    range=[0, 110]
+                    range=[0, 115]
                 ),
                 xaxis=dict(
                     type="category"
@@ -3083,6 +3084,10 @@ with tab5:
                     for v in percentual_sem_devolucao
                 ],
                 textposition="outside",
+                textfont=dict(
+                    size=14
+                ),
+                cliponaxis=False,
                 name="% Sem Devoluções"
             ))
 
@@ -3096,6 +3101,11 @@ with tab5:
                     for v in meta_dev
                 ],
                 textposition="top center",
+                textfont=dict(
+                    size=12
+                ),
+                texttemplate="%{text}",
+                textfont_color="white",
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3105,11 +3115,14 @@ with tab5:
             ))
 
             fig2.update_layout(
-                height=450,
+                height=500,
+                margin=dict(
+                    t=80
+                ),
                 yaxis_title="%",
                 xaxis_title="Mês",
                 yaxis=dict(
-                    range=[0, 110]
+                    range=[0, 115]
                 ),
                 xaxis=dict(
                     type="category"
@@ -3155,6 +3168,10 @@ with tab5:
                     for v in percentual_prazo_geral
                 ],
                 textposition="outside",
+                textfont=dict(
+                    size=14
+                ),
+                cliponaxis=False,
                 name="% Entregue no Prazo"
             ))
 
@@ -3168,6 +3185,11 @@ with tab5:
                     for v in meta_geral
                 ],
                 textposition="top center",
+                textfont=dict(
+                    size=12
+                ),
+                texttemplate="%{text}",
+                textfont_color="white",
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3178,10 +3200,13 @@ with tab5:
 
             fig3.update_layout(
                 height=550,
+                margin=dict(
+                    t=80
+                ),
                 yaxis_title="% Entregas no Prazo",
                 xaxis_title="Mês",
                 yaxis=dict(
-                    range=[0, 110]
+                    range=[0, 115]
                 ),
                 xaxis=dict(
                     type="category"
