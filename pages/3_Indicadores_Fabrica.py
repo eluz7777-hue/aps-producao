@@ -2885,18 +2885,26 @@ with tab5:
                 if len(dados_validos) == 0:
                     return 0
 
-                return round(sum(dados_validos) / len(dados_validos), 1)
+                return round(
+                    sum(dados_validos) / len(dados_validos),
+                    1
+                )
 
             # ====================================================
             # 📊 DADOS PRAZO PROVEDOR
             # ====================================================
-            meses_prazo = df_prazo.iloc[:, 0].astype(str).tolist()
+            meses_prazo = (
+                df_prazo.iloc[:, 0]
+                .astype(str)
+                .tolist()
+            )
 
             prazo_ok = (
                 pd.to_numeric(
                     df_prazo.iloc[:, 2],
                     errors="coerce"
-                ).fillna(0) * 100
+                )
+                .fillna(0) * 100
             ).round(1).tolist()
 
             meta_prazo = [90] * len(meses_prazo)
@@ -2912,7 +2920,11 @@ with tab5:
             # ====================================================
             # 📊 DADOS DEVOLUÇÕES
             # ====================================================
-            meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
+            meses_dev = (
+                df_devolucao.iloc[:, 0]
+                .astype(str)
+                .tolist()
+            )
 
             entregas_total = pd.to_numeric(
                 df_devolucao.iloc[:, 1],
@@ -2961,13 +2973,18 @@ with tab5:
             # ====================================================
             # 📊 DADOS VISÃO GERAL
             # ====================================================
-            meses_geral = df_geral.iloc[:, 0].astype(str).tolist()
+            meses_geral = (
+                df_geral.iloc[:, 0]
+                .astype(str)
+                .tolist()
+            )
 
             percentual_prazo_geral = (
                 pd.to_numeric(
                     df_geral.iloc[:, 3],
                     errors="coerce"
-                ).fillna(0) * 100
+                )
+                .fillna(0) * 100
             ).round(1).tolist()
 
             meta_geral = [98] * len(meses_geral)
@@ -3004,13 +3021,14 @@ with tab5:
                     size=14
                 ),
                 cliponaxis=False,
+                offsetgroup=1,
                 name="% Prazo e Antecipado"
             ))
 
             # 🔴 META
             fig1.add_trace(go.Scatter(
                 x=meses_prazo,
-                y=meta_prazo,
+                y=[v + 4 for v in meta_prazo],
                 mode="lines+markers+text",
                 text=[
                     f"{v:.0f}%"
@@ -3018,10 +3036,11 @@ with tab5:
                 ],
                 textposition="top center",
                 textfont=dict(
-                    size=12
+                    size=11
                 ),
-                texttemplate="%{text}",
-                textfont_color="white",
+                marker=dict(
+                    size=7
+                ),
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3031,14 +3050,14 @@ with tab5:
             ))
 
             fig1.update_layout(
-                height=500,
+                height=520,
                 margin=dict(
-                    t=80
+                    t=100
                 ),
                 yaxis_title="%",
                 xaxis_title="Mês",
                 yaxis=dict(
-                    range=[0, 115]
+                    range=[0, 120]
                 ),
                 xaxis=dict(
                     type="category"
@@ -3088,13 +3107,14 @@ with tab5:
                     size=14
                 ),
                 cliponaxis=False,
+                offsetgroup=1,
                 name="% Sem Devoluções"
             ))
 
             # 🔴 META
             fig2.add_trace(go.Scatter(
                 x=meses_dev,
-                y=meta_dev,
+                y=[v + 4 for v in meta_dev],
                 mode="lines+markers+text",
                 text=[
                     f"{v:.0f}%"
@@ -3102,10 +3122,11 @@ with tab5:
                 ],
                 textposition="top center",
                 textfont=dict(
-                    size=12
+                    size=11
                 ),
-                texttemplate="%{text}",
-                textfont_color="white",
+                marker=dict(
+                    size=7
+                ),
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3115,14 +3136,14 @@ with tab5:
             ))
 
             fig2.update_layout(
-                height=500,
+                height=520,
                 margin=dict(
-                    t=80
+                    t=100
                 ),
                 yaxis_title="%",
                 xaxis_title="Mês",
                 yaxis=dict(
-                    range=[0, 115]
+                    range=[0, 120]
                 ),
                 xaxis=dict(
                     type="category"
@@ -3172,13 +3193,14 @@ with tab5:
                     size=14
                 ),
                 cliponaxis=False,
+                offsetgroup=1,
                 name="% Entregue no Prazo"
             ))
 
             # 🔴 META
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
-                y=meta_geral,
+                y=[v + 4 for v in meta_geral],
                 mode="lines+markers+text",
                 text=[
                     f"{v:.0f}%"
@@ -3186,10 +3208,11 @@ with tab5:
                 ],
                 textposition="top center",
                 textfont=dict(
-                    size=12
+                    size=11
                 ),
-                texttemplate="%{text}",
-                textfont_color="white",
+                marker=dict(
+                    size=7
+                ),
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3201,12 +3224,12 @@ with tab5:
             fig3.update_layout(
                 height=550,
                 margin=dict(
-                    t=80
+                    t=100
                 ),
                 yaxis_title="% Entregas no Prazo",
                 xaxis_title="Mês",
                 yaxis=dict(
-                    range=[0, 115]
+                    range=[0, 120]
                 ),
                 xaxis=dict(
                     type="category"
@@ -3253,7 +3276,6 @@ with tab5:
             st.error(
                 f"❌ Erro ao carregar indicadores: {e}"
             )
-
 
 
 
