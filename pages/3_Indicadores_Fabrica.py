@@ -2885,18 +2885,15 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            meta_prazo = (
-                pd.to_numeric(
-                    df_prazo.iloc[:, 4],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(1).tolist()
+            # 🔥 META FIXA = 90%
+            meta_prazo = [90] * len(meses_prazo)
 
             # ====================================================
             # 📊 DADOS DEVOLUÇÕES
             # ====================================================
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
+            # 🔥 COLUNA CORRETA = % SEM DEVOLUÇÕES
             percentual_sem_devolucao = (
                 pd.to_numeric(
                     df_devolucao.iloc[:, 2],
@@ -2904,12 +2901,8 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            meta_dev = (
-                pd.to_numeric(
-                    df_devolucao.iloc[:, 4],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(1).tolist()
+            # 🔥 META FIXA = 90%
+            meta_dev = [90] * len(meses_dev)
 
             # ====================================================
             # 📊 DADOS VISÃO GERAL
@@ -2923,12 +2916,8 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            meta_geral = (
-                pd.to_numeric(
-                    df_geral.iloc[:, 4],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(1).tolist()
+            # 🔥 META FIXA = 98%
+            meta_geral = [98] * len(meses_geral)
 
             # ====================================================
             # 📊 FUNÇÃO ACM
@@ -2991,7 +2980,7 @@ with tab5:
 
             st.plotly_chart(fig1, use_container_width=True)
 
-            if prazo_ok[-1] >= meta_prazo[-1]:
+            if prazo_ok[-1] >= 90:
 
                 st.success("🟢 Fornecedor dentro do prazo")
 
@@ -3046,7 +3035,7 @@ with tab5:
 
             st.plotly_chart(fig2, use_container_width=True)
 
-            if percentual_sem_devolucao[-1] >= meta_dev[-1]:
+            if percentual_sem_devolucao[-1] >= 90:
 
                 st.success("🟢 Qualidade adequada")
 
@@ -3101,7 +3090,7 @@ with tab5:
 
             st.plotly_chart(fig3, use_container_width=True)
 
-            if percentual_prazo_geral[-1] >= meta_geral[-1]:
+            if percentual_prazo_geral[-1] >= 98:
 
                 st.success("🟢 Performance dentro da meta")
 
