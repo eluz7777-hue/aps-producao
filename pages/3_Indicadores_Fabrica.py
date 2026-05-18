@@ -3319,26 +3319,29 @@ with tab6:
             # ====================================================
             xls = pd.ExcelFile(caminho_excel)
 
-            # 🔥 AGORA UTILIZANDO AS ABAS CORRETAS
-            # fundamentais para os indicadores
+            # 🔥 ABAS CORRETAS
             df_abs = pd.read_excel(
                 xls,
-                sheet_name="TB ABSENTEISMO"
+                sheet_name="TB ABSENTEISMO",
+                header=None
             )
 
             df_trein = pd.read_excel(
                 xls,
-                sheet_name="TB TREINAMENTOS"
+                sheet_name="TB TREINAMENTOS",
+                header=None
             )
 
             df_faltas = pd.read_excel(
                 xls,
-                sheet_name="TB FALTAS INJUSTIFICADAS"
+                sheet_name="TB FALTAS INJUSTIFICADAS",
+                header=None
             )
 
             df_extra = pd.read_excel(
                 xls,
-                sheet_name="TB HORAS EXTRAS"
+                sheet_name="TB HORAS EXTRAS",
+                header=None
             )
 
             # ====================================================
@@ -3346,18 +3349,48 @@ with tab6:
             # ====================================================
             def preparar_df(df):
 
-                # remove linhas vazias
+                # remove linhas totalmente vazias
                 df = df.dropna(
                     how="all"
                 ).reset_index(drop=True)
 
                 # =================================================
-                # 🔥 LINHA CORRETA DOS DADOS
+                # 🔥 LOCALIZA PRIMEIRA LINHA COM JAN
+                # isso corrige o problema do mês de janeiro
                 # =================================================
-                df = df.iloc[2:].copy()
+                linha_inicio = None
+
+                for idx in range(len(df)):
+
+                    valor = str(
+                        df.iloc[idx, 0]
+                    ).strip()
+
+                    if valor.lower().startswith("jan"):
+
+                        linha_inicio = idx
+                        break
+
+                if linha_inicio is None:
+
+                    return pd.DataFrame(
+                        columns=[
+                            "MES",
+                            "VALOR",
+                            "META"
+                        ]
+                    )
 
                 # =================================================
-                # 🔥 MANTÉM 3 COLUNAS
+                # 🔥 PEGA 12 MESES
+                # =================================================
+                df = df.iloc[
+                    linha_inicio:
+                    linha_inicio + 12
+                ].copy()
+
+                # =================================================
+                # 🔥 MANTÉM COLUNAS NECESSÁRIAS
                 # =================================================
                 df = df.iloc[:, 0:3]
 
@@ -3371,7 +3404,7 @@ with tab6:
                 ]
 
                 # =================================================
-                # 🔥 LIMPEZA MESES
+                # 🔥 LIMPEZA DOS MESES
                 # =================================================
                 df["MES"] = (
                     df["MES"]
@@ -3395,22 +3428,18 @@ with tab6:
                 # =================================================
                 # 🔥 CONVERSÃO NUMÉRICA
                 # =================================================
-                df["VALOR"] = (
-                    pd.to_numeric(
-                        df["VALOR"],
-                        errors="coerce"
-                    ).fillna(0)
-                )
+                df["VALOR"] = pd.to_numeric(
+                    df["VALOR"],
+                    errors="coerce"
+                ).fillna(0)
 
-                df["META"] = (
-                    pd.to_numeric(
-                        df["META"],
-                        errors="coerce"
-                    ).fillna(0)
-                )
+                df["META"] = pd.to_numeric(
+                    df["META"],
+                    errors="coerce"
+                ).fillna(0)
 
                 # =================================================
-                # 🔥 MESES SEM DADOS AINDA
+                # 🔥 MESES FUTUROS SEM DADOS
                 # =================================================
                 meses_sem_dados = [
                     "Mai",
@@ -3479,6 +3508,14 @@ with tab6:
                 df,
                 tipo_meta
             ):
+
+                if df.empty:
+
+                    st.warning(
+                        f"⚠️ Sem dados válidos para {titulo}"
+                    )
+
+                    return
 
                 meses = (
                     df["MES"]
