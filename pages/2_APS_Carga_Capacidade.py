@@ -5063,6 +5063,18 @@ fila_detalhe["Horas"] = (
 
 
 # ============================================================
+# 🔥 FORMATA HORAS
+# ============================================================
+fila_detalhe["Horas"] = pd.to_numeric(
+
+    fila_detalhe["Horas"],
+
+    errors="coerce"
+
+).fillna(0).round(2)
+
+
+# ============================================================
 # 🔥 TRATAMENTO ENTREGA
 # ============================================================
 if "ENTREGA" in fila_detalhe.columns:
@@ -5088,9 +5100,9 @@ if "ENTREGA" in fila_detalhe.columns:
     ).dt.days
 
     # ========================================================
-    # 🔥 ENTREGA FORMATADA
+    # 🔥 DATA ENTREGA FORMATADA
     # ========================================================
-    fila_detalhe["ENTREGA"] = (
+    fila_detalhe["Data Entrega"] = (
 
         fila_detalhe["ENTREGA_DT"]
 
@@ -5185,7 +5197,7 @@ colunas_fila = [
     "Processo",
     "Horas",
     "Dias para Entrega",
-    "ENTREGA"
+    "Data Entrega"
 ]
 
 
