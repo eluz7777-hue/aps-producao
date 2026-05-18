@@ -5075,13 +5075,36 @@ fila_detalhe["Horas"] = pd.to_numeric(
 
 
 # ============================================================
+# 🔥 GARANTE DATA DE ENTREGA
+# ============================================================
+coluna_entrega = None
+
+possiveis_entregas = [
+
+    "ENTREGA",
+    "DATA ENTREGA",
+    "DATA_ENTREGA",
+    "DATA DE ENTREGA",
+    "DATA_ENTREGA_APS"
+]
+
+
+for col in possiveis_entregas:
+
+    if col in fila_detalhe.columns:
+
+        coluna_entrega = col
+        break
+
+
+# ============================================================
 # 🔥 TRATAMENTO ENTREGA
 # ============================================================
-if "ENTREGA" in fila_detalhe.columns:
+if coluna_entrega is not None:
 
     fila_detalhe["ENTREGA_DT"] = pd.to_datetime(
 
-        fila_detalhe["ENTREGA"],
+        fila_detalhe[coluna_entrega],
 
         errors="coerce"
     )
@@ -5108,6 +5131,11 @@ if "ENTREGA" in fila_detalhe.columns:
 
         .dt.strftime("%d/%m/%Y")
     )
+
+else:
+
+    fila_detalhe["Dias para Entrega"] = np.nan
+    fila_detalhe["Data Entrega"] = ""
 
 
 # ============================================================
@@ -5138,15 +5166,9 @@ def definir_semaforo(dias):
 # ============================================================
 # 🔥 APLICA SEMÁFORO
 # ============================================================
-if "Dias para Entrega" in fila_detalhe.columns:
-
-    fila_detalhe["Semáforo"] = fila_detalhe[
-        "Dias para Entrega"
-    ].apply(definir_semaforo)
-
-else:
-
-    fila_detalhe["Semáforo"] = "🟢"
+fila_detalhe["Semáforo"] = fila_detalhe[
+    "Dias para Entrega"
+].apply(definir_semaforo)
 
 
 # ============================================================
@@ -5168,18 +5190,13 @@ fila_detalhe["ordem_status"] = fila_detalhe[
 # ============================================================
 # 🔥 ORDENAÇÃO DA FILA
 # ============================================================
-colunas_ordenacao = ["ordem_status"]
-
-if "Dias para Entrega" in fila_detalhe.columns:
-
-    colunas_ordenacao.append(
-        "Dias para Entrega"
-    )
-
-
 fila_detalhe = fila_detalhe.sort_values(
 
-    by=colunas_ordenacao,
+    by=[
+
+        "ordem_status",
+        "Dias para Entrega"
+    ],
 
     ascending=True
 )
