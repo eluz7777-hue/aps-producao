@@ -5067,7 +5067,7 @@ fila_detalhe["Horas"] = (
 # ============================================================
 if "ENTREGA" in fila_detalhe.columns:
 
-    fila_detalhe["ENTREGA"] = pd.to_datetime(
+    fila_detalhe["ENTREGA_DT"] = pd.to_datetime(
 
         fila_detalhe["ENTREGA"],
 
@@ -5076,15 +5076,23 @@ if "ENTREGA" in fila_detalhe.columns:
 
     hoje = pd.Timestamp.today().normalize()
 
+    # ========================================================
+    # 🔥 DIAS PARA ENTREGA
+    # ========================================================
     fila_detalhe["Dias para Entrega"] = (
 
-        fila_detalhe["ENTREGA"] - hoje
+        fila_detalhe["ENTREGA_DT"]
+
+        - hoje
 
     ).dt.days
 
+    # ========================================================
+    # 🔥 ENTREGA FORMATADA
+    # ========================================================
     fila_detalhe["ENTREGA"] = (
 
-        fila_detalhe["ENTREGA"]
+        fila_detalhe["ENTREGA_DT"]
 
         .dt.strftime("%d/%m/%Y")
     )
@@ -5100,18 +5108,24 @@ def definir_semaforo(dias):
         dias = float(dias)
 
     except:
-        return "⚪"
+        return "🟢"
 
+    # 🔴 ATRASADO
     if dias < 0:
         return "🔴"
 
+    # 🟡 RISCO
     elif dias <= 2:
         return "🟡"
 
+    # 🟢 OK
     else:
         return "🟢"
 
 
+# ============================================================
+# 🔥 APLICA SEMÁFORO
+# ============================================================
 if "Dias para Entrega" in fila_detalhe.columns:
 
     fila_detalhe["Semáforo"] = fila_detalhe[
@@ -5120,19 +5134,19 @@ if "Dias para Entrega" in fila_detalhe.columns:
 
 else:
 
-    fila_detalhe["Semáforo"] = "⚪"
+    fila_detalhe["Semáforo"] = "🟢"
 
 
 # ============================================================
-# 🔥 ORDENAÇÃO EXECUTIVA
+# 🔥 ORDEM EXECUTIVA
 # ============================================================
 ordem_status = {
 
     "🔴": 0,
     "🟡": 1,
-    "🟢": 2,
-    "⚪": 3
+    "🟢": 2
 }
+
 
 fila_detalhe["ordem_status"] = fila_detalhe[
     "Semáforo"
@@ -5160,7 +5174,7 @@ fila_detalhe = fila_detalhe.sort_values(
 
 
 # ============================================================
-# 🔥 COLUNAS
+# 🔥 COLUNAS EXIBIÇÃO
 # ============================================================
 colunas_fila = [
 
@@ -5214,11 +5228,16 @@ st.dataframe(
 # 🔥 SALDO REAL
 # ============================================================
 df_operacional["Saldo_Horas"] = (
-    df_operacional["Horas"] - df_operacional["Horas_Baixadas"]
+
+    df_operacional["Horas"]
+
+    - df_operacional["Horas_Baixadas"]
 )
 
 df_operacional["Saldo_Horas"] = (
+
     df_operacional["Saldo_Horas"]
+
     .clip(lower=0)
 )
 
@@ -5241,6 +5260,7 @@ df_operacional["Status Operacional"] = np.where(
         "⏳ Pendente"
     )
 )
+
 
 
 # ============================================================
