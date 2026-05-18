@@ -1400,31 +1400,89 @@ def normalizar_chave_operacao(pv, processo, codigo):
 
 
 # --------------------------------------------
-# GARANTE CHAVE PADRÃO NA BASE OPERACIONAL
+# 🔥 GARANTE CHAVE OPERACIONAL OFICIAL APS
 # --------------------------------------------
 if not df_operacional.empty:
-    for col in ["PV", "Processo", "CODIGO_PV"]:
+
+    # ========================================================
+    # 🔒 NORMALIZAÇÃO TOTAL
+    # ========================================================
+    for col in [
+        "PV",
+        "Processo",
+        "CODIGO_PV"
+    ]:
+
         if col not in df_operacional.columns:
             df_operacional[col] = ""
 
         df_operacional[col] = (
+
             df_operacional[col]
+
             .fillna("")
+
             .astype(str)
-            .str.strip()
+
             .str.upper()
+
+            .str.strip()
+
+            .str.replace(".0", "", regex=False)
+
+            .str.replace("  ", " ", regex=False)
+
+            .str.replace(" - ", "-", regex=False)
+
+            .str.replace("- ", "-", regex=False)
+
+            .str.replace(" -", "-", regex=False)
         )
 
-    df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
-        lambda r: normalizar_chave_operacao(
-            r["PV"], r["Processo"], r["CODIGO_PV"]
-        ),
-        axis=1
+    # ========================================================
+    # 🔥 CHAVE OPERACIONAL DEFINITIVA
+    # ========================================================
+    df_operacional["CHAVE_OPERACAO"] = (
+
+        df_operacional["PV"]
+
+        + "||"
+
+        + df_operacional["Processo"]
+
+        + "||"
+
+        + df_operacional["CODIGO_PV"]
     )
+
+    # ========================================================
+    # 🔥 REMOVE DUPLICAÇÕES DA PV.xlsx
+    # ========================================================
+    df_operacional = (
+
+        df_operacional
+
+        .sort_values(
+            by=[
+                "PV",
+                "Processo",
+                "CODIGO_PV"
+            ]
+        )
+
+        .drop_duplicates(
+            subset=[
+                "CHAVE_OPERACAO"
+            ],
+            keep="first"
+        )
+
+        .reset_index(drop=True)
+    )
+
 else:
+
     df_operacional["CHAVE_OPERACAO"] = ""
-
-
 
 
 
