@@ -2878,21 +2878,9 @@ with tab5:
             # ====================================================
             meses_prazo = df_prazo.iloc[:, 0].astype(str).tolist()
 
-            total_itens_prazo = pd.to_numeric(
-                df_prazo.iloc[:, 1],
-                errors="coerce"
-            ).fillna(0).tolist()
-
             prazo_ok = (
                 pd.to_numeric(
                     df_prazo.iloc[:, 2],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(1).tolist()
-
-            prazo_atraso = (
-                pd.to_numeric(
-                    df_prazo.iloc[:, 3],
                     errors="coerce"
                 ).fillna(0) * 100
             ).round(1).tolist()
@@ -2909,30 +2897,21 @@ with tab5:
             # ====================================================
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
-            qtd_devolucao = pd.to_numeric(
-                df_devolucao.iloc[:, 1],
+            # 🔥 CORREÇÃO DA LEITURA
+            percentual_devolucao = pd.to_numeric(
+                df_devolucao.iloc[:, 3],
                 errors="coerce"
-            ).fillna(0).tolist()
+            ).fillna(0).round(2).tolist()
 
-            percentual_devolucao = (
-                pd.to_numeric(
-                    df_devolucao.iloc[:, 2],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(2).tolist()
-
-            meta_dev = (
-                pd.to_numeric(
-                    df_devolucao.iloc[:, 3],
-                    errors="coerce"
-                ).fillna(0) * 100
-            ).round(1).tolist()
+            meta_dev = pd.to_numeric(
+                df_devolucao.iloc[:, 4],
+                errors="coerce"
+            ).fillna(0).round(2).tolist()
 
             # ====================================================
             # 📊 DADOS VISÃO GERAL
             # ====================================================
-            df_geral = df_geral.iloc[1:].copy()
-
+            # 🔥 NÃO REMOVE MAIS JANEIRO
             meses_geral = df_geral.iloc[:, 0].astype(str).tolist()
 
             total_pedidos = pd.to_numeric(
@@ -2993,7 +2972,9 @@ with tab5:
             fig1.add_trace(go.Scatter(
                 x=meses_prazo,
                 y=meta_prazo,
-                mode="lines",
+                mode="lines+text",
+                text=[f"{v:.1f}%" for v in meta_prazo],
+                textposition="top center",
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3006,7 +2987,10 @@ with tab5:
                 height=450,
                 yaxis_title="%",
                 xaxis_title="Mês",
-                yaxis=dict(range=[0, 110])
+                yaxis=dict(range=[0, 110]),
+                xaxis=dict(
+                    type="category"
+                )
             )
 
             st.plotly_chart(fig1, use_container_width=True)
@@ -3036,7 +3020,9 @@ with tab5:
             fig2.add_trace(go.Scatter(
                 x=meses_dev,
                 y=meta_dev,
-                mode="lines",
+                mode="lines+text",
+                text=[f"{v:.2f}%" for v in meta_dev],
+                textposition="top center",
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3048,7 +3034,10 @@ with tab5:
             fig2.update_layout(
                 height=450,
                 yaxis_title="%",
-                xaxis_title="Mês"
+                xaxis_title="Mês",
+                xaxis=dict(
+                    type="category"
+                )
             )
 
             st.plotly_chart(fig2, use_container_width=True)
@@ -3063,7 +3052,7 @@ with tab5:
             # ====================================================
             # 📊 3 - VISÃO COMPLETA
             # ====================================================
-            st.subheader("📊 Entregas no Prazo (Visão Completa)")
+            st.subheader("📊 Entregas no Prazo (Visão Completa) - GE")
 
             fig3 = go.Figure()
 
@@ -3071,7 +3060,7 @@ with tab5:
                 name="Total Pedidos",
                 x=meses_geral,
                 y=total_pedidos,
-                text=[str(v) for v in total_pedidos],
+                text=[str(int(v)) for v in total_pedidos],
                 textposition="outside"
             ))
 
@@ -3079,14 +3068,16 @@ with tab5:
                 name="Pedidos no Prazo",
                 x=meses_geral,
                 y=pedidos_no_prazo,
-                text=[str(v) for v in pedidos_no_prazo],
+                text=[str(int(v)) for v in pedidos_no_prazo],
                 textposition="outside"
             ))
 
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
                 y=meta_geral,
-                mode="lines",
+                mode="lines+text",
+                text=[f"{v:.1f}%" for v in meta_geral],
+                textposition="top center",
                 name="Meta",
                 line=dict(
                     color="red",
@@ -3108,7 +3099,10 @@ with tab5:
                 barmode="group",
                 height=550,
                 yaxis_title="Quantidade / %",
-                xaxis_title="Mês"
+                xaxis_title="Mês",
+                xaxis=dict(
+                    type="category"
+                )
             )
 
             st.plotly_chart(fig3, use_container_width=True)
