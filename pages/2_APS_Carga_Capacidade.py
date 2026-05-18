@@ -4867,7 +4867,61 @@ else:
 
 
 # ============================================================
-# 🔥 MERGE OPERACIONAL
+# 🔥 CONSOLIDA BASE OPERACIONAL
+# ============================================================
+
+# 🔒 GARANTE COLUNAS
+for col in [
+    "CHAVE_OPERACAO",
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas"
+]:
+
+    if col not in df_operacional.columns:
+        df_operacional[col] = ""
+
+
+# ============================================================
+# 🔥 NORMALIZA NUMÉRICOS
+# ============================================================
+df_operacional["Horas"] = pd.to_numeric(
+
+    df_operacional["Horas"],
+
+    errors="coerce"
+
+).fillna(0)
+
+
+# ============================================================
+# 🔥 REMOVE DUPLICAÇÕES DA BASE APS
+# ============================================================
+df_operacional = (
+
+    df_operacional
+
+    .groupby(
+        [
+            "CHAVE_OPERACAO",
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "Processo"
+        ],
+        as_index=False
+    )
+
+    .agg({
+        "Horas": "sum"
+    })
+)
+
+
+# ============================================================
+# 🔥 MERGE OPERACIONAL REAL
 # ============================================================
 df_operacional = df_operacional.merge(
 
@@ -4877,7 +4931,6 @@ df_operacional = df_operacional.merge(
 
     how="left"
 )
-
 
 
 
