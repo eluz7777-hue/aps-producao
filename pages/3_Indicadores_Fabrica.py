@@ -3013,22 +3013,23 @@ with tab5:
                 x=meses_prazo,
                 y=prazo_ok,
                 text=[
-                    f"{v:.0f}%"
+                    f"<b>{v:.0f}%</b>"
                     for v in prazo_ok
                 ],
-                textposition="outside",
+                textposition="inside",
+                insidetextanchor="middle",
                 textfont=dict(
-                    size=14
+                    size=14,
+                    color="white"
                 ),
                 cliponaxis=False,
-                offsetgroup=1,
                 name="% Prazo e Antecipado"
             ))
 
             # 🔴 META
             fig1.add_trace(go.Scatter(
                 x=meses_prazo,
-                y=[v + 4 for v in meta_prazo],
+                y=meta_prazo,
                 mode="lines+markers+text",
                 text=[
                     f"{v:.0f}%"
@@ -3099,22 +3100,23 @@ with tab5:
                 x=meses_dev,
                 y=percentual_sem_devolucao,
                 text=[
-                    f"{v:.1f}%"
+                    f"<b>{v:.1f}%</b>"
                     for v in percentual_sem_devolucao
                 ],
-                textposition="outside",
+                textposition="inside",
+                insidetextanchor="middle",
                 textfont=dict(
-                    size=14
+                    size=14,
+                    color="white"
                 ),
                 cliponaxis=False,
-                offsetgroup=1,
                 name="% Sem Devoluções"
             ))
 
             # 🔴 META
             fig2.add_trace(go.Scatter(
                 x=meses_dev,
-                y=[v + 4 for v in meta_dev],
+                y=meta_dev,
                 mode="lines+markers+text",
                 text=[
                     f"{v:.0f}%"
@@ -3185,22 +3187,23 @@ with tab5:
                 x=meses_geral,
                 y=percentual_prazo_geral,
                 text=[
-                    f"{v:.1f}%"
+                    f"<b>{v:.1f}%</b>"
                     for v in percentual_prazo_geral
                 ],
-                textposition="outside",
+                textposition="inside",
+                insidetextanchor="middle",
                 textfont=dict(
-                    size=14
+                    size=14,
+                    color="white"
                 ),
                 cliponaxis=False,
-                offsetgroup=1,
                 name="% Entregue no Prazo"
             ))
 
             # 🔴 META
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
-                y=[v + 4 for v in meta_geral],
+                y=meta_geral,
                 mode="lines+markers+text",
                 text=[
                     f"{v:.0f}%"
