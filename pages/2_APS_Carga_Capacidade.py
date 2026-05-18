@@ -4877,7 +4877,8 @@ for col in [
     "Cliente",
     "CODIGO_PV",
     "Processo",
-    "Horas"
+    "Horas",
+    "Data"
 ]:
 
     if col not in df_operacional.columns:
@@ -4897,6 +4898,17 @@ df_operacional["Horas"] = pd.to_numeric(
 
 
 # ============================================================
+# 🔥 NORMALIZA DATA
+# ============================================================
+df_operacional["Data"] = pd.to_datetime(
+
+    df_operacional["Data"],
+
+    errors="coerce"
+)
+
+
+# ============================================================
 # 🔥 REMOVE DUPLICAÇÕES DA BASE APS
 # ============================================================
 df_operacional = (
@@ -4909,7 +4921,8 @@ df_operacional = (
             "PV",
             "Cliente",
             "CODIGO_PV",
-            "Processo"
+            "Processo",
+            "Data"
         ],
         as_index=False
     )
@@ -4931,7 +4944,6 @@ df_operacional = df_operacional.merge(
 
     how="left"
 )
-
 
 
 # ------------------------------------------------------------
