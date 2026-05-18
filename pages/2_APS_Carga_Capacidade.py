@@ -5075,7 +5075,7 @@ fila_detalhe["Horas"] = pd.to_numeric(
 
 
 # ============================================================
-# 🔥 GARANTE DATA DE ENTREGA
+# 🔥 IDENTIFICA COLUNA DE ENTREGA
 # ============================================================
 coluna_entrega = None
 
@@ -5095,6 +5095,74 @@ for col in possiveis_entregas:
 
         coluna_entrega = col
         break
+
+
+# ============================================================
+# 🔥 CASO NÃO EXISTA NA BASE OPERACIONAL
+# BUSCA DIRETO DA PV.xlsx
+# ============================================================
+if coluna_entrega is None:
+
+    try:
+
+        caminho_pv = os.path.abspath("PV.xlsx")
+
+        df_pv_entrega = pd.read_excel(
+
+            caminho_pv
+        )
+
+        col_pv = None
+        col_entrega_pv = None
+
+        for c in df_pv_entrega.columns:
+
+            c_upper = str(c).upper().strip()
+
+            if c_upper == "PV":
+                col_pv = c
+
+            if c_upper in [
+                "DATA DE ENTREGA",
+                "DATA_ENTREGA",
+                "ENTREGA"
+            ]:
+                col_entrega_pv = c
+
+        if col_pv and col_entrega_pv:
+
+            entrega_map = (
+
+                df_pv_entrega[[
+                    col_pv,
+                    col_entrega_pv
+                ]]
+
+                .drop_duplicates()
+
+                .rename(columns={
+
+                    col_pv: "PV",
+                    col_entrega_pv: "DATA_ENTREGA_PV"
+                })
+            )
+
+            fila_detalhe = fila_detalhe.merge(
+
+                entrega_map,
+
+                on="PV",
+
+                how="left"
+            )
+
+            coluna_entrega = "DATA_ENTREGA_PV"
+
+    except Exception as e:
+
+        st.warning(
+            f"Não foi possível buscar entrega da PV.xlsx: {e}"
+        )
 
 
 # ============================================================
