@@ -5112,51 +5112,64 @@ if coluna_entrega is None:
             caminho_pv
         )
 
-        col_pv = None
-        col_entrega_pv = None
+        # ====================================================
+        # 🔥 PADRONIZA TIPOS
+        # ====================================================
+        df_pv_entrega.columns = [
 
-        for c in df_pv_entrega.columns:
+            str(c).strip()
+            for c in df_pv_entrega.columns
+        ]
 
-            c_upper = str(c).upper().strip()
+        fila_detalhe["PV"] = (
 
-            if c_upper == "PV":
-                col_pv = c
+            fila_detalhe["PV"]
 
-            if c_upper in [
-                "DATA DE ENTREGA",
-                "DATA_ENTREGA",
-                "ENTREGA"
-            ]:
-                col_entrega_pv = c
+            .astype(str)
 
-        if col_pv and col_entrega_pv:
+            .str.strip()
+        )
 
-            entrega_map = (
+        df_pv_entrega["PV"] = (
 
-                df_pv_entrega[[
-                    col_pv,
-                    col_entrega_pv
-                ]]
+            df_pv_entrega["PV"]
 
-                .drop_duplicates()
+            .astype(str)
 
-                .rename(columns={
+            .str.strip()
+        )
 
-                    col_pv: "PV",
-                    col_entrega_pv: "DATA_ENTREGA_PV"
-                })
-            )
+        # ====================================================
+        # 🔥 USA COLUNA OFICIAL
+        # ====================================================
+        entrega_map = (
 
-            fila_detalhe = fila_detalhe.merge(
+            df_pv_entrega[[
 
-                entrega_map,
+                "PV",
+                "DATA DE ENTREGA"
 
-                on="PV",
+            ]]
 
-                how="left"
-            )
+            .drop_duplicates()
 
-            coluna_entrega = "DATA_ENTREGA_PV"
+            .rename(columns={
+
+                "DATA DE ENTREGA":
+                "DATA_ENTREGA_PV"
+            })
+        )
+
+        fila_detalhe = fila_detalhe.merge(
+
+            entrega_map,
+
+            on="PV",
+
+            how="left"
+        )
+
+        coluna_entrega = "DATA_ENTREGA_PV"
 
     except Exception as e:
 
