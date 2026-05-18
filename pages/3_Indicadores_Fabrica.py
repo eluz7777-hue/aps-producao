@@ -2874,6 +2874,21 @@ with tab5:
             df_geral.columns = [str(c).strip() for c in df_geral.columns]
 
             # ====================================================
+            # 📊 FUNÇÃO ACM
+            # ====================================================
+            def media_apenas_com_dados(lista):
+
+                dados_validos = [
+                    v for v in lista
+                    if v is not None and v > 0
+                ]
+
+                if len(dados_validos) == 0:
+                    return 0
+
+                return round(sum(dados_validos) / len(dados_validos), 1)
+
+            # ====================================================
             # 📊 DADOS PRAZO PROVEDOR
             # ====================================================
             meses_prazo = df_prazo.iloc[:, 0].astype(str).tolist()
@@ -2885,15 +2900,22 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            # 🔥 META FIXA = 90%
+            # 🔥 META FIXA
             meta_prazo = [90] * len(meses_prazo)
+
+            # 🔥 ACM
+            acm_prazo = media_apenas_com_dados(prazo_ok)
+
+            # 🔥 ADICIONA ACUMULADO
+            meses_prazo.append("ACM")
+            prazo_ok.append(acm_prazo)
+            meta_prazo.append(90)
 
             # ====================================================
             # 📊 DADOS DEVOLUÇÕES
             # ====================================================
             meses_dev = df_devolucao.iloc[:, 0].astype(str).tolist()
 
-            # 🔥 COLUNA CORRETA = % SEM DEVOLUÇÕES
             percentual_sem_devolucao = (
                 pd.to_numeric(
                     df_devolucao.iloc[:, 2],
@@ -2901,8 +2923,24 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            # 🔥 META FIXA = 90%
+            # 🔥 GARANTE EXIBIÇÃO DAS COLUNAS ZERO
+            percentual_sem_devolucao = [
+                0.01 if v == 0 else v
+                for v in percentual_sem_devolucao
+            ]
+
+            # 🔥 META FIXA
             meta_dev = [90] * len(meses_dev)
+
+            # 🔥 ACM
+            acm_devolucao = media_apenas_com_dados(
+                percentual_sem_devolucao
+            )
+
+            # 🔥 ADICIONA ACUMULADO
+            meses_dev.append("ACM")
+            percentual_sem_devolucao.append(acm_devolucao)
+            meta_dev.append(90)
 
             # ====================================================
             # 📊 DADOS VISÃO GERAL
@@ -2916,24 +2954,18 @@ with tab5:
                 ).fillna(0) * 100
             ).round(1).tolist()
 
-            # 🔥 META FIXA = 98%
+            # 🔥 META FIXA
             meta_geral = [98] * len(meses_geral)
 
-            # ====================================================
-            # 📊 FUNÇÃO ACM
-            # ====================================================
-            def media(vals):
+            # 🔥 ACM
+            acm_geral = media_apenas_com_dados(
+                percentual_prazo_geral
+            )
 
-                vals = [v for v in vals if v is not None]
-
-                if len(vals) == 0:
-                    return 0
-
-                return sum(vals) / len(vals)
-
-            acm_prazo = media(prazo_ok)
-            acm_devolucao = media(percentual_sem_devolucao)
-            acm_geral = media(percentual_prazo_geral)
+            # 🔥 ADICIONA ACUMULADO
+            meses_geral.append("ACM")
+            percentual_prazo_geral.append(acm_geral)
+            meta_geral.append(98)
 
             # ====================================================
             # 📊 1 - PRAZO DO PROVEDOR
@@ -2942,21 +2974,31 @@ with tab5:
 
             fig1 = go.Figure()
 
+            # ====================================================
             # 🔶 BARRAS
+            # ====================================================
             fig1.add_trace(go.Bar(
                 x=meses_prazo,
                 y=prazo_ok,
-                text=[f"{v:.0f}%" for v in prazo_ok],
+                text=[
+                    f"{v:.0f}%"
+                    for v in prazo_ok
+                ],
                 textposition="outside",
                 name="% Prazo e Antecipado"
             ))
 
+            # ====================================================
             # 🔴 META
+            # ====================================================
             fig1.add_trace(go.Scatter(
                 x=meses_prazo,
                 y=meta_prazo,
                 mode="lines+markers+text",
-                text=[f"{v:.0f}%" for v in meta_prazo],
+                text=[
+                    f"{v:.0f}%"
+                    for v in meta_prazo
+                ],
                 textposition="top center",
                 name="Meta",
                 line=dict(
@@ -2978,9 +3020,12 @@ with tab5:
                 )
             )
 
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(
+                fig1,
+                use_container_width=True
+            )
 
-            if prazo_ok[-1] >= 90:
+            if prazo_ok[-2] >= 90:
 
                 st.success("🟢 Fornecedor dentro do prazo")
 
@@ -2997,21 +3042,33 @@ with tab5:
 
             fig2 = go.Figure()
 
+            # ====================================================
             # 🔶 BARRAS
+            # ====================================================
             fig2.add_trace(go.Bar(
                 x=meses_dev,
                 y=percentual_sem_devolucao,
-                text=[f"{v:.0f}%" for v in percentual_sem_devolucao],
+                text=[
+                    "0%"
+                    if v == 0.01
+                    else f"{v:.0f}%"
+                    for v in percentual_sem_devolucao
+                ],
                 textposition="outside",
                 name="% Sem Devoluções"
             ))
 
+            # ====================================================
             # 🔴 META
+            # ====================================================
             fig2.add_trace(go.Scatter(
                 x=meses_dev,
                 y=meta_dev,
                 mode="lines+markers+text",
-                text=[f"{v:.0f}%" for v in meta_dev],
+                text=[
+                    f"{v:.0f}%"
+                    for v in meta_dev
+                ],
                 textposition="top center",
                 name="Meta",
                 line=dict(
@@ -3033,9 +3090,12 @@ with tab5:
                 )
             )
 
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(
+                fig2,
+                use_container_width=True
+            )
 
-            if percentual_sem_devolucao[-1] >= 90:
+            if percentual_sem_devolucao[-2] >= 90:
 
                 st.success("🟢 Qualidade adequada")
 
@@ -3052,21 +3112,31 @@ with tab5:
 
             fig3 = go.Figure()
 
-            # 🔵 BARRAS % ENTREGUE NO PRAZO
+            # ====================================================
+            # 🔵 BARRAS
+            # ====================================================
             fig3.add_trace(go.Bar(
                 x=meses_geral,
                 y=percentual_prazo_geral,
-                text=[f"{v:.1f}%" for v in percentual_prazo_geral],
+                text=[
+                    f"{v:.1f}%"
+                    for v in percentual_prazo_geral
+                ],
                 textposition="outside",
                 name="% Entregue no Prazo"
             ))
 
+            # ====================================================
             # 🔴 META
+            # ====================================================
             fig3.add_trace(go.Scatter(
                 x=meses_geral,
                 y=meta_geral,
                 mode="lines+markers+text",
-                text=[f"{v:.0f}%" for v in meta_geral],
+                text=[
+                    f"{v:.0f}%"
+                    for v in meta_geral
+                ],
                 textposition="top center",
                 name="Meta",
                 line=dict(
@@ -3088,9 +3158,12 @@ with tab5:
                 )
             )
 
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(
+                fig3,
+                use_container_width=True
+            )
 
-            if percentual_prazo_geral[-1] >= 98:
+            if percentual_prazo_geral[-2] >= 98:
 
                 st.success("🟢 Performance dentro da meta")
 
@@ -3113,7 +3186,9 @@ with tab5:
 
         except Exception as e:
 
-            st.error(f"❌ Erro ao carregar indicadores: {e}")
+            st.error(
+                f"❌ Erro ao carregar indicadores: {e}"
+            )
 
 
 
