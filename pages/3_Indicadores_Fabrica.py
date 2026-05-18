@@ -3319,28 +3319,26 @@ with tab6:
             # ====================================================
             xls = pd.ExcelFile(caminho_excel)
 
+            # 🔥 AGORA UTILIZANDO AS ABAS CORRETAS
+            # fundamentais para os indicadores
             df_abs = pd.read_excel(
                 xls,
-                sheet_name="ABSENTEISMO X HHT",
-                header=None
+                sheet_name="TB ABSENTEISMO"
             )
 
             df_trein = pd.read_excel(
                 xls,
-                sheet_name="HORAS TERINAMENTOS X HHT",
-                header=None
+                sheet_name="TB TREINAMENTOS"
             )
 
             df_faltas = pd.read_excel(
                 xls,
-                sheet_name="FALTAS INJUSTIFICADAS X HHT",
-                header=None
+                sheet_name="TB FALTAS INJUSTIFICADAS"
             )
 
             df_extra = pd.read_excel(
                 xls,
-                sheet_name="HORAS EXTRAS X HHT",
-                header=None
+                sheet_name="TB HORAS EXTRAS"
             )
 
             # ====================================================
@@ -3354,47 +3352,18 @@ with tab6:
                 ).reset_index(drop=True)
 
                 # =================================================
-                # 🔥 LOCALIZA LINHA 2026
+                # 🔥 LINHA CORRETA DOS DADOS
                 # =================================================
-                linha_2026 = None
-
-                for idx in range(len(df)):
-
-                    linha_texto = " ".join(
-                        [
-                            str(v)
-                            for v in df.iloc[idx].tolist()
-                        ]
-                    )
-
-                    if "2026" in linha_texto:
-
-                        linha_2026 = idx
-                        break
-
-                if linha_2026 is None:
-
-                    return pd.DataFrame(
-                        columns=[
-                            "MES",
-                            "VALOR",
-                            "META"
-                        ]
-                    )
+                df = df.iloc[2:].copy()
 
                 # =================================================
-                # 🔥 PEGA SOMENTE 2026
-                # =================================================
-                df = df.iloc[
-                    linha_2026 + 1:
-                    linha_2026 + 13
-                ].copy()
-
-                # =================================================
-                # 🔥 MANTÉM SOMENTE 3 COLUNAS
+                # 🔥 MANTÉM 3 COLUNAS
                 # =================================================
                 df = df.iloc[:, 0:3]
 
+                # =================================================
+                # 🔥 RENOMEIA
+                # =================================================
                 df.columns = [
                     "MES",
                     "VALOR",
@@ -3402,7 +3371,7 @@ with tab6:
                 ]
 
                 # =================================================
-                # 🔥 LIMPEZA DOS MESES
+                # 🔥 LIMPEZA MESES
                 # =================================================
                 df["MES"] = (
                     df["MES"]
@@ -3441,8 +3410,7 @@ with tab6:
                 )
 
                 # =================================================
-                # 🔥 ZERA MESES FUTUROS
-                # Maio, Junho e Julho devem permanecer zerados
+                # 🔥 MESES SEM DADOS AINDA
                 # =================================================
                 meses_sem_dados = [
                     "Mai",
@@ -3461,6 +3429,17 @@ with tab6:
                     ),
                     "VALOR"
                 ] = 0
+
+                # =================================================
+                # 🔥 CONVERTE PARA %
+                # =================================================
+                df["VALOR"] = (
+                    df["VALOR"] * 100
+                ).round(2)
+
+                df["META"] = (
+                    df["META"] * 100
+                ).round(2)
 
                 return df
 
@@ -3501,26 +3480,20 @@ with tab6:
                 tipo_meta
             ):
 
-                if df.empty:
-
-                    st.warning(
-                        f"⚠️ Sem dados válidos para {titulo}"
-                    )
-
-                    return
-
                 meses = (
                     df["MES"]
                     .tolist()
                 )
 
                 valores = (
-                    df["VALOR"] * 100
-                ).round(2).tolist()
+                    df["VALOR"]
+                    .tolist()
+                )
 
                 metas = (
-                    df["META"] * 100
-                ).round(2).tolist()
+                    df["META"]
+                    .tolist()
+                )
 
                 # ================================================
                 # 📊 ACM
