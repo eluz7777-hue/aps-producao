@@ -1739,7 +1739,7 @@ else:
 
 
 # ============================================================
-# BASE OPERACIONAL REAL (COM SALDO DE BAIXAS)
+# BASE OPERACIONAL REAL (EXECUÇÃO SOBERANA APS)
 # ============================================================
 
 df_baixas_ativas = st.session_state.get(
@@ -1748,57 +1748,185 @@ df_baixas_ativas = st.session_state.get(
 )
 
 # ------------------------------------------------------------
-# BASE ORIGINAL
+# 🔥 BASE ORIGINAL PV
 # ------------------------------------------------------------
-df = df_operacional.copy()
+df_planejamento = df_operacional.copy()
 
 # ------------------------------------------------------------
-# SEM BAIXAS
+# 🔥 NORMALIZA BASE PLANEJAMENTO
+# ------------------------------------------------------------
+for col in ["PV", "Processo", "CODIGO_PV"]:
+
+    if col not in df_planejamento.columns:
+        df_planejamento[col] = ""
+
+    df_planejamento[col] = (
+
+        df_planejamento[col]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+# ------------------------------------------------------------
+# 🔥 GARANTE CHAVE OPERACIONAL
+# ------------------------------------------------------------
+if "CHAVE_OPERACAO" not in df_planejamento.columns:
+
+    df_planejamento["CHAVE_OPERACAO"] = (
+
+        df_planejamento.apply(
+
+            lambda r: normalizar_chave_operacao(
+
+                r["PV"],
+                r["Processo"],
+                r["CODIGO_PV"]
+
+            ),
+
+            axis=1
+        )
+    )
+
+# ------------------------------------------------------------
+# 🔥 HORAS PLANEJADAS
+# ------------------------------------------------------------
+df_planejamento["Horas"] = (
+
+    pd.to_numeric(
+        df_planejamento["Horas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+)
+
+# ------------------------------------------------------------
+# 🔥 SEM BAIXAS
 # ------------------------------------------------------------
 if df_baixas_ativas.empty:
 
-    df["Horas_Baixadas"] = 0
-    df["Horas_Restantes"] = df["Horas"]
+    df_planejamento["Horas_Baixadas"] = 0
+
+    df_planejamento["Horas_Restantes"] = (
+        df_planejamento["Horas"]
+    )
 
 # ------------------------------------------------------------
-# COM BAIXAS
+# 🔥 COM BAIXAS
 # ------------------------------------------------------------
 else:
 
-    df_baixas_tmp = df_baixas_ativas.copy()
+    df_baixas_tmp = (
+        df_baixas_ativas.copy()
+    )
 
     # --------------------------------------------------------
-    # NORMALIZAÇÃO
+    # 🔥 NORMALIZA BAIXAS
     # --------------------------------------------------------
-    for col in ["PV", "Processo", "CODIGO_PV"]:
+    for col in [
+
+        "PV",
+        "Processo",
+        "CODIGO_PV",
+        "CHAVE_OPERACAO"
+
+    ]:
 
         if col not in df_baixas_tmp.columns:
             df_baixas_tmp[col] = ""
 
         df_baixas_tmp[col] = (
+
             df_baixas_tmp[col]
+
             .fillna("")
+
             .astype(str)
+
             .str.strip()
+
             .str.upper()
         )
 
     # --------------------------------------------------------
-    # CHAVE PADRÃO
+    # 🔥 RECRIA CHAVE SE NECESSÁRIO
     # --------------------------------------------------------
-    df_baixas_tmp["CHAVE_OPERACAO"] = (
-        df_baixas_tmp.apply(
-            lambda r: normalizar_chave_operacao(
-                r["PV"],
-                r["Processo"],
-                r["CODIGO_PV"]
-            ),
-            axis=1
+    mascara_chave = (
+
+        df_baixas_tmp["CHAVE_OPERACAO"]
+
+        .astype(str)
+
+        .str.strip()
+
+        == ""
+    )
+
+    if mascara_chave.any():
+
+        df_baixas_tmp.loc[
+            mascara_chave,
+            "CHAVE_OPERACAO"
+        ] = (
+
+            df_baixas_tmp.loc[
+                mascara_chave,
+                "PV"
+            ]
+
+            + "||"
+
+            + df_baixas_tmp.loc[
+                mascara_chave,
+                "Processo"
+            ]
+
+            + "||"
+
+            + df_baixas_tmp.loc[
+                mascara_chave,
+                "CODIGO_PV"
+            ]
         )
+
+    # --------------------------------------------------------
+    # 🔥 HORAS NUMÉRICAS
+    # --------------------------------------------------------
+    df_baixas_tmp["Horas"] = (
+
+        pd.to_numeric(
+            df_baixas_tmp["Horas"],
+            errors="coerce"
+        )
+
+        .fillna(0)
     )
 
     # --------------------------------------------------------
-    # CONSOLIDA HORAS BAIXADAS
+    # 🔥 SOMENTE BAIXAS ATIVAS
+    # --------------------------------------------------------
+    df_baixas_tmp = (
+
+        df_baixas_tmp[
+            df_baixas_tmp["Status_Baixa"]
+            .isin([
+                "ATIVA",
+                "TERCEIRIZADA"
+            ])
+        ]
+
+        .copy()
+    )
+
+    # --------------------------------------------------------
+    # 🔥 CONSOLIDA BAIXAS
     # --------------------------------------------------------
     baixas_consolidadas = (
 
@@ -1819,150 +1947,276 @@ else:
     )
 
     # --------------------------------------------------------
-    # MERGE COM BASE OPERACIONAL
+    # 🔥 MERGE EXECUÇÃO REAL
     # --------------------------------------------------------
-    df = df.merge(
-        baixas_consolidadas,
-        on="CHAVE_OPERACAO",
-        how="left"
+    df_planejamento = (
+
+        df_planejamento.merge(
+
+            baixas_consolidadas,
+
+            on="CHAVE_OPERACAO",
+
+            how="left"
+        )
     )
 
     # --------------------------------------------------------
-    # TRATAMENTO NUMÉRICO
+    # 🔥 TRATAMENTO NUMÉRICO
     # --------------------------------------------------------
-    df["Horas"] = (
+    df_planejamento["Horas_Baixadas"] = (
+
         pd.to_numeric(
-            df["Horas"],
+            df_planejamento["Horas_Baixadas"],
             errors="coerce"
         )
+
         .fillna(0)
     )
 
-    df["Horas_Baixadas"] = (
-        pd.to_numeric(
-            df["Horas_Baixadas"],
-            errors="coerce"
-        )
-        .fillna(0)
+    # --------------------------------------------------------
+    # 🔥 LIMITADOR INDUSTRIAL
+    # --------------------------------------------------------
+    df_planejamento["Horas_Baixadas"] = np.minimum(
+
+        df_planejamento["Horas_Baixadas"],
+
+        df_planejamento["Horas"]
     )
 
     # --------------------------------------------------------
-    # SALDO REAL
+    # 🔥 SALDO REAL
     # --------------------------------------------------------
-    df["Horas_Restantes"] = (
-        df["Horas"]
-        - df["Horas_Baixadas"]
+    df_planejamento["Horas_Restantes"] = (
+
+        df_planejamento["Horas"]
+
+        - df_planejamento["Horas_Baixadas"]
+
     ).clip(lower=0)
 
 # ------------------------------------------------------------
-# STATUS OPERACIONAL REAL
+# 🔥 STATUS OPERACIONAL REAL
 # ------------------------------------------------------------
-df["Status Operacional"] = np.where(
-    df["Horas_Restantes"] <= 0.0001,
+df_planejamento["Status Operacional"] = np.where(
+
+    df_planejamento["Horas_Restantes"] <= 0.0001,
+
     "✅ Baixado",
+
     "⏳ Pendente"
 )
 
 # ------------------------------------------------------------
-# APS USA SOMENTE SALDO RESTANTE
+# 🔥 REMOVE SOMENTE OPERAÇÕES CONCLUÍDAS
 # ------------------------------------------------------------
-df = df[
-    df["Horas_Restantes"] > 0.0001
-].copy()
+df = (
 
+    df_planejamento[
+        df_planejamento["Horas_Restantes"] > 0.0001
+    ]
 
-
-# ------------------------------------------------------------
-# HORAS OFICIAIS DO APS
-# ------------------------------------------------------------
-df["Horas_Originais"] = df["Horas"]
-df["Horas"] = df["Horas_Restantes"]
-
-df = df.reset_index(drop=True)
+    .copy()
+)
 
 # ------------------------------------------------------------
-# 🔥 SINCRONIZA BASE OPERACIONAL REAL
+# 🔥 HORAS OFICIAIS APS
 # ------------------------------------------------------------
-# Mantém compatibilidade com dashboards
-# que ainda utilizam:
-# - Horas_Baixadas
-# - Horas_Restantes
-# ------------------------------------------------------------
-df_operacional = df.copy()
+df["Horas_Originais"] = (
+    df["Horas"]
+)
 
-# 🔒 GARANTE COLUNAS LEGADAS
+df["Horas"] = (
+    df["Horas_Restantes"]
+)
+
+df = (
+    df.reset_index(drop=True)
+)
+
+# ------------------------------------------------------------
+# 🔥 BASE OPERACIONAL SOBERANA
+# ------------------------------------------------------------
+df_operacional = (
+    df.copy()
+)
+
+# ------------------------------------------------------------
+# 🔒 GARANTE COLUNAS
+# ------------------------------------------------------------
 if "Horas_Baixadas" not in df_operacional.columns:
+
     df_operacional["Horas_Baixadas"] = 0
 
 if "Horas_Restantes" not in df_operacional.columns:
+
     df_operacional["Horas_Restantes"] = (
         df_operacional["Horas"]
     )
 
-
-
 # ------------------------------------------------------------
 # DATAFRAMES AUXILIARES
 # ------------------------------------------------------------
-df_excluidas = pd.DataFrame(pvs_excluidas)
-df_sem_carga = pd.DataFrame(pvs_sem_carga)
-df_auditoria_pv = pd.DataFrame(auditoria_pv)
+df_excluidas = pd.DataFrame(
+    pvs_excluidas
+)
 
+df_sem_carga = pd.DataFrame(
+    pvs_sem_carga
+)
 
+df_auditoria_pv = pd.DataFrame(
+    auditoria_pv
+)
 
+# ------------------------------------------------------------
+# 🔥 GARANTIA DE RASTREABILIDADE
+# ------------------------------------------------------------
+pvs_auditadas_set = set(
 
-# -------------------------------
-# Garantia de rastreabilidade
-# -------------------------------
-pvs_auditadas_set = set(df_auditoria_pv["PV"].astype(str).str.strip().unique()) if not df_auditoria_pv.empty else set()
-pvs_nao_auditadas = pvs_excel_set - pvs_auditadas_set
+    df_auditoria_pv["PV"]
+
+    .astype(str)
+
+    .str.strip()
+
+    .unique()
+
+) if not df_auditoria_pv.empty else set()
+
+pvs_nao_auditadas = (
+    pvs_excel_set - pvs_auditadas_set
+)
 
 for pv_faltante in pvs_nao_auditadas:
-    linha_pv = df_pv[df_pv["PV"].astype(str).str.strip() == pv_faltante]
+
+    linha_pv = df_pv[
+        df_pv["PV"]
+        .astype(str)
+        .str.strip()
+        == pv_faltante
+    ]
 
     if not linha_pv.empty:
+
         row = linha_pv.iloc[0]
 
         registro = {
-            "PV": str(row["PV"]).strip(),
-            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
+
+            "PV": str(
+                row["PV"]
+            ).strip(),
+
+            "Cliente": row.get(
+                "CLIENTE",
+                "SEM CLIENTE"
+            ),
+
             "CODIGO": row["CODIGO_PV"],
+
             "CODIGO_PV": row["CODIGO_PV"],
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
-            "Motivo": "PV não auditada por falha de processamento"
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
+            "Motivo": (
+                "PV não auditada por falha de processamento"
+            )
         }
 
-        pvs_excluidas.append(registro)
-        pvs_sem_carga.append(registro)
-
-        auditoria_pv.append({
-            "PV": str(row["PV"]).strip(),
-            "Cliente": row.get("CLIENTE", "SEM CLIENTE"),
-            "CODIGO": row["CODIGO_PV"],
-            "CODIGO_PV": row["CODIGO_PV"],
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
-            "Status": "Falha de processamento",
-            "Qtd": row["QTD"],
-            "Total Processos Válidos": 0,
-            "Horas Totais": 0,
-            "Motivo": "PV não auditada por falha de processamento"
-        })
-
-df_excluidas = pd.DataFrame(pvs_excluidas)
-df_sem_carga = pd.DataFrame(pvs_sem_carga)
-df_auditoria_pv = pd.DataFrame(auditoria_pv)
-
-for _df_aux in [df_excluidas, df_sem_carga, df_auditoria_pv]:
-    if not _df_aux.empty and "DATA_ENTREGA_APS" in _df_aux.columns:
-        _df_aux["DATA_ENTREGA_APS"] = pd.to_datetime(
-            _df_aux["DATA_ENTREGA_APS"],
-            errors="coerce",
-            dayfirst=True
+        pvs_excluidas.append(
+            registro
         )
 
+        pvs_sem_carga.append(
+            registro
+        )
+
+        auditoria_pv.append({
+
+            "PV": str(
+                row["PV"]
+            ).strip(),
+
+            "Cliente": row.get(
+                "CLIENTE",
+                "SEM CLIENTE"
+            ),
+
+            "CODIGO": row["CODIGO_PV"],
+
+            "CODIGO_PV": row["CODIGO_PV"],
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
+            "Status": (
+                "Falha de processamento"
+            ),
+
+            "Qtd": row["QTD"],
+
+            "Total Processos Válidos": 0,
+
+            "Horas Totais": 0,
+
+            "Motivo": (
+                "PV não auditada por falha de processamento"
+            )
+        })
+
+df_excluidas = pd.DataFrame(
+    pvs_excluidas
+)
+
+df_sem_carga = pd.DataFrame(
+    pvs_sem_carga
+)
+
+df_auditoria_pv = pd.DataFrame(
+    auditoria_pv
+)
+
+for _df_aux in [
+
+    df_excluidas,
+    df_sem_carga,
+    df_auditoria_pv
+
+]:
+
+    if (
+
+        not _df_aux.empty
+
+        and "DATA_ENTREGA_APS"
+        in _df_aux.columns
+    ):
+
+        _df_aux["DATA_ENTREGA_APS"] = (
+            pd.to_datetime(
+
+                _df_aux["DATA_ENTREGA_APS"],
+
+                errors="coerce",
+
+                dayfirst=True
+            )
+        )
+
+# ------------------------------------------------------------
+# 🔥 VALIDAÇÃO FINAL APS
+# ------------------------------------------------------------
 if df.empty:
-    st.error("Nenhuma carga operacional pendente encontrada.")
-    st.stop()
+
+    st.warning(
+        "Nenhuma carga operacional pendente encontrada."
+    )
+
 
 
 
