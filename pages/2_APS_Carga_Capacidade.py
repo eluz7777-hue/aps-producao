@@ -64,23 +64,202 @@ def inicializar_banco():
 inicializar_banco()
 
 
+
+
+
 # ============================================================
-# 🔥 FUNÇÃO GLOBAL SQLITE (AGORA CORRETA)
+# 🔥 FUNÇÃO GLOBAL SQLITE (VERSÃO DEFINITIVA APS)
 # ============================================================
 def carregar_baixas_sqlite():
 
+    conn = None
+
     try:
+
+        # ====================================================
+        # 🔥 CONEXÃO
+        # ====================================================
         conn = get_connection()
-        df = pd.read_sql_query("SELECT * FROM baixas", conn)
+
+        # ====================================================
+        # 🔥 LEITURA SQLITE
+        # ====================================================
+        df = pd.read_sql_query(
+            "SELECT * FROM baixas",
+            conn
+        )
+
+        # ====================================================
+        # 🔒 SEM DADOS
+        # ====================================================
+        if df is None or df.empty:
+
+            conn.close()
+
+            return pd.DataFrame(
+                columns=COLUNAS_BAIXAS + [
+                    "CHAVE_OPERACAO"
+                ]
+            )
+
+        # ====================================================
+        # 🔥 GARANTE COLUNA
+        # ====================================================
+        if "CHAVE_OPERACAO" not in df.columns:
+
+            df["CHAVE_OPERACAO"] = ""
+
+        # ====================================================
+        # 🔥 NORMALIZA CAMPOS
+        # ====================================================
+        for col in [
+
+            "PV",
+            "CODIGO_PV",
+            "Processo",
+            "CHAVE_OPERACAO"
+
+        ]:
+
+            df[col] = (
+
+                df[col]
+
+                .fillna("")
+
+                .astype(str)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+        # ====================================================
+        # 🔥 RECUPERA CHAVES ANTIGAS
+        # ====================================================
+        mascara_chave_vazia = (
+
+            df["CHAVE_OPERACAO"]
+
+            .astype(str)
+
+            .str.strip()
+
+            == ""
+        )
+
+        if mascara_chave_vazia.any():
+
+            df.loc[
+                mascara_chave_vazia,
+                "CHAVE_OPERACAO"
+            ] = (
+
+                df.loc[
+                    mascara_chave_vazia,
+                    "PV"
+                ]
+
+                + "||"
+
+                + df.loc[
+                    mascara_chave_vazia,
+                    "Processo"
+                ]
+
+                + "||"
+
+                + df.loc[
+                    mascara_chave_vazia,
+                    "CODIGO_PV"
+                ]
+            )
+
+            # ================================================
+            # 🔥 REGRAVA SQLITE RECUPERADO
+            # ================================================
+            try:
+
+                df.to_sql(
+                    "baixas",
+                    conn,
+                    if_exists="replace",
+                    index=False
+                )
+
+                conn.commit()
+
+            except:
+                pass
+
+        # ====================================================
+        # 🔥 PADRONIZA
+        # ====================================================
+        df = _padronizar_df_baixas(df)
+
+        # ====================================================
+        # 🔥 REMOVE DUPLICIDADES
+        # ====================================================
+        df = (
+
+            df
+
+            .drop_duplicates()
+
+            .reset_index(drop=True)
+        )
+
+        # ====================================================
+        # 🔥 ORDENAÇÃO FINAL
+        # ====================================================
+        df = (
+
+            df
+
+            .sort_values(
+
+                by=[
+                    "Data_Baixa",
+                    "PV",
+                    "Processo"
+                ],
+
+                ascending=[
+                    False,
+                    True,
+                    True
+                ]
+            )
+
+            .reset_index(drop=True)
+        )
+
+        # ====================================================
+        # 🔥 FECHA CONEXÃO
+        # ====================================================
         conn.close()
 
-        if df is None or df.empty:
-            return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+        return df
 
-        return _padronizar_df_baixas(df)
+    except Exception as e:
 
-    except Exception:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
+        try:
+            conn.close()
+        except:
+            pass
+
+        st.warning(
+            f"Erro SQLite baixas: {e}"
+        )
+
+        return pd.DataFrame(
+            columns=COLUNAS_BAIXAS + [
+                "CHAVE_OPERACAO"
+            ]
+        )
+
+
+
 
 
 # ============================================================
