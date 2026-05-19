@@ -1245,117 +1245,189 @@ def garantir_arquivo_baixas(base_path):
 
 def _padronizar_df_baixas(df_baixas):
 
+    # ========================================================
+    # 🔒 DATAFRAME VAZIO
+    # ========================================================
     if df_baixas is None or df_baixas.empty:
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
 
+        return pd.DataFrame(
+            columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+        )
+
+    # ========================================================
+    # 🔥 CÓPIA SEGURA
+    # ========================================================
     df_baixas = df_baixas.copy()
 
+    # ========================================================
+    # 🔥 GARANTE TODAS AS COLUNAS
+    # ========================================================
     for col in COLUNAS_BAIXAS:
+
         if col not in df_baixas.columns:
             df_baixas[col] = None
 
-    df_baixas = df_baixas[COLUNAS_BAIXAS].copy()
+    # 🔥 CHAVE OPERACIONAL
+    if "CHAVE_OPERACAO" not in df_baixas.columns:
+        df_baixas["CHAVE_OPERACAO"] = ""
 
+    # ========================================================
+    # 🔥 MANTÉM TODAS AS COLUNAS NECESSÁRIAS
+    # ========================================================
+    df_baixas = df_baixas[
+        COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+    ].copy()
+
+    # ========================================================
+    # 🔥 COLUNAS TEXTO
+    # ========================================================
     colunas_texto = [
-        "PV", "Cliente", "CODIGO_PV", "Processo",
-        "Usuario", "Observacao", "Status_Baixa",
-        "Data_Estorno", "Motivo_Estorno"
+
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Usuario",
+        "Observacao",
+        "Status_Baixa",
+        "Data_Estorno",
+        "Motivo_Estorno",
+        "CHAVE_OPERACAO"
     ]
 
     for col in colunas_texto:
-        df_baixas[col] = df_baixas[col].fillna("").astype(str).str.strip()
 
-    df_baixas["PV"] = df_baixas["PV"].str.upper()
-    df_baixas["CODIGO_PV"] = df_baixas["CODIGO_PV"].str.upper()
-    df_baixas["Processo"] = df_baixas["Processo"].str.upper()
-    df_baixas["Cliente"] = df_baixas["Cliente"].replace("", "SEM CLIENTE")
+        df_baixas[col] = (
 
-    df_baixas["Status_Baixa"] = (
-        df_baixas["Status_Baixa"]
-        .replace("", "ATIVA")
+            df_baixas[col]
+
+            .fillna("")
+
+            .astype(str)
+
+            .str.strip()
+        )
+
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO
+    # ========================================================
+    df_baixas["PV"] = (
+        df_baixas["PV"]
         .str.upper()
     )
 
-    df_baixas["Horas"] = pd.to_numeric(df_baixas["Horas"], errors="coerce").fillna(0)
-    df_baixas["Data_Baixa"] = pd.to_datetime(df_baixas["Data_Baixa"], errors="coerce")
-    df_baixas["Data_Estorno"] = df_baixas["Data_Estorno"].fillna("").astype(str)
-
-    df_baixas["CHAVE_OPERACAO"] = (
-        df_baixas["PV"] + "||" +
-        df_baixas["Processo"] + "||" +
+    df_baixas["CODIGO_PV"] = (
         df_baixas["CODIGO_PV"]
+        .str.upper()
     )
 
-    df_baixas = df_baixas.sort_values(
-        by=["Data_Baixa", "PV", "Processo"],
-        ascending=[False, True, True]
-    ).reset_index(drop=True)
+    df_baixas["Processo"] = (
+        df_baixas["Processo"]
+        .str.upper()
+    )
+
+    df_baixas["Cliente"] = (
+        df_baixas["Cliente"]
+        .replace("", "SEM CLIENTE")
+    )
+
+    # ========================================================
+    # 🔥 STATUS
+    # ========================================================
+    df_baixas["Status_Baixa"] = (
+
+        df_baixas["Status_Baixa"]
+
+        .replace("", "ATIVA")
+
+        .str.upper()
+    )
+
+    # ========================================================
+    # 🔥 NUMÉRICOS
+    # ========================================================
+    df_baixas["Horas"] = (
+
+        pd.to_numeric(
+            df_baixas["Horas"],
+            errors="coerce"
+        )
+
+        .fillna(0)
+    )
+
+    # ========================================================
+    # 🔥 DATAS
+    # ========================================================
+    df_baixas["Data_Baixa"] = pd.to_datetime(
+
+        df_baixas["Data_Baixa"],
+
+        errors="coerce"
+    )
+
+    df_baixas["Data_Estorno"] = (
+        df_baixas["Data_Estorno"]
+        .fillna("")
+        .astype(str)
+    )
+
+    # ========================================================
+    # 🔥 RECRIA CHAVE SE NECESSÁRIO
+    # ========================================================
+    df_baixas["CHAVE_OPERACAO"] = np.where(
+
+        df_baixas["CHAVE_OPERACAO"].astype(str).str.strip() == "",
+
+        (
+            df_baixas["PV"]
+            + "||"
+            + df_baixas["Processo"]
+            + "||"
+            + df_baixas["CODIGO_PV"]
+        ),
+
+        df_baixas["CHAVE_OPERACAO"]
+    )
+
+    # ========================================================
+    # 🔥 REMOVE DUPLICIDADES
+    # ========================================================
+    df_baixas = (
+
+        df_baixas
+
+        .drop_duplicates()
+
+        .reset_index(drop=True)
+    )
+
+    # ========================================================
+    # 🔥 ORDENAÇÃO
+    # ========================================================
+    df_baixas = (
+
+        df_baixas
+
+        .sort_values(
+
+            by=[
+                "Data_Baixa",
+                "PV",
+                "Processo"
+            ],
+
+            ascending=[
+                False,
+                True,
+                True
+            ]
+        )
+
+        .reset_index(drop=True)
+    )
 
     return df_baixas
-
-
-# ============================================================
-# FUNÇÃO DE CARREGAMENTO (SEM CACHE - PERSISTÊNCIA REAL)
-# ============================================================
-def carregar_baixas_operacionais(base_path, file_mtime_baixas):
-
-    caminho = garantir_arquivo_baixas(base_path)
-
-    try:
-        df_baixas = pd.read_excel(caminho, dtype=str)
-
-        if df_baixas is None:
-            df_baixas = pd.DataFrame(columns=COLUNAS_BAIXAS)
-
-        df_baixas = _padronizar_df_baixas(df_baixas)
-
-        return df_baixas
-
-    except Exception as e:
-        st.warning(f"Erro ao ler baixas: {e}")
-        return pd.DataFrame(columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"])
-
-
-
-# ============================================================
-# 🔥 CARREGAMENTO DAS BAIXAS (SQLITE OFICIAL)
-# ============================================================
-
-# ------------------------------------------------------------
-# 🔥 LEITURA OFICIAL SQLITE
-# ------------------------------------------------------------
-df_baixas = carregar_baixas_sqlite()
-
-# 🔒 GARANTE PADRÃO
-df_baixas = _padronizar_df_baixas(df_baixas)
-
-# ------------------------------------------------------------
-# 🔥 SINCRONIZA SESSION STATE
-# ------------------------------------------------------------
-st.session_state["df_baixas"] = df_baixas.copy()
-
-# ------------------------------------------------------------
-# 🔥 FILTRA BAIXAS ATIVAS
-# ------------------------------------------------------------
-df_baixas_ativas = df_baixas[
-    df_baixas["Status_Baixa"].isin([
-        "ATIVA",
-        "TERCEIRIZADA"
-    ])
-].copy()
-
-# 🔒 GARANTE PADRÃO NAS ATIVAS
-df_baixas_ativas = _padronizar_df_baixas(
-    df_baixas_ativas
-)
-
-# ------------------------------------------------------------
-# 🔥 SESSION STATE OFICIAL
-# ------------------------------------------------------------
-st.session_state["df_baixas_ativas"] = (
-    df_baixas_ativas
-)
-
 
 
 
