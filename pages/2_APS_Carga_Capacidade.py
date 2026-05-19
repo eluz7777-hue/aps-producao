@@ -7406,25 +7406,85 @@ with st.expander(
 
 
 # =====================================================
-# 🔥 FILA REAL DOS GARGALOS
+# 🔥 FILA REAL OPERACIONAL APS
 # =====================================================
-processos_top = (
-    gargalos_top["Processo"]
-    .astype(str)
-    .tolist()
+
+# -----------------------------------------------------
+# 🔥 BASE OPERACIONAL COMPLETA
+# -----------------------------------------------------
+base_operacional = df_base_gargalo.copy()
+
+# -----------------------------------------------------
+# 🔥 NORMALIZAÇÃO
+# -----------------------------------------------------
+if "Saldo_Horas" not in base_operacional.columns:
+
+    base_operacional["Saldo_Horas"] = (
+        base_operacional["Horas"]
+    )
+
+base_operacional["Saldo_Horas"] = (
+
+    pd.to_numeric(
+        base_operacional["Saldo_Horas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
 )
 
-base_gargalos = df_base_gargalo[
-    df_base_gargalo["Processo"].isin(
-        processos_top
-    )
-].copy()
+# -----------------------------------------------------
+# 🔥 SOMENTE OPERAÇÕES PENDENTES
+# -----------------------------------------------------
+fila = (
 
-fila = base_gargalos[
-    base_gargalos["Saldo_Horas"] > 0
-].copy()
+    base_operacional[
+        base_operacional["Saldo_Horas"] > 0
+    ]
+
+    .copy()
+)
+
+# -----------------------------------------------------
+# 🔥 REMOVE DUPLICIDADES
+# -----------------------------------------------------
+if "CHAVE_OPERACAO" in fila.columns:
+
+    fila = (
+
+        fila
+
+        .drop_duplicates(
+            subset=["CHAVE_OPERACAO"]
+        )
+
+        .copy()
+    )
+
+# -----------------------------------------------------
+# 🔥 ORDENAÇÃO INDUSTRIAL
+# -----------------------------------------------------
+colunas_ordem = []
+
+if "DATA_ENTREGA_APS" in fila.columns:
+    colunas_ordem.append(
+        "DATA_ENTREGA_APS"
+    )
+
+if "Saldo_Horas" in fila.columns:
+    colunas_ordem.append(
+        "Saldo_Horas"
+    )
+
+if colunas_ordem:
+
+    fila = fila.sort_values(
+        by=colunas_ordem,
+        ascending=[True, False][:len(colunas_ordem)]
+    )
 
 fila = fila.reset_index(drop=True)
+
 
 st.markdown(
     "### ✅ Dar Baixa em Operação Concluída"
