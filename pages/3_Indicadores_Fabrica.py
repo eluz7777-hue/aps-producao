@@ -3644,6 +3644,9 @@ with tab6:
                 # ================================================
                 ultimo = valores[-2]
 
+                # ------------------------------------------------
+                # 🔴 INDICADORES ONDE MENOR É MELHOR
+                # ------------------------------------------------
                 if tipo_meta == "max":
 
                     if ultimo <= meta_padrao:
@@ -3658,7 +3661,10 @@ with tab6:
                             "🔴 Indicador fora da meta, com impacto potencial na operação e necessidade de ação corretiva"
                         )
 
-                else:
+                # ------------------------------------------------
+                # 🟢 INDICADORES ONDE MAIOR É MELHOR
+                # ------------------------------------------------
+                elif tipo_meta == "min":
 
                     if ultimo >= meta_padrao:
 
