@@ -1807,28 +1807,51 @@ if not df_operacional.empty:
         if col not in df_operacional.columns:
             df_operacional[col] = ""
 
-        df_operacional[col] = (
+        # ----------------------------------------------------
+        # 🔥 PROCESSOS
+        # ----------------------------------------------------
+        if col == "Processo":
 
-            df_operacional[col]
+            df_operacional[col] = (
 
-            .fillna("")
+                df_operacional[col]
 
-            .astype(str)
+                .fillna("")
 
-            .str.upper()
+                .astype(str)
 
-            .str.strip()
+                .str.strip()
 
-            .str.replace(".0", "", regex=False)
+                .apply(normalizar_processo)
+            )
 
-            .str.replace("  ", " ", regex=False)
+        # ----------------------------------------------------
+        # 🔥 DEMAIS CAMPOS
+        # ----------------------------------------------------
+        else:
 
-            .str.replace(" - ", "-", regex=False)
+            df_operacional[col] = (
 
-            .str.replace("- ", "-", regex=False)
+                df_operacional[col]
 
-            .str.replace(" -", "-", regex=False)
-        )
+                .fillna("")
+
+                .astype(str)
+
+                .str.upper()
+
+                .str.strip()
+
+                .str.replace(".0", "", regex=False)
+
+                .str.replace("  ", " ", regex=False)
+
+                .str.replace(" - ", "-", regex=False)
+
+                .str.replace("- ", "-", regex=False)
+
+                .str.replace(" -", "-", regex=False)
+            )
 
     # ========================================================
     # 🔥 CHAVE OPERACIONAL DEFINITIVA
@@ -1874,7 +1897,6 @@ if not df_operacional.empty:
 else:
 
     df_operacional["CHAVE_OPERACAO"] = ""
-
 
 
 
@@ -1942,6 +1964,7 @@ st.session_state["df_baixas_ativas"] = (
 # 🔥 BASE ORIGINAL PV
 # ------------------------------------------------------------
 df_planejamento = df_operacional.copy()
+
 
 # ------------------------------------------------------------
 # 🔥 NORMALIZA BASE PLANEJAMENTO
