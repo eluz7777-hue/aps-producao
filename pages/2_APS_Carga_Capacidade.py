@@ -1630,9 +1630,20 @@ def _padronizar_df_baixas(df_baixas):
         .str.upper()
     )
 
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO INDUSTRIAL PROCESSOS APS
+    # ========================================================
     df_baixas["Processo"] = (
+
         df_baixas["Processo"]
-        .str.upper()
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.strip()
+
+        .apply(normalizar_processo)
     )
 
     df_baixas["Cliente"] = (
@@ -1737,7 +1748,6 @@ def _padronizar_df_baixas(df_baixas):
     )
 
     return df_baixas
-
 
 
 
