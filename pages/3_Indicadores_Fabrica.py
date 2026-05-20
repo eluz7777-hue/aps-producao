@@ -3703,7 +3703,7 @@ with tab6:
                 "📊 Índice de Treinamento (HHT)",
                 "Mede o volume de treinamento aplicado em relação às horas trabalhadas.",
                 df_trein,
-                "min"
+                "max"
             )
 
             # ====================================================
