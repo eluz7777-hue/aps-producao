@@ -1742,10 +1742,61 @@ else:
 # BASE OPERACIONAL REAL (EXECUÇÃO SOBERANA APS)
 # ============================================================
 
-df_baixas_ativas = st.session_state.get(
-    "df_baixas_ativas",
-    pd.DataFrame()
+# ------------------------------------------------------------
+# 🔥 LEITURA OFICIAL SQLITE APS
+# ------------------------------------------------------------
+df_baixas = carregar_baixas_sqlite()
+
+# ------------------------------------------------------------
+# 🔒 GARANTE PADRONIZAÇÃO
+# ------------------------------------------------------------
+df_baixas = _padronizar_df_baixas(
+    df_baixas
 )
+
+# ------------------------------------------------------------
+# 🔥 SESSION STATE OFICIAL
+# ------------------------------------------------------------
+st.session_state["df_baixas"] = (
+    df_baixas.copy()
+)
+
+# ------------------------------------------------------------
+# 🔥 FILTRA SOMENTE BAIXAS ATIVAS
+# ------------------------------------------------------------
+df_baixas_ativas = (
+
+    df_baixas[
+
+        df_baixas["Status_Baixa"]
+
+        .isin([
+
+            "ATIVA",
+            "TERCEIRIZADA"
+
+        ])
+    ]
+
+    .copy()
+)
+
+# ------------------------------------------------------------
+# 🔒 GARANTE PADRONIZAÇÃO FINAL
+# ------------------------------------------------------------
+df_baixas_ativas = (
+    _padronizar_df_baixas(
+        df_baixas_ativas
+    )
+)
+
+# ------------------------------------------------------------
+# 🔥 SESSION STATE OFICIAL APS
+# ------------------------------------------------------------
+st.session_state["df_baixas_ativas"] = (
+    df_baixas_ativas.copy()
+)
+
 
 # ------------------------------------------------------------
 # 🔥 BASE ORIGINAL PV
