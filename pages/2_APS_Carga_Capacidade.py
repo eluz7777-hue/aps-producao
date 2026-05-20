@@ -1179,6 +1179,8 @@ df_pv = df_pv.drop_duplicates().copy()
 # Remove apenas linhas sem código
 df_pv = df_pv[df_pv["CODIGO_KEY"] != ""].copy()
 
+
+
 # ===============================
 # PROCESSOS
 # ===============================
@@ -1205,17 +1207,145 @@ PROCESSOS_VALIDOS = [
     "DIVERSOS"
 ]
 
-processos = [p for p in PROCESSOS_VALIDOS if p in df_pv.columns]
 
-# Converte todos os tempos para número (aceita decimal)
+# ============================================================
+# 🔥 NORMALIZAÇÃO GLOBAL DE PROCESSOS APS
+# ============================================================
+
+MAPEAMENTO_PROCESSOS = {
+
+    # --------------------------------------------------------
+    # CORTE - SERRA
+    # --------------------------------------------------------
+    "CORTE-SERRA": "CORTE - SERRA",
+    "CORTE / SERRA": "CORTE - SERRA",
+    "CORTE_SERRA": "CORTE - SERRA",
+    "CORTE SERRA": "CORTE - SERRA",
+
+    # --------------------------------------------------------
+    # CORTE-LASER
+    # --------------------------------------------------------
+    "CORTE LASER": "CORTE-LASER",
+    "LASER": "CORTE-LASER",
+
+    # --------------------------------------------------------
+    # CORTE-PLASMA
+    # --------------------------------------------------------
+    "CORTE PLASMA": "CORTE-PLASMA",
+    "PLASMA": "CORTE-PLASMA",
+
+    # --------------------------------------------------------
+    # TORNO CONVENCIONAL
+    # --------------------------------------------------------
+    "TORNO": "TORNO CONVENCIONAL",
+
+    # --------------------------------------------------------
+    # FRESADORAS
+    # --------------------------------------------------------
+    "FRESA": "FRESADORAS",
+    "FRESADORA": "FRESADORAS",
+
+    # --------------------------------------------------------
+    # SOLDAGEM
+    # --------------------------------------------------------
+    "SOLDA": "SOLDAGEM",
+
+    # --------------------------------------------------------
+    # CENTRO DE USINAGEM
+    # --------------------------------------------------------
+    "USINAGEM": "CENTRO DE USINAGEM",
+    "CENTRO USINAGEM": "CENTRO DE USINAGEM",
+
+    # --------------------------------------------------------
+    # ACABAMENTO
+    # --------------------------------------------------------
+    "FINALIZACAO": "ACABAMENTO",
+    "FINALIZAÇÃO": "ACABAMENTO"
+}
+
+
+# ============================================================
+# 🔥 FUNÇÃO GLOBAL NORMALIZAÇÃO PROCESSOS
+# ============================================================
+
+def normalizar_processo(valor):
+
+    if pd.isna(valor):
+        return "DIVERSOS"
+
+    valor = (
+
+        str(valor)
+
+        .strip()
+
+        .upper()
+    )
+
+    valor = (
+        MAPEAMENTO_PROCESSOS.get(
+            valor,
+            valor
+        )
+    )
+
+    return valor
+
+
+# ============================================================
+# 🔥 NORMALIZA NOMES DE COLUNAS DA PV
+# ============================================================
+
+df_pv.columns = [
+
+    normalizar_processo(col)
+
+    if col != "Processo"
+
+    else col
+
+    for col in df_pv.columns
+]
+
+
+# ============================================================
+# 🔥 PROCESSOS EXISTENTES NA PV
+# ============================================================
+
+processos = [
+
+    p
+
+    for p in PROCESSOS_VALIDOS
+
+    if p in df_pv.columns
+]
+
+
+# ============================================================
+# 🔥 CONVERSÃO NUMÉRICA DOS TEMPOS
+# ============================================================
+
 for proc in processos:
+
     df_pv[proc] = (
+
         df_pv[proc]
+
         .astype(str)
+
         .str.replace(",", ".", regex=False)
+
         .str.strip()
     )
-    df_pv[proc] = pd.to_numeric(df_pv[proc], errors="coerce").fillna(0)
+
+    df_pv[proc] = pd.to_numeric(
+
+        df_pv[proc],
+
+        errors="coerce"
+
+    ).fillna(0)
 
 
 # ===============================
