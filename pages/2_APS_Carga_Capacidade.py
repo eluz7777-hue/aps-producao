@@ -29,40 +29,133 @@ st.set_page_config(layout="wide")
 # ============================================================
 DB_PATH = "aps_baixas.db"
 
+
+# ============================================================
+# 🔥 CONEXÃO SQLITE
+# ============================================================
 def get_connection():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+    return sqlite3.connect(
+        DB_PATH,
+        check_same_thread=False
+    )
 
 
+# ============================================================
+# 🔥 INICIALIZAÇÃO BANCO APS
+# ============================================================
 def inicializar_banco():
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
+    # ========================================================
+    # 🔥 TABELA PRINCIPAL
+    # ========================================================
     cursor.execute("""
+
         CREATE TABLE IF NOT EXISTS baixas (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
             PV TEXT,
+
             Cliente TEXT,
+
             CODIGO_PV TEXT,
+
             Processo TEXT,
+
             Horas REAL,
+
+            Horas_Planejadas REAL,
+
             Data_Baixa TEXT,
+
             Usuario TEXT,
+
             Observacao TEXT,
+
             Status_Baixa TEXT,
+
             Data_Estorno TEXT,
+
             Motivo_Estorno TEXT,
+
             CHAVE_OPERACAO TEXT
         )
+
     """)
 
+    # ========================================================
+    # 🔥 GARANTE COLUNA EM BANCOS ANTIGOS
+    # ========================================================
+    cursor.execute("""
+
+        PRAGMA table_info(baixas)
+
+    """)
+
+    colunas_existentes = [
+
+        row[1]
+
+        for row in cursor.fetchall()
+    ]
+
+    # --------------------------------------------------------
+    # 🔥 HORAS PLANEJADAS
+    # --------------------------------------------------------
+    if "Horas_Planejadas" not in colunas_existentes:
+
+        cursor.execute("""
+
+            ALTER TABLE baixas
+
+            ADD COLUMN Horas_Planejadas REAL
+
+        """)
+
+    # ========================================================
+    # 🔥 ÍNDICES PERFORMANCE APS
+    # ========================================================
+    cursor.execute("""
+
+        CREATE INDEX IF NOT EXISTS idx_baixas_chave
+
+        ON baixas (CHAVE_OPERACAO)
+
+    """)
+
+    cursor.execute("""
+
+        CREATE INDEX IF NOT EXISTS idx_baixas_status
+
+        ON baixas (Status_Baixa)
+
+    """)
+
+    cursor.execute("""
+
+        CREATE INDEX IF NOT EXISTS idx_baixas_data
+
+        ON baixas (Data_Baixa)
+
+    """)
+
+    # ========================================================
+    # 🔥 COMMIT
+    # ========================================================
     conn.commit()
+
     conn.close()
 
 
-# 🔥 EXECUTA NA INICIALIZAÇÃO
+# ============================================================
+# 🔥 EXECUÇÃO AUTOMÁTICA APS
+# ============================================================
 inicializar_banco()
-
 
 
 
@@ -275,7 +368,6 @@ def salvar_baixa_sqlite(nova_baixa):
 
         cursor = conn.cursor()
 
-
         # ====================================================
         # 🔥 NORMALIZAÇÃO TOTAL
         # ====================================================
@@ -291,7 +383,10 @@ def salvar_baixa_sqlite(nova_baixa):
             nova_baixa.get("CODIGO_PV", "")
         )
 
-        processo = _norm(
+        # ----------------------------------------------------
+        # 🔥 PROCESSO NORMALIZADO APS
+        # ----------------------------------------------------
+        processo = normalizar_processo(
             nova_baixa.get("Processo", "")
         )
 
@@ -315,7 +410,6 @@ def salvar_baixa_sqlite(nova_baixa):
             nova_baixa.get("CHAVE_OPERACAO", "")
         ).strip()
 
-
         # ====================================================
         # 🔥 HORAS SEGURAS
         # ====================================================
@@ -329,14 +423,12 @@ def salvar_baixa_sqlite(nova_baixa):
 
         horas = float(horas)
 
-
         # ====================================================
         # 🔥 DATA BAIXA REAL
         # ====================================================
         data_baixa = nova_baixa.get(
             "Data_Baixa"
         )
-
 
         # ----------------------------------------------------
         # datetime
@@ -393,7 +485,6 @@ def salvar_baixa_sqlite(nova_baixa):
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-
         # ====================================================
         # 🔥 DATA ESTORNO
         # ====================================================
@@ -438,6 +529,23 @@ def salvar_baixa_sqlite(nova_baixa):
 
                 data_estorno = ""
 
+        # ====================================================
+        # 🔒 CHAVE OPERACIONAL
+        # ====================================================
+        if chave_operacao.strip() == "":
+
+            chave_operacao = (
+
+                pv
+
+                + "||"
+
+                + processo
+
+                + "||"
+
+                + codigo_pv
+            )
 
         # ====================================================
         # 🔒 BLOQUEIO DUPLICIDADE
@@ -465,7 +573,6 @@ def salvar_baixa_sqlite(nova_baixa):
             horas_existentes
         )
 
-
         # ====================================================
         # 🔥 BASE OPERACIONAL
         # ====================================================
@@ -474,6 +581,7 @@ def salvar_baixa_sqlite(nova_baixa):
         try:
 
             base_oper = df_operacional[
+
                 df_operacional[
                     "CHAVE_OPERACAO"
                 ] == chave_operacao
@@ -482,7 +590,9 @@ def salvar_baixa_sqlite(nova_baixa):
             if not base_oper.empty:
 
                 horas_planejadas = pd.to_numeric(
+
                     base_oper.iloc[0]["Horas"],
+
                     errors="coerce"
                 )
 
@@ -497,13 +607,47 @@ def salvar_baixa_sqlite(nova_baixa):
 
             horas_planejadas = 0
 
+        # ====================================================
+        # 🔒 BLINDAGEM INDUSTRIAL
+        # ====================================================
+        if horas_planejadas <= 0:
 
+            cursor.execute("""
+
+                SELECT
+                    COALESCE(MAX(Horas_Planejadas), 0)
+
+                FROM baixas
+
+                WHERE CHAVE_OPERACAO = ?
+
+            """, (chave_operacao,))
+
+            horas_antigas = cursor.fetchone()[0]
+
+            if horas_antigas is None:
+                horas_antigas = 0
+
+            horas_antigas = float(
+                horas_antigas
+            )
+
+            horas_planejadas = max(
+                horas_antigas,
+                horas_existentes
+            )
+
+        # ====================================================
+        # 🔥 SALDO RESTANTE
+        # ====================================================
         saldo_restante = max(
-            horas_planejadas -
-            horas_existentes,
+
+            horas_planejadas
+
+            - horas_existentes,
+
             0
         )
-
 
         # ====================================================
         # 🔒 EVITA DUPLICIDADE
@@ -517,7 +661,6 @@ def salvar_baixa_sqlite(nova_baixa):
                 "erro": "Operação já totalmente baixada"
             }
 
-
         # ====================================================
         # 🔥 AJUSTA HORAS
         # ====================================================
@@ -525,7 +668,6 @@ def salvar_baixa_sqlite(nova_baixa):
             horas,
             saldo_restante
         )
-
 
         # ====================================================
         # 💾 INSERT SQLITE
@@ -539,6 +681,7 @@ def salvar_baixa_sqlite(nova_baixa):
                 CODIGO_PV,
                 Processo,
                 Horas,
+                Horas_Planejadas,
                 Data_Baixa,
                 Usuario,
                 Observacao,
@@ -549,7 +692,7 @@ def salvar_baixa_sqlite(nova_baixa):
 
             )
 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 
         """, (
 
@@ -558,6 +701,7 @@ def salvar_baixa_sqlite(nova_baixa):
             codigo_pv,
             processo,
             horas,
+            horas_planejadas,
             data_baixa,
             usuario,
             observacao,
@@ -568,16 +712,16 @@ def salvar_baixa_sqlite(nova_baixa):
 
         ))
 
-
+        # ====================================================
+        # 🔥 COMMIT OFICIAL
+        # ====================================================
         conn.commit()
 
         conn.close()
 
-
         return {
             "ok": True
         }
-
 
     except Exception as e:
 
@@ -590,7 +734,6 @@ def salvar_baixa_sqlite(nova_baixa):
             "ok": False,
             "erro": str(e)
         }
-
 
 
 # ============================================================
