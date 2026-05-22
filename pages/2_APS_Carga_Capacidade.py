@@ -1796,168 +1796,440 @@ for proc in processos:
 
 # ===============================
 # EXPANSÃO CORRIGIDA (SEM ERRO)
+# 🔥 VERSÃO DEFINITIVA APS
+# 🔥 CHAVE_OPERACAO INTEGRADA
 # ===============================
 pvs_totais_excel = df_pv["PV"].astype(str).str.strip().nunique()
-pvs_excel_set = set(df_pv["PV"].astype(str).str.strip().unique())
+
+pvs_excel_set = set(
+    df_pv["PV"]
+    .astype(str)
+    .str.strip()
+    .unique()
+)
 
 linhas = []
+
 pvs_excluidas = []
+
 pvs_sem_carga = []
+
 auditoria_pv = []
 
 for _, row in df_pv.iterrows():
 
-    pv_atual = str(row["PV"]).strip()
-    cliente_atual = row.get("CLIENTE", "SEM CLIENTE")
-    codigo_atual = row["CODIGO_PV"]
+    pv_atual = str(
+        row["PV"]
+    ).strip()
+
+    cliente_atual = row.get(
+        "CLIENTE",
+        "SEM CLIENTE"
+    )
+
+    codigo_atual = str(
+        row["CODIGO_PV"]
+    ).strip()
 
     status_pv = "OK"
+
     qtde_processos_validos = 0
+
     horas_totais_pv = 0
+
     motivos_pv = []
+
     tempos_debug = []
 
     # -------------------------------
     # Validações básicas
     # -------------------------------
-    data_valida = not pd.isna(row["ENTREGA"])
-    qtd_valida = pd.notna(row["QTD"]) and float(row["QTD"]) > 0
+    data_valida = not pd.isna(
+        row["ENTREGA"]
+    )
+
+    qtd_valida = (
+
+        pd.notna(row["QTD"])
+
+        and
+
+        float(row["QTD"]) > 0
+    )
 
     if not data_valida:
-        motivos_pv.append("Data de entrega inválida")
+
+        motivos_pv.append(
+            "Data de entrega inválida"
+        )
 
     if not qtd_valida:
-        motivos_pv.append("Quantidade zero ou inválida")
 
-    # Se data ou quantidade estiverem inválidas, não tenta expandir processo
+        motivos_pv.append(
+            "Quantidade zero ou inválida"
+        )
+
+    # --------------------------------------------------------
+    # 🔒 DATA/QTD INVÁLIDA
+    # --------------------------------------------------------
     if not data_valida or not qtd_valida:
+
         status_pv = "Inconsistente"
 
         registro = {
+
             "PV": pv_atual,
+
             "Cliente": cliente_atual,
+
             "CODIGO": codigo_atual,
+
             "CODIGO_PV": codigo_atual,
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
-            "Motivo": " | ".join(motivos_pv)
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
+            "Motivo": " | ".join(
+                motivos_pv
+            )
         }
 
-        pvs_excluidas.append(registro)
-        pvs_sem_carga.append(registro)
+        pvs_excluidas.append(
+            registro
+        )
+
+        pvs_sem_carga.append(
+            registro
+        )
 
         auditoria_pv.append({
+
             "PV": pv_atual,
+
             "Cliente": cliente_atual,
+
             "CODIGO": codigo_atual,
+
             "CODIGO_PV": codigo_atual,
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
             "Status": status_pv,
+
             "Qtd": row["QTD"],
+
             "Total Processos Válidos": 0,
+
             "Horas Totais": 0,
-            "Motivo": " | ".join(motivos_pv)
+
+            "Motivo": " | ".join(
+                motivos_pv
+            )
         })
+
         continue
 
-    # -------------------------------
-    # Expansão dos processos válidos
-    # -------------------------------
+    # --------------------------------------------------------
+    # 🔥 EXPANSÃO DOS PROCESSOS
+    # --------------------------------------------------------
     for proc in processos:
+
         valor_original = row.get(proc)
-        tempo = pd.to_numeric(valor_original, errors="coerce")
+
+        tempo = pd.to_numeric(
+            valor_original,
+            errors="coerce"
+        )
 
         if pd.notna(tempo) and tempo > 0:
+
             qtde_processos_validos += 1
 
-            horas = (tempo * float(row["QTD"])) / 60
+            # ------------------------------------------------
+            # 🔥 HORAS OPERACIONAIS
+            # ------------------------------------------------
+            horas = (
+
+                tempo
+
+                * float(row["QTD"])
+
+            ) / 60
+
             horas_totais_pv += horas
 
-            linhas.append({
-                "PV": pv_atual,
-                "Cliente": cliente_atual,
-                "CODIGO_PV": codigo_atual,
-                "Processo": proc,
-                "Data": row["ENTREGA"],
-                "ENTREGA": row["ENTREGA"],
-                "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", row["ENTREGA"]),
-                "Horas": horas
-            })
-        else:
-            tempos_debug.append(f"{proc}={valor_original}")
+            # ------------------------------------------------
+            # 🔥 PROCESSO NORMALIZADO
+            # ------------------------------------------------
+            processo_normalizado = (
+                normalizar_processo(proc)
+            )
 
-    # -------------------------------
-    # Se não teve nenhum processo válido
-    # -------------------------------
+            # ------------------------------------------------
+            # 🔥 CHAVE OPERACIONAL APS
+            # ------------------------------------------------
+            chave_operacao = (
+
+                str(pv_atual)
+
+                .strip()
+
+                .upper()
+
+                + "||"
+
+                + str(
+                    processo_normalizado
+                )
+
+                .strip()
+
+                .upper()
+
+                + "||"
+
+                + str(codigo_atual)
+
+                .strip()
+
+                .upper()
+            )
+
+            # ------------------------------------------------
+            # 🔥 REGISTRO OPERACIONAL
+            # ------------------------------------------------
+            linhas.append({
+
+                "PV": pv_atual,
+
+                "Cliente": cliente_atual,
+
+                "CODIGO_PV": codigo_atual,
+
+                "Processo": processo_normalizado,
+
+                "Data": row["ENTREGA"],
+
+                "ENTREGA": row["ENTREGA"],
+
+                "DATA_ENTREGA_APS": row.get(
+                    "DATA_ENTREGA_APS",
+                    row["ENTREGA"]
+                ),
+
+                "Horas": horas,
+
+                # =============================================
+                # 🔥 CHAVE OPERACIONAL OFICIAL APS
+                # =============================================
+                "CHAVE_OPERACAO": chave_operacao
+            })
+
+        else:
+
+            tempos_debug.append(
+                f"{proc}={valor_original}"
+            )
+
+    # --------------------------------------------------------
+    # 🔒 SEM PROCESSOS VÁLIDOS
+    # --------------------------------------------------------
     if qtde_processos_validos == 0:
+
         status_pv = "Sem processo válido"
 
-        motivo_sem_processo = "Nenhum processo com tempo > 0"
+        motivo_sem_processo = (
+            "Nenhum processo com tempo > 0"
+        )
+
         if tempos_debug:
-            motivo_sem_processo += " | " + " ; ".join(tempos_debug[:10])
+
+            motivo_sem_processo += (
+
+                " | "
+
+                + " ; ".join(
+                    tempos_debug[:10]
+                )
+            )
 
         registro = {
+
             "PV": pv_atual,
+
             "Cliente": cliente_atual,
+
             "CODIGO": codigo_atual,
+
             "CODIGO_PV": codigo_atual,
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
             "Motivo": motivo_sem_processo
         }
 
-        pvs_excluidas.append(registro)
-        pvs_sem_carga.append(registro)
+        pvs_excluidas.append(
+            registro
+        )
+
+        pvs_sem_carga.append(
+            registro
+        )
 
         auditoria_pv.append({
+
             "PV": pv_atual,
+
             "Cliente": cliente_atual,
+
             "CODIGO": codigo_atual,
+
             "CODIGO_PV": codigo_atual,
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
             "Status": status_pv,
+
             "Qtd": row["QTD"],
+
             "Total Processos Válidos": 0,
+
             "Horas Totais": 0,
+
             "Motivo": motivo_sem_processo
         })
+
     else:
+
         auditoria_pv.append({
+
             "PV": pv_atual,
+
             "Cliente": cliente_atual,
+
             "CODIGO": codigo_atual,
+
             "CODIGO_PV": codigo_atual,
-            "DATA_ENTREGA_APS": row.get("DATA_ENTREGA_APS", pd.NaT),
+
+            "DATA_ENTREGA_APS": row.get(
+                "DATA_ENTREGA_APS",
+                pd.NaT
+            ),
+
             "Status": status_pv,
+
             "Qtd": row["QTD"],
-            "Total Processos Válidos": qtde_processos_validos,
-            "Horas Totais": horas_totais_pv,
+
+            "Total Processos Válidos": (
+                qtde_processos_validos
+            ),
+
+            "Horas Totais": (
+                horas_totais_pv
+            ),
+
             "Motivo": ""
         })
 
-# Base principal de carga
-df_original = pd.DataFrame(linhas)
+# ============================================================
+# 🔥 BASE PRINCIPAL OPERACIONAL APS
+# ============================================================
+df_original = pd.DataFrame(
+    linhas
+)
 
-# Blindagem de colunas críticas
+# ============================================================
+# 🔥 BLINDAGEM DE COLUNAS CRÍTICAS
+# ============================================================
 if not df_original.empty:
+
+    # --------------------------------------------------------
+    # 🔥 DATA_ENTREGA_APS
+    # --------------------------------------------------------
     if "DATA_ENTREGA_APS" in df_original.columns:
-        df_original["DATA_ENTREGA_APS"] = pd.to_datetime(
-            df_original["DATA_ENTREGA_APS"],
+
+        df_original[
+            "DATA_ENTREGA_APS"
+        ] = pd.to_datetime(
+
+            df_original[
+                "DATA_ENTREGA_APS"
+            ],
+
             errors="coerce",
+
             dayfirst=True
         )
 
+    # --------------------------------------------------------
+    # 🔥 ENTREGA
+    # --------------------------------------------------------
     if "ENTREGA" in df_original.columns:
-        df_original["ENTREGA"] = pd.to_datetime(
-            df_original["ENTREGA"],
+
+        df_original[
+            "ENTREGA"
+        ] = pd.to_datetime(
+
+            df_original[
+                "ENTREGA"
+            ],
+
             errors="coerce",
+
             dayfirst=True
         )
 
+    # --------------------------------------------------------
+    # 🔥 DATA
+    # --------------------------------------------------------
     if "Data" in df_original.columns:
-        df_original["Data"] = pd.to_datetime(
-            df_original["Data"],
+
+        df_original[
+            "Data"
+        ] = pd.to_datetime(
+
+            df_original[
+                "Data"
+            ],
+
             errors="coerce",
+
             dayfirst=True
         )
+
+    # --------------------------------------------------------
+    # 🔥 NORMALIZA CHAVE FINAL
+    # --------------------------------------------------------
+    if "CHAVE_OPERACAO" in df_original.columns:
+
+        df_original[
+            "CHAVE_OPERACAO"
+        ] = (
+
+            df_original[
+                "CHAVE_OPERACAO"
+            ]
+
+            .fillna("")
+
+            .astype(str)
+
+            .str.upper()
+
+            .str.strip()
+        )
+
 
 
 
