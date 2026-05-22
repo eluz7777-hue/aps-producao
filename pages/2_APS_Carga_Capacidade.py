@@ -296,6 +296,43 @@ def carregar_baixas_postgresql():
         )
 
         # ====================================================
+        # 🔥 GARANTE COLUNAS PADRÃO APS
+        # ====================================================
+        for col in [
+
+            "id",
+            "PV",
+            "Cliente",
+            "CODIGO_PV",
+            "Processo",
+            "Horas",
+            "Horas_Planejadas",
+            "Data_Baixa",
+            "Usuario",
+            "Observacao",
+            "Status_Baixa",
+            "Data_Estorno",
+            "Motivo_Estorno",
+            "CHAVE_OPERACAO"
+
+        ]:
+
+            if col not in df.columns:
+
+                if col in [
+
+                    "Horas",
+                    "Horas_Planejadas"
+
+                ]:
+
+                    df[col] = 0
+
+                else:
+
+                    df[col] = ""
+
+        # ====================================================
         # 🔒 SEM DADOS
         # ====================================================
         if df is None or df.empty:
@@ -339,6 +376,19 @@ def carregar_baixas_postgresql():
 
                 .str.upper()
             )
+
+        # ====================================================
+        # 🔥 CONVERSÕES NUMÉRICAS
+        # ====================================================
+        df["Horas"] = pd.to_numeric(
+            df["Horas"],
+            errors="coerce"
+        ).fillna(0)
+
+        df["Horas_Planejadas"] = pd.to_numeric(
+            df["Horas_Planejadas"],
+            errors="coerce"
+        ).fillna(0)
 
         # ====================================================
         # 🔥 RECUPERA CHAVES ANTIGAS
@@ -392,23 +442,25 @@ def carregar_baixas_postgresql():
                         mascara_chave_vazia
                     ].iterrows():
 
-                        trans_conn.execute(
+                        if str(row["id"]).strip() != "":
 
-                            text("""
+                            trans_conn.execute(
 
-                                UPDATE baixas
+                                text("""
 
-                                SET CHAVE_OPERACAO = :chave
+                                    UPDATE baixas
 
-                                WHERE id = :id
+                                    SET CHAVE_OPERACAO = :chave
 
-                            """),
+                                    WHERE id = :id
 
-                            {
-                                "chave": row["CHAVE_OPERACAO"],
-                                "id": int(row["id"])
-                            }
-                        )
+                                """),
+
+                                {
+                                    "chave": row["CHAVE_OPERACAO"],
+                                    "id": int(row["id"])
+                                }
+                            )
 
             except Exception as e:
 
@@ -451,7 +503,7 @@ def carregar_baixas_postgresql():
                 ascending=[
                     False,
                     True,
-                    True
+                   True
                 ]
             )
 
