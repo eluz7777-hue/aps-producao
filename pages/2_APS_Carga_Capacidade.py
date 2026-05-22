@@ -6620,8 +6620,9 @@ else:
 
             + "||"
 
-            + base_corte["Processo"]
-            .astype(str)
+            + normalizar_processo(
+                base_corte["Processo"]
+            ).astype(str)
 
             + "||"
 
@@ -6660,10 +6661,12 @@ else:
 
                 + "||"
 
-                + base_corte.loc[
-                    mascara_chave_vazia,
-                    "Processo"
-                ].astype(str)
+                + normalizar_processo(
+                    base_corte.loc[
+                        mascara_chave_vazia,
+                        "Processo"
+                    ]
+                ).astype(str)
 
                 + "||"
 
@@ -6672,6 +6675,23 @@ else:
                     "CODIGO_PV"
                 ].astype(str)
             )
+
+
+    # ========================================================
+    # 🔥 NORMALIZA CHAVE FINAL
+    # ========================================================
+    base_corte["CHAVE_OPERACAO"] = (
+
+        base_corte["CHAVE_OPERACAO"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.upper()
+
+        .str.strip()
+    )
 
 
     # ========================================================
@@ -6714,12 +6734,6 @@ else:
 
     if "reset_corte_lote" not in st.session_state:
         st.session_state["reset_corte_lote"] = False
-
-    if "lock_baixa_unitaria" not in st.session_state:
-        st.session_state["lock_baixa_unitaria"] = False
-
-    if "lock_baixa_lote" not in st.session_state:
-        st.session_state["lock_baixa_lote"] = False
 
 
     # ========================================================
@@ -6781,32 +6795,12 @@ else:
             key="btn_corte_unitario"
         ):
 
-            # =================================================
-            # 🔒 LOCK DUPLO CLIQUE
-            # =================================================
-            if st.session_state["lock_baixa_unitaria"]:
-
-                st.warning(
-                    "⚠️ Baixa já em processamento"
-                )
-
-                st.stop()
-
-            st.session_state[
-                "lock_baixa_unitaria"
-            ] = True
-
-
             # 🔒 BLOQUEIA ZERADOS
             if saldo_real <= 0:
 
                 st.warning(
                     "⚠️ Operação já totalmente baixada"
                 )
-
-                st.session_state[
-                    "lock_baixa_unitaria"
-                ] = False
 
                 st.stop()
 
@@ -6830,6 +6824,14 @@ else:
                     .astype(str)
                     .str.strip()
                     .str.upper()
+                )
+
+                df_baixas_atual["CHAVE_OPERACAO"] = (
+                    df_baixas_atual["CHAVE_OPERACAO"]
+                    .fillna("")
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
                 )
 
                 df_baixas_validas = (
@@ -6879,10 +6881,6 @@ else:
                 st.warning(
                     "⚠️ Operação já totalmente baixada"
                 )
-
-                st.session_state[
-                    "lock_baixa_unitaria"
-                ] = False
 
                 st.stop()
 
@@ -6943,11 +6941,6 @@ else:
             )
 
 
-            st.session_state[
-                "lock_baixa_unitaria"
-            ] = False
-
-
             if resultado.get("ok"):
 
                 st.session_state[
@@ -6991,22 +6984,6 @@ else:
             key="btn_corte_lote"
         ):
 
-            # =================================================
-            # 🔒 LOCK DUPLO CLIQUE
-            # =================================================
-            if st.session_state["lock_baixa_lote"]:
-
-                st.warning(
-                    "⚠️ Lote já em processamento"
-                )
-
-                st.stop()
-
-            st.session_state[
-                "lock_baixa_lote"
-            ] = True
-
-
             sucessos = []
             erros = []
 
@@ -7030,6 +7007,14 @@ else:
                     .astype(str)
                     .str.strip()
                     .str.upper()
+                )
+
+                df_baixas_atual["CHAVE_OPERACAO"] = (
+                    df_baixas_atual["CHAVE_OPERACAO"]
+                    .fillna("")
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
                 )
 
                 df_baixas_validas = (
@@ -7155,11 +7140,6 @@ else:
                 else:
 
                     erros.append(label)
-
-
-            st.session_state[
-                "lock_baixa_lote"
-            ] = False
 
 
             # =================================================
