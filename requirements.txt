@@ -3,7 +3,8 @@ pandas
 numpy
 plotly
 sqlalchemy
-mysql-connector-python
+psycopg2-binary
+supabase
 openpyxl
 holidays
 python-docx

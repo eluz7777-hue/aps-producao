@@ -18,170 +18,236 @@ import time
 import holidays
 import math
 import shutil
-import sqlite3
+
+# ============================================================
+# 🔥 REMOVIDO SQLITE
+# ============================================================
+
+from sqlalchemy import (
+    create_engine,
+    text
+)
+
+from sqlalchemy.exc import (
+    SQLAlchemyError
+)
+
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 st.set_page_config(layout="wide")
 
 
+
 # ============================================================
-# 🔥 SQLITE - BANCO OFICIAL APS
+# 🔥 POSTGRESQL SUPABASE - BANCO OFICIAL APS
 # ============================================================
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
+# ------------------------------------------------------------
+# 🔒 CONFIGURAÇÕES SEGURAS STREAMLIT
+# ------------------------------------------------------------
+SUPABASE_HOST = st.secrets["SUPABASE_HOST"]
+
+SUPABASE_PORT = st.secrets["SUPABASE_PORT"]
+
+SUPABASE_DB = st.secrets["SUPABASE_DB"]
+
+SUPABASE_USER = st.secrets["SUPABASE_USER"]
+
+SUPABASE_PASSWORD = st.secrets["SUPABASE_PASSWORD"]
+
+
+# ------------------------------------------------------------
+# 🔥 DATABASE URL APS
+# ------------------------------------------------------------
+DATABASE_URL = (
+
+    f"postgresql+psycopg2://"
+
+    f"{SUPABASE_USER}:"
+
+    f"{SUPABASE_PASSWORD}@"
+
+    f"{SUPABASE_HOST}:"
+
+    f"{SUPABASE_PORT}/"
+
+    f"{SUPABASE_DB}"
 )
 
-DB_DIR = os.path.join(
-    BASE_DIR,
-    "database"
-)
 
 # ============================================================
-# 🔥 GARANTE PASTA DATABASE
+# 🔥 ENGINE GLOBAL APS
 # ============================================================
-os.makedirs(
-    DB_DIR,
-    exist_ok=True
-)
+engine = create_engine(
 
-# ============================================================
-# 🔥 CAMINHO FIXO SQLITE
-# ============================================================
-DB_PATH = os.path.join(
-    DB_DIR,
-    "aps_baixas.db"
-)
+    DATABASE_URL,
 
-# ============================================================
-# 🔥 DEBUG CAMINHO REAL
-# ============================================================
-st.warning(
-    f"SQLite oficial: {DB_PATH}"
+    pool_pre_ping=True,
+
+    pool_size=10,
+
+    max_overflow=20,
+
+    pool_recycle=1800,
+
+    pool_timeout=30
 )
 
 
+# ============================================================
+# 🔥 TESTE VISUAL APS
+# ============================================================
+try:
+
+    with engine.connect() as conn:
+
+        conn.execute(
+            text("SELECT 1")
+        )
+
+    st.success(
+        "✅ PostgreSQL Supabase conectado"
+    )
+
+except Exception as e:
+
+    st.error(
+        f"❌ Erro conexão PostgreSQL: {e}"
+    )
+
+    st.stop()
+
 
 # ============================================================
-# 🔥 CONEXÃO SQLITE
+# 🔥 CONEXÃO GLOBAL APS
 # ============================================================
 def get_connection():
 
-    return sqlite3.connect(
-        DB_PATH,
-        check_same_thread=False
-    )
+    return engine.connect()
+
 
 
 # ============================================================
-# 🔥 INICIALIZAÇÃO BANCO APS
+# 🔥 INICIALIZAÇÃO BANCO APS POSTGRESQL
 # ============================================================
 def inicializar_banco():
 
-    conn = get_connection()
+    conn = None
 
-    cursor = conn.cursor()
+    try:
 
-    # ========================================================
-    # 🔥 TABELA PRINCIPAL
-    # ========================================================
-    cursor.execute("""
+        # ====================================================
+        # 🔥 CONEXÃO
+        # ====================================================
+        conn = engine.connect()
 
-        CREATE TABLE IF NOT EXISTS baixas (
+        # ====================================================
+        # 🔥 TRANSAÇÃO
+        # ====================================================
+        trans = conn.begin()
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        # ====================================================
+        # 🔥 TABELA PRINCIPAL APS
+        # ====================================================
+        conn.execute(text("""
 
-            PV TEXT,
+            CREATE TABLE IF NOT EXISTS baixas (
 
-            Cliente TEXT,
+                id SERIAL PRIMARY KEY,
 
-            CODIGO_PV TEXT,
+                PV TEXT,
 
-            Processo TEXT,
+                Cliente TEXT,
 
-            Horas REAL,
+                CODIGO_PV TEXT,
 
-            Horas_Planejadas REAL,
+                Processo TEXT,
 
-            Data_Baixa TEXT,
+                Horas DOUBLE PRECISION,
 
-            Usuario TEXT,
+                Horas_Planejadas DOUBLE PRECISION,
 
-            Observacao TEXT,
+                Data_Baixa TIMESTAMP,
 
-            Status_Baixa TEXT,
+                Usuario TEXT,
 
-            Data_Estorno TEXT,
+                Observacao TEXT,
 
-            Motivo_Estorno TEXT,
+                Status_Baixa TEXT,
 
-            CHAVE_OPERACAO TEXT
+                Data_Estorno TEXT,
+
+                Motivo_Estorno TEXT,
+
+                CHAVE_OPERACAO TEXT
+
+            )
+
+        """))
+
+        # ====================================================
+        # 🔥 ÍNDICES PERFORMANCE APS
+        # ====================================================
+        conn.execute(text("""
+
+            CREATE INDEX IF NOT EXISTS idx_baixas_chave
+
+            ON baixas (CHAVE_OPERACAO)
+
+        """))
+
+        conn.execute(text("""
+
+            CREATE INDEX IF NOT EXISTS idx_baixas_status
+
+            ON baixas (Status_Baixa)
+
+        """))
+
+        conn.execute(text("""
+
+            CREATE INDEX IF NOT EXISTS idx_baixas_data
+
+            ON baixas (Data_Baixa)
+
+        """))
+
+        # ====================================================
+        # 🔥 COMMIT
+        # ====================================================
+        trans.commit()
+
+        st.success(
+            "✅ Estrutura PostgreSQL inicializada"
         )
 
-    """)
+    except Exception as e:
 
-    # ========================================================
-    # 🔥 GARANTE COLUNA EM BANCOS ANTIGOS
-    # ========================================================
-    cursor.execute("""
+        try:
 
-        PRAGMA table_info(baixas)
+            trans.rollback()
 
-    """)
+        except:
+            pass
 
-    colunas_existentes = [
+        st.error(
+            f"❌ Erro inicialização PostgreSQL: {e}"
+        )
 
-        row[1]
+        st.stop()
 
-        for row in cursor.fetchall()
-    ]
+    finally:
 
-    # --------------------------------------------------------
-    # 🔥 HORAS PLANEJADAS
-    # --------------------------------------------------------
-    if "Horas_Planejadas" not in colunas_existentes:
+        try:
 
-        cursor.execute("""
+            conn.close()
 
-            ALTER TABLE baixas
+        except:
+            pass
 
-            ADD COLUMN Horas_Planejadas REAL
 
-        """)
 
-    # ========================================================
-    # 🔥 ÍNDICES PERFORMANCE APS
-    # ========================================================
-    cursor.execute("""
-
-        CREATE INDEX IF NOT EXISTS idx_baixas_chave
-
-        ON baixas (CHAVE_OPERACAO)
-
-    """)
-
-    cursor.execute("""
-
-        CREATE INDEX IF NOT EXISTS idx_baixas_status
-
-        ON baixas (Status_Baixa)
-
-    """)
-
-    cursor.execute("""
-
-        CREATE INDEX IF NOT EXISTS idx_baixas_data
-
-        ON baixas (Data_Baixa)
-
-    """)
-
-    # ========================================================
-    # 🔥 COMMIT
-    # ========================================================
-    conn.commit()
-
-    conn.close()
 
 
 # ============================================================
@@ -193,9 +259,9 @@ inicializar_banco()
 
 
 # ============================================================
-# 🔥 FUNÇÃO GLOBAL SQLITE (VERSÃO DEFINITIVA APS)
+# 🔥 FUNÇÃO GLOBAL POSTGRESQL (VERSÃO DEFINITIVA APS)
 # ============================================================
-def carregar_baixas_sqlite():
+def carregar_baixas_postgresql():
 
     conn = None
 
@@ -207,10 +273,18 @@ def carregar_baixas_sqlite():
         conn = get_connection()
 
         # ====================================================
-        # 🔥 LEITURA SQLITE
+        # 🔥 LEITURA POSTGRESQL
         # ====================================================
-        df = pd.read_sql_query(
-            "SELECT * FROM baixas",
+        df = pd.read_sql(
+
+            text("""
+
+                SELECT *
+
+                FROM baixas
+
+            """),
+
             conn
         )
 
@@ -301,21 +375,39 @@ def carregar_baixas_sqlite():
             )
 
             # ================================================
-            # 🔥 REGRAVA SQLITE RECUPERADO
+            # 🔥 ATUALIZA CHAVES RECUPERADAS
             # ================================================
             try:
 
-                df.to_sql(
-                    "baixas",
-                    conn,
-                    if_exists="replace",
-                    index=False
+                with engine.begin() as trans_conn:
+
+                    for _, row in df.loc[
+                        mascara_chave_vazia
+                    ].iterrows():
+
+                        trans_conn.execute(
+
+                            text("""
+
+                                UPDATE baixas
+
+                                SET CHAVE_OPERACAO = :chave
+
+                                WHERE id = :id
+
+                            """),
+
+                            {
+                                "chave": row["CHAVE_OPERACAO"],
+                                "id": int(row["id"])
+                            }
+                        )
+
+            except Exception as e:
+
+                st.warning(
+                    f"Erro atualização chaves PostgreSQL: {e}"
                 )
-
-                conn.commit()
-
-            except:
-                pass
 
         # ====================================================
         # 🔥 PADRONIZA
@@ -374,7 +466,7 @@ def carregar_baixas_sqlite():
             pass
 
         st.warning(
-            f"Erro SQLite baixas: {e}"
+            f"Erro PostgreSQL baixas: {e}"
         )
 
         return pd.DataFrame(
@@ -387,18 +479,27 @@ def carregar_baixas_sqlite():
 
 
 
+
 # ============================================================
-# 🔥 SALVAR BAIXA SQLITE (VERSÃO DEFINITIVA BLINDADA)
+# 🔥 SALVAR BAIXA POSTGRESQL (VERSÃO DEFINITIVA BLINDADA APS)
 # ============================================================
-def salvar_baixa_sqlite(nova_baixa):
+def salvar_baixa_postgresql(nova_baixa):
 
     conn = None
 
+    trans = None
+
     try:
 
+        # ====================================================
+        # 🔥 CONEXÃO
+        # ====================================================
         conn = get_connection()
 
-        cursor = conn.cursor()
+        # ====================================================
+        # 🔥 TRANSAÇÃO
+        # ====================================================
+        trans = conn.begin()
 
         # ====================================================
         # 🔥 NORMALIZAÇÃO TOTAL
@@ -582,21 +683,29 @@ def salvar_baixa_sqlite(nova_baixa):
         # ====================================================
         # 🔒 BLOQUEIO DUPLICIDADE
         # ====================================================
-        cursor.execute("""
+        resultado_existente = conn.execute(
 
-            SELECT
-                COALESCE(SUM(Horas), 0)
+            text("""
 
-            FROM baixas
+                SELECT
+                    COALESCE(SUM(Horas), 0)
 
-            WHERE CHAVE_OPERACAO = ?
+                FROM baixas
 
-            AND UPPER(Status_Baixa)
-            IN ('ATIVA', 'TERCEIRIZADA')
+                WHERE CHAVE_OPERACAO = :chave
 
-        """, (chave_operacao,))
+                AND UPPER(Status_Baixa)
+                IN ('ATIVA', 'TERCEIRIZADA')
 
-        horas_existentes = cursor.fetchone()[0]
+            """),
+
+            {
+                "chave": chave_operacao
+            }
+
+        ).fetchone()
+
+        horas_existentes = resultado_existente[0]
 
         if horas_existentes is None:
             horas_existentes = 0
@@ -644,18 +753,26 @@ def salvar_baixa_sqlite(nova_baixa):
         # ====================================================
         if horas_planejadas <= 0:
 
-            cursor.execute("""
+            resultado_planejado = conn.execute(
 
-                SELECT
-                    COALESCE(MAX(Horas_Planejadas), 0)
+                text("""
 
-                FROM baixas
+                    SELECT
+                        COALESCE(MAX(Horas_Planejadas), 0)
 
-                WHERE CHAVE_OPERACAO = ?
+                    FROM baixas
 
-            """, (chave_operacao,))
+                    WHERE CHAVE_OPERACAO = :chave
 
-            horas_antigas = cursor.fetchone()[0]
+                """),
+
+                {
+                    "chave": chave_operacao
+                }
+
+            ).fetchone()
+
+            horas_antigas = resultado_planejado[0]
 
             if horas_antigas is None:
                 horas_antigas = 0
@@ -702,52 +819,73 @@ def salvar_baixa_sqlite(nova_baixa):
         )
 
         # ====================================================
-        # 💾 INSERT SQLITE
+        # 💾 INSERT POSTGRESQL
         # ====================================================
-        cursor.execute("""
+        conn.execute(
 
-            INSERT INTO baixas (
+            text("""
 
-                PV,
-                Cliente,
-                CODIGO_PV,
-                Processo,
-                Horas,
-                Horas_Planejadas,
-                Data_Baixa,
-                Usuario,
-                Observacao,
-                Status_Baixa,
-                Data_Estorno,
-                Motivo_Estorno,
-                CHAVE_OPERACAO
+                INSERT INTO baixas (
 
-            )
+                    PV,
+                    Cliente,
+                    CODIGO_PV,
+                    Processo,
+                    Horas,
+                    Horas_Planejadas,
+                    Data_Baixa,
+                    Usuario,
+                    Observacao,
+                    Status_Baixa,
+                    Data_Estorno,
+                    Motivo_Estorno,
+                    CHAVE_OPERACAO
 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                )
 
-        """, (
+                VALUES (
 
-            pv,
-            cliente,
-            codigo_pv,
-            processo,
-            horas,
-            horas_planejadas,
-            data_baixa,
-            usuario,
-            observacao,
-            status_baixa,
-            data_estorno,
-            motivo_estorno,
-            chave_operacao
+                    :PV,
+                    :Cliente,
+                    :CODIGO_PV,
+                    :Processo,
+                    :Horas,
+                    :Horas_Planejadas,
+                    :Data_Baixa,
+                    :Usuario,
+                    :Observacao,
+                    :Status_Baixa,
+                    :Data_Estorno,
+                    :Motivo_Estorno,
+                    :CHAVE_OPERACAO
 
-        ))
+                )
+
+            """),
+
+            {
+
+                "PV": pv,
+                "Cliente": cliente,
+                "CODIGO_PV": codigo_pv,
+                "Processo": processo,
+                "Horas": horas,
+                "Horas_Planejadas": horas_planejadas,
+                "Data_Baixa": data_baixa,
+                "Usuario": usuario,
+                "Observacao": observacao,
+                "Status_Baixa": status_baixa,
+                "Data_Estorno": data_estorno,
+                "Motivo_Estorno": motivo_estorno,
+                "CHAVE_OPERACAO": chave_operacao
+
+            }
+        )
 
         # ====================================================
         # 🔥 COMMIT OFICIAL
         # ====================================================
-        conn.commit()
+        trans.commit()
 
         conn.close()
 
@@ -756,6 +894,11 @@ def salvar_baixa_sqlite(nova_baixa):
         }
 
     except Exception as e:
+
+        try:
+            trans.rollback()
+        except:
+            pass
 
         try:
             conn.close()
@@ -768,8 +911,11 @@ def salvar_baixa_sqlite(nova_baixa):
         }
 
 
+
+
 # ============================================================
 # 🔐 CONTROLE OFICIAL DE HISTÓRICO + BACKUP AUTOMÁTICO
+# 🔥 POSTGRESQL + EXCEL + BLINDAGEM APS
 # ============================================================
 
 PASTA_BACKUP_BAIXAS = "backup_baixas"
@@ -848,13 +994,15 @@ def _criar_backup():
 
 
 # ============================================================
-# 🔥 SALVA HISTÓRICO
+# 🔥 EXPORTAÇÃO OFICIAL HISTÓRICO APS
 # ============================================================
 def salvar_historico_baixas(df):
 
     """
-    🔴 ÚNICO PONTO OFICIAL
-    DE GRAVAÇÃO DO HISTÓRICO
+    🔴 EXPORTAÇÃO OFICIAL APS
+
+    PostgreSQL = banco oficial
+    Excel = backup/exportação operacional
     """
 
     try:
@@ -924,7 +1072,7 @@ def salvar_historico_baixas(df):
 
 
         # ====================================================
-        # 🔥 BACKUP
+        # 🔥 BACKUP LOCAL
         # ====================================================
         backup_ok, backup_msg = (
             _criar_backup()
@@ -932,7 +1080,7 @@ def salvar_historico_baixas(df):
 
 
         # ====================================================
-        # 🔥 SALVA EXCEL
+        # 🔥 EXPORTAÇÃO EXCEL
         # ====================================================
         df.to_excel(
             ARQUIVO_HISTORICO_BAIXAS,
@@ -941,7 +1089,7 @@ def salvar_historico_baixas(df):
 
 
         # ====================================================
-        # 🔥 VALIDA
+        # 🔥 VALIDA EXPORTAÇÃO
         # ====================================================
         if not os.path.exists(
             ARQUIVO_HISTORICO_BAIXAS
@@ -988,6 +1136,7 @@ def salvar_historico_baixas(df):
 
             "backup_msg": None
         }
+
 
 
 
@@ -2080,9 +2229,9 @@ else:
 # ============================================================
 
 # ------------------------------------------------------------
-# 🔥 LEITURA OFICIAL SQLITE APS
+# 🔥 LEITURA OFICIAL POSTGRESQL APS
 # ------------------------------------------------------------
-df_baixas = carregar_baixas_sqlite()
+df_baixas = carregar_baixas_postgresql()
 
 # ------------------------------------------------------------
 # 🔒 GARANTE PADRONIZAÇÃO
@@ -3773,7 +3922,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     # ========================================================
-    # 🔥 BASE DE BAIXAS ATIVAS (SQLITE)
+    # 🔥 BASE DE BAIXAS ATIVAS (POSTGRESQL)
     # ========================================================
     if (
         df_baixas_ativas is None
@@ -3939,6 +4088,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     )
 
     return df_dash
+
 
 # ============================================================
 # RESUMO DOS CARDS
@@ -5629,10 +5779,11 @@ col_k3.metric(
 
 
 # ============================================================
-# 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (SQLITE → OPERACIONAL)
+# 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (POSTGRESQL → OPERACIONAL)
 # ============================================================
 
-df_baixas = carregar_baixas_sqlite()
+df_baixas = carregar_baixas_postgresql()
+
 
 
 # ============================================================
@@ -5688,7 +5839,7 @@ if "CHAVE_OPERACAO" not in df_operacional.columns:
 
 
 # ============================================================
-# 🔥 GARANTE CHAVE SQLITE
+# 🔥 GARANTE CHAVE POSTGRESQL
 # ============================================================
 if "CHAVE_OPERACAO" not in df_baixas.columns:
 
@@ -5700,6 +5851,7 @@ if "CHAVE_OPERACAO" not in df_baixas.columns:
         + "||"
         + df_baixas["CODIGO_PV"]
     )
+
 
 
 # ============================================================
@@ -6268,13 +6420,14 @@ df_operacional["Status Operacional"] = np.where(
 
 
 # ============================================================
-# ✂️ BAIXAS DE CORTE (VERSÃO BLINDADA - SQLITE)
+# ✂️ BAIXAS DE CORTE (VERSÃO BLINDADA - POSTGRESQL)
 # ============================================================
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 st.markdown("### ⚡ Módulo de Corte — Baixa, Lote e Estorno")
+
 
 # ============================================================
 # 🔥 FUNÇÃO DE NORMALIZAÇÃO (PADRÃO GLOBAL)
@@ -6534,9 +6687,11 @@ else:
 
 
             # =================================================
-            # 🔥 RECARREGA SQLITE
+            # 🔥 RECARREGA POSTGRESQL
             # =================================================
-            df_baixas_atual = carregar_baixas_sqlite()
+            df_baixas_atual = (
+                carregar_baixas_postgresql()
+            )
 
             if not df_baixas_atual.empty:
 
@@ -6656,9 +6811,9 @@ else:
 
 
             # =================================================
-            # 💾 SALVA SQLITE
+            # 💾 SALVA POSTGRESQL
             # =================================================
-            resultado = salvar_baixa_sqlite(
+            resultado = salvar_baixa_postgresql(
                 nova_baixa
             )
 
@@ -6690,6 +6845,7 @@ else:
                 )
 
     st.divider()
+
 
 
     # ========================================================
@@ -6731,9 +6887,11 @@ else:
 
 
             # =================================================
-            # 🔥 RECARREGA SQLITE
+            # 🔥 RECARREGA POSTGRESQL
             # =================================================
-            df_baixas_atual = carregar_baixas_sqlite()
+            df_baixas_atual = (
+                carregar_baixas_postgresql()
+            )
 
             if not df_baixas_atual.empty:
 
@@ -6858,7 +7016,10 @@ else:
                 }
 
 
-                resultado = salvar_baixa_sqlite(
+                # =============================================
+                # 💾 SALVA POSTGRESQL
+                # =============================================
+                resultado = salvar_baixa_postgresql(
                     nova_baixa
                 )
 
@@ -6897,17 +7058,26 @@ else:
 
             st.rerun()
 
+
 # ============================================================
-# 🔥 FUNÇÃO LOCAL - CARREGAR BAIXAS SQLITE
+# 🔥 FUNÇÃO LOCAL - CARREGAR BAIXAS POSTGRESQL
 # ============================================================
-def carregar_baixas_sqlite_local():
+def carregar_baixas_postgresql_local():
 
     try:
 
         conn = get_connection()
 
-        df = pd.read_sql_query(
-            "SELECT * FROM baixas",
+        df = pd.read_sql(
+
+            text("""
+
+                SELECT *
+
+                FROM baixas
+
+            """),
+
             conn
         )
 
@@ -6933,7 +7103,7 @@ def carregar_baixas_sqlite_local():
 
 
 # =========================================================
-# 🔥 BASE REAL DO DASHBOARD DE CORTE (BLINDADO SQLITE)
+# 🔥 BASE REAL DO DASHBOARD DE CORTE (BLINDADO POSTGRESQL)
 # =========================================================
 
 st.markdown("## 📊 Dashboard do Corte")
@@ -7146,9 +7316,9 @@ fila_corte_dash = fila_corte_dash.reset_index(drop=True)
 
 
 # =========================================================
-# 🔥 HISTÓRICO SQLITE
+# 🔥 HISTÓRICO POSTGRESQL
 # =========================================================
-df_baixas = carregar_baixas_sqlite()
+df_baixas = carregar_baixas_postgresql()
 
 hist_corte_dash = df_baixas.copy()
 
@@ -7224,6 +7394,9 @@ else:
     qtd_baixadas_corte = 0
     horas_baixadas_corte = 0
     qtd_estornadas_corte = 0
+
+
+
 
 
 # =========================================================
@@ -7405,7 +7578,7 @@ st.divider()
 
 
 # ============================================================
-# =========== CONTROLE DOS GARGALOS (BLINDADO SQLITE REAL) ====
+# =========== CONTROLE DOS GARGALOS (BLINDADO POSTGRESQL REAL)
 # ============================================================
 
 # ============================================================
@@ -7436,6 +7609,7 @@ if "Saldo_Horas" not in df_operacional.columns:
             errors="coerce"
         ).fillna(0)
     )
+
 
 
 # ============================================================
@@ -7555,9 +7729,9 @@ for col in [
 
 
 # ============================================================
-# 🔥 HISTÓRICO SQLITE REAL
+# 🔥 HISTÓRICO POSTGRESQL REAL
 # ============================================================
-df_baixas_sql = carregar_baixas_sqlite()
+df_baixas_sql = carregar_baixas_postgresql()
 
 if not df_baixas_sql.empty:
 
@@ -7587,7 +7761,7 @@ else:
 
 
 # ============================================================
-# 🔥 AGREGAÇÃO REAL SQLITE
+# 🔥 AGREGAÇÃO REAL POSTGRESQL
 # ============================================================
 if not df_baixas_sql.empty:
 
@@ -7611,7 +7785,6 @@ else:
             "Horas_Baixadas"
         ]
     )
-
 
 # ============================================================
 # 🔥 REMOVE COLUNAS DUPLICADAS
@@ -7964,9 +8137,9 @@ else:
 
 
     # =================================================
-    # 🔥 RECARREGA SQLITE
+    # 🔥 RECARREGA POSTGRESQL
     # =================================================
-    df_baixas_atual = carregar_baixas_sqlite()
+    df_baixas_atual = carregar_baixas_postgresql()
 
     if not df_baixas_atual.empty:
 
@@ -8137,7 +8310,7 @@ else:
             }
 
 
-            resultado = salvar_baixa_sqlite(
+            resultado = salvar_baixa_postgresql(
                 nova_baixa
             )
 
@@ -8249,7 +8422,7 @@ else:
             }
 
 
-            resultado = salvar_baixa_sqlite(
+            resultado = salvar_baixa_postgresql(
                 nova_baixa
             )
 
@@ -8277,6 +8450,7 @@ else:
                 )
 
     st.divider()
+
 
 
     # =================================================
@@ -8411,7 +8585,7 @@ else:
                 }
 
 
-                resultado = salvar_baixa_sqlite(
+                resultado = salvar_baixa_postgresql(
                     nova_baixa
                 )
 
@@ -8456,16 +8630,16 @@ st.divider()
 
 
 # ============================================================
-# 🔥 MINI DASHBOARD POR GARGALO (SQLITE REAL)
+# 🔥 MINI DASHBOARD POR GARGALO (POSTGRESQL REAL)
 # ============================================================
 
 st.markdown("## 🔥 Mini Dashboard por Gargalo")
 
 
 # ============================================================
-# 🔥 BASE REAL DAS BAIXAS (SQLITE)
+# 🔥 BASE REAL DAS BAIXAS (POSTGRESQL)
 # ============================================================
-df_baixas_ativas = carregar_baixas_sqlite()
+df_baixas_ativas = carregar_baixas_postgresql()
 
 if df_baixas_ativas is None:
     df_baixas_ativas = pd.DataFrame()
@@ -8519,6 +8693,9 @@ if not df_baixas_ativas.empty:
 else:
 
     df_baixas_ativas = pd.DataFrame()
+
+
+
 
 
 # ============================================================
@@ -9010,23 +9187,40 @@ else:
 
 
 # ============================================================
-# 🧨 RESET TOTAL DAS BAIXAS SQLITE
+# 🧨 RESET TOTAL DAS BAIXAS POSTGRESQL
 # ============================================================
-st.markdown("## 🧨 RESET TOTAL SQLITE")
+st.markdown("## 🧨 RESET TOTAL POSTGRESQL")
 
 if st.button("🗑️ APAGAR TODAS AS BAIXAS"):
 
+    conn = None
+    trans = None
+
     try:
 
+        # ====================================================
+        # 🔥 CONEXÃO
+        # ====================================================
         conn = get_connection()
 
-        cursor = conn.cursor()
+        # ====================================================
+        # 🔥 TRANSAÇÃO
+        # ====================================================
+        trans = conn.begin()
 
-        cursor.execute(
-            "DELETE FROM baixas"
+        # ====================================================
+        # 🔥 DELETE TOTAL
+        # ====================================================
+        conn.execute(
+            text(
+                "DELETE FROM baixas"
+            )
         )
 
-        conn.commit()
+        # ====================================================
+        # 🔥 COMMIT
+        # ====================================================
+        trans.commit()
 
         conn.close()
 
@@ -9038,8 +9232,17 @@ if st.button("🗑️ APAGAR TODAS AS BAIXAS"):
 
     except Exception as e:
 
-        st.error(str(e))
+        try:
+            trans.rollback()
+        except:
+            pass
 
+        try:
+            conn.close()
+        except:
+            pass
+
+        st.error(str(e))
 
 
 
@@ -9059,9 +9262,10 @@ st.caption(
 
 
 # ============================================================
-# 🔥 BASE SQLITE REAL
+# 🔥 BASE POSTGRESQL REAL
 # ============================================================
-df_hist = carregar_baixas_sqlite()
+df_hist = carregar_baixas_postgresql()
+
 
 
 # ============================================================
