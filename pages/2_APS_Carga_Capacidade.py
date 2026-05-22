@@ -25,9 +25,41 @@ st.set_page_config(layout="wide")
 
 
 # ============================================================
-# 🔥 SQLITE - INICIALIZAÇÃO DO BANCO APS
+# 🔥 SQLITE - BANCO OFICIAL APS
 # ============================================================
-DB_PATH = "aps_baixas.db"
+
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+DB_DIR = os.path.join(
+    BASE_DIR,
+    "database"
+)
+
+# ============================================================
+# 🔥 GARANTE PASTA DATABASE
+# ============================================================
+os.makedirs(
+    DB_DIR,
+    exist_ok=True
+)
+
+# ============================================================
+# 🔥 CAMINHO FIXO SQLITE
+# ============================================================
+DB_PATH = os.path.join(
+    DB_DIR,
+    "aps_baixas.db"
+)
+
+# ============================================================
+# 🔥 DEBUG CAMINHO REAL
+# ============================================================
+st.warning(
+    f"SQLite oficial: {DB_PATH}"
+)
+
 
 
 # ============================================================
