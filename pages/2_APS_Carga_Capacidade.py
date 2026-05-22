@@ -611,6 +611,7 @@ def salvar_baixa_postgresql(nova_baixa):
         )
 
         if pd.isna(horas):
+
             horas = 0
 
         horas = float(horas)
@@ -740,6 +741,18 @@ def salvar_baixa_postgresql(nova_baixa):
             )
 
         # ====================================================
+        # 🔥 NORMALIZA CHAVE FINAL
+        # ====================================================
+        chave_operacao = (
+
+            str(chave_operacao)
+
+            .upper()
+
+            .strip()
+        )
+
+        # ====================================================
         # 🔒 BLOQUEIO DUPLICIDADE
         # ====================================================
         resultado_existente = conn.execute(
@@ -767,6 +780,7 @@ def salvar_baixa_postgresql(nova_baixa):
         horas_existentes = resultado_existente[0]
 
         if horas_existentes is None:
+
             horas_existentes = 0
 
         horas_existentes = float(
@@ -780,6 +794,46 @@ def salvar_baixa_postgresql(nova_baixa):
 
         try:
 
+            # ------------------------------------------------
+            # 🔥 GARANTE CHAVE OPERACIONAL APS
+            # ------------------------------------------------
+            if "CHAVE_OPERACAO" not in df_operacional.columns:
+
+                df_operacional["CHAVE_OPERACAO"] = (
+
+                    df_operacional["PV"]
+                    .astype(str)
+
+                    + "||"
+
+                    + df_operacional["Processo"]
+                    .astype(str)
+
+                    + "||"
+
+                    + df_operacional["CODIGO_PV"]
+                    .astype(str)
+                )
+
+            # ------------------------------------------------
+            # 🔥 NORMALIZA CHAVE
+            # ------------------------------------------------
+            df_operacional["CHAVE_OPERACAO"] = (
+
+                df_operacional["CHAVE_OPERACAO"]
+
+                .fillna("")
+
+                .astype(str)
+
+                .str.upper()
+
+                .str.strip()
+            )
+
+            # ------------------------------------------------
+            # 🔥 LOCALIZA OPERAÇÃO REAL
+            # ------------------------------------------------
             base_oper = df_operacional[
 
                 df_operacional[
@@ -797,6 +851,7 @@ def salvar_baixa_postgresql(nova_baixa):
                 )
 
                 if pd.isna(horas_planejadas):
+
                     horas_planejadas = 0
 
                 horas_planejadas = float(
@@ -834,6 +889,7 @@ def salvar_baixa_postgresql(nova_baixa):
             horas_antigas = resultado_planejado[0]
 
             if horas_antigas is None:
+
                 horas_antigas = 0
 
             horas_antigas = float(
@@ -842,7 +898,8 @@ def salvar_baixa_postgresql(nova_baixa):
 
             horas_planejadas = max(
                 horas_antigas,
-                horas_existentes
+                horas_existentes,
+                horas
             )
 
         # ====================================================
@@ -861,6 +918,11 @@ def salvar_baixa_postgresql(nova_baixa):
         # 🔒 EVITA DUPLICIDADE
         # ====================================================
         if saldo_restante <= 0:
+
+            try:
+                trans.rollback()
+            except:
+                pass
 
             conn.close()
 
@@ -968,6 +1030,7 @@ def salvar_baixa_postgresql(nova_baixa):
             "ok": False,
             "erro": str(e)
         }
+
 
 
 
