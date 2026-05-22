@@ -6911,7 +6911,7 @@ else:
                     linha["CODIGO_PV"]
                 ),
 
-                "Processo": _norm(
+                "Processo": normalizar_processo(
                     linha["Processo"]
                 ),
 
@@ -7119,7 +7119,7 @@ else:
                         linha["CODIGO_PV"]
                     ),
 
-                    "Processo": _norm(
+                    "Processo": normalizar_processo(
                         linha["Processo"]
                     ),
 
@@ -8414,7 +8414,7 @@ else:
                     linha["CODIGO_PV"]
                 ),
 
-                "Processo": _norm(
+                "Processo": normalizar_processo(
                     linha["Processo"]
                 ),
 
@@ -8526,7 +8526,7 @@ else:
                     linha["CODIGO_PV"]
                 ),
 
-                "Processo": _norm(
+                "Processo": normalizar_processo(
                     linha["Processo"]
                 ),
 
@@ -8689,7 +8689,7 @@ else:
                         linha["CODIGO_PV"]
                     ),
 
-                    "Processo": _norm(
+                    "Processo": normalizar_processo(
                         linha["Processo"]
                     ),
 
