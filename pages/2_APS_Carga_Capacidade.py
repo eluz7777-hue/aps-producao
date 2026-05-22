@@ -7144,7 +7144,7 @@ else:
                 # =============================================
                 # 💾 SALVA POSTGRESQL
                 # =============================================
-               resultado = salvar_baixa_postgresql(
+                resultado = salvar_baixa_postgresql(
                     nova_baixa
                 )
 
