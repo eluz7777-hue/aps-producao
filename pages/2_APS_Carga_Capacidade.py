@@ -1794,6 +1794,9 @@ for proc in processos:
     ).fillna(0)
 
 
+
+
+
 # ===============================
 # EXPANSÃO CORRIGIDA (SEM ERRO)
 # 🔥 VERSÃO DEFINITIVA APS
@@ -2011,6 +2014,9 @@ for _, row in df_pv.iterrows():
 
                 "CODIGO_PV": codigo_atual,
 
+                # =============================================
+                # 🔥 PROCESSO NORMALIZADO APS
+                # =============================================
                 "Processo": processo_normalizado,
 
                 "Data": row["ENTREGA"],
@@ -2209,6 +2215,28 @@ if not df_original.empty:
         )
 
     # --------------------------------------------------------
+    # 🔥 NORMALIZA PROCESSO FINAL
+    # --------------------------------------------------------
+    if "Processo" in df_original.columns:
+
+        df_original[
+            "Processo"
+        ] = (
+
+            df_original[
+                "Processo"
+            ]
+
+            .fillna("")
+
+            .astype(str)
+
+            .apply(
+                normalizar_processo
+            )
+        )
+
+    # --------------------------------------------------------
     # 🔥 NORMALIZA CHAVE FINAL
     # --------------------------------------------------------
     if "CHAVE_OPERACAO" in df_original.columns:
@@ -2229,6 +2257,13 @@ if not df_original.empty:
 
             .str.strip()
         )
+
+# ============================================================
+# 🔥 BASE OPERACIONAL OFICIAL APS
+# ============================================================
+df_operacional = df_original.copy()
+
+
 
 
 
