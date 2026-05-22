@@ -2266,8 +2266,6 @@ df_operacional = df_original.copy()
 
 
 
-
-
 # =============================== 
 # BAIXAS OPERACIONAIS APS
 # ===============================
@@ -2740,26 +2738,37 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
         .str.upper()
     )
 
-# ------------------------------------------------------------
-# 🔥 GARANTE CHAVE OPERACIONAL
-# ------------------------------------------------------------
-if "CHAVE_OPERACAO" not in df_planejamento.columns:
 
-    df_planejamento["CHAVE_OPERACAO"] = (
+df_planejamento["CHAVE_OPERACAO"] = (
 
-        df_planejamento.apply(
+    df_planejamento["PV"]
 
-            lambda r: normalizar_chave_operacao(
+    .astype(str)
 
-                r["PV"],
-                r["Processo"],
-                r["CODIGO_PV"]
+    .str.strip()
 
-            ),
+    .str.upper()
 
-            axis=1
-        )
-    )
+    + "||"
+
+    + df_planejamento["Processo"]
+
+    .astype(str)
+
+    .apply(normalizar_processo)
+
+    + "||"
+
+    + df_planejamento["CODIGO_PV"]
+
+    .astype(str)
+
+    .str.strip()
+
+    .str.upper()
+)
+
+
 
 # ------------------------------------------------------------
 # 🔥 HORAS PLANEJADAS
