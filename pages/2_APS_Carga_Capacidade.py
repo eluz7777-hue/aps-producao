@@ -6609,6 +6609,72 @@ if base_corte.empty:
 else:
 
     # ========================================================
+    # 🔥 GARANTE CHAVE OPERACIONAL
+    # ========================================================
+    if "CHAVE_OPERACAO" not in base_corte.columns:
+
+        base_corte["CHAVE_OPERACAO"] = (
+
+            base_corte["PV"]
+            .astype(str)
+
+            + "||"
+
+            + base_corte["Processo"]
+            .astype(str)
+
+            + "||"
+
+            + base_corte["CODIGO_PV"]
+            .astype(str)
+        )
+
+    else:
+
+        base_corte["CHAVE_OPERACAO"] = (
+
+            base_corte["CHAVE_OPERACAO"]
+
+            .fillna("")
+
+            .astype(str)
+
+            .str.strip()
+        )
+
+        mascara_chave_vazia = (
+            base_corte["CHAVE_OPERACAO"] == ""
+        )
+
+        if mascara_chave_vazia.any():
+
+            base_corte.loc[
+                mascara_chave_vazia,
+                "CHAVE_OPERACAO"
+            ] = (
+
+                base_corte.loc[
+                    mascara_chave_vazia,
+                    "PV"
+                ].astype(str)
+
+                + "||"
+
+                + base_corte.loc[
+                    mascara_chave_vazia,
+                    "Processo"
+                ].astype(str)
+
+                + "||"
+
+                + base_corte.loc[
+                    mascara_chave_vazia,
+                    "CODIGO_PV"
+                ].astype(str)
+            )
+
+
+    # ========================================================
     # 🔥 LABEL VISUAL
     # ========================================================
     base_corte["LABEL"] = (
@@ -7078,7 +7144,7 @@ else:
                 # =============================================
                 # 💾 SALVA POSTGRESQL
                 # =============================================
-                resultado = salvar_baixa_postgresql(
+               resultado = salvar_baixa_postgresql(
                     nova_baixa
                 )
 
@@ -7116,6 +7182,7 @@ else:
                 )
 
             st.rerun()
+
 
 
 # ============================================================
