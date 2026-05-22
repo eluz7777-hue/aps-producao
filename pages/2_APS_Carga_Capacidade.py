@@ -129,6 +129,12 @@ def get_connection():
 
 
 # ============================================================
+# 🔥 DEBUG POSTGRESQL APS
+# ============================================================
+DEBUG_POSTGRES = False
+
+
+# ============================================================
 # 🔥 INICIALIZAÇÃO BANCO APS POSTGRESQL
 # ============================================================
 def inicializar_banco():
@@ -218,9 +224,11 @@ def inicializar_banco():
         # ====================================================
         trans.commit()
 
-        st.success(
-            "✅ Estrutura PostgreSQL inicializada"
-        )
+        if DEBUG_POSTGRES:
+
+            st.success(
+                "✅ Estrutura PostgreSQL inicializada"
+            )
 
     except Exception as e:
 
@@ -254,7 +262,6 @@ def inicializar_banco():
 # 🔥 EXECUÇÃO AUTOMÁTICA APS
 # ============================================================
 inicializar_banco()
-
 
 
 
