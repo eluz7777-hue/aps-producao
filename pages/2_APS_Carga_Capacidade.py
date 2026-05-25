@@ -2699,6 +2699,8 @@ if not df_operacional.empty:
                 .str.strip()
 
                 .apply(normalizar_processo)
+
+                .str.upper()
             )
 
         # ----------------------------------------------------
@@ -2727,7 +2729,39 @@ if not df_operacional.empty:
                 .str.replace("- ", "-", regex=False)
 
                 .str.replace(" -", "-", regex=False)
+
+                .str.replace("\xa0", "", regex=False)
             )
+
+    # ========================================================
+    # 🔥 GARANTE COLUNAS OPERACIONAIS
+    # ========================================================
+    if "Horas" not in df_operacional.columns:
+
+        df_operacional["Horas"] = 0
+
+    if "Cliente" not in df_operacional.columns:
+
+        df_operacional["Cliente"] = ""
+
+    if "Data" not in df_operacional.columns:
+
+        df_operacional["Data"] = pd.NaT
+
+
+    # ========================================================
+    # 🔥 NORMALIZA HORAS
+    # ========================================================
+    df_operacional["Horas"] = (
+
+        pd.to_numeric(
+            df_operacional["Horas"],
+            errors="coerce"
+        )
+
+        .fillna(0)
+    )
+
 
     # ========================================================
     # 🔥 CHAVE OPERACIONAL DEFINITIVA
@@ -2745,9 +2779,55 @@ if not df_operacional.empty:
         + df_operacional["CODIGO_PV"]
     )
 
+
     # ========================================================
-    # 🔥 REMOVE DUPLICAÇÕES DA PV.xlsx
+    # 🔥 NORMALIZA CHAVE FINAL
     # ========================================================
+    df_operacional["CHAVE_OPERACAO"] = (
+
+        df_operacional["CHAVE_OPERACAO"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.replace(".0", "", regex=False)
+
+        .str.replace("\xa0", "", regex=False)
+
+        .str.replace(" | ", "|", regex=False)
+
+        .str.replace("|| ", "||", regex=False)
+
+        .str.replace(" ||", "||", regex=False)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+
+    # ========================================================
+    # 🔥 CONSOLIDA DUPLICAÇÕES DA PV.xlsx
+    # ========================================================
+    colunas_base_operacional = [
+
+        "CHAVE_OPERACAO",
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Data"
+    ]
+
+    colunas_existentes_operacional = [
+
+        c for c in colunas_base_operacional
+
+        if c in df_operacional.columns
+    ]
+
+
     df_operacional = (
 
         df_operacional
@@ -2760,19 +2840,39 @@ if not df_operacional.empty:
             ]
         )
 
-        .drop_duplicates(
-            subset=[
-                "CHAVE_OPERACAO"
-            ],
-            keep="first"
+        .groupby(
+            colunas_existentes_operacional,
+            as_index=False
         )
 
+        .agg({
+            "Horas": "sum"
+        })
+
         .reset_index(drop=True)
+    )
+
+
+    # ========================================================
+    # 🔥 AUDITORIA DE DUPLICIDADES
+    # ========================================================
+    df_operacional["CHAVE_DUPLICADA"] = (
+
+        df_operacional
+
+        .duplicated(
+            subset=["CHAVE_OPERACAO"],
+            keep=False
+        )
     )
 
 else:
 
     df_operacional["CHAVE_OPERACAO"] = ""
+
+    df_operacional["CHAVE_DUPLICADA"] = False
+
+
 
 
 
@@ -3123,17 +3223,82 @@ df = (
 # ------------------------------------------------------------
 # 🔥 HORAS OFICIAIS APS
 # ------------------------------------------------------------
-df["Horas_Originais"] = (
-    df["Horas"]
+
+# ============================================================
+# 🔒 GARANTE HORAS ORIGINAIS IMUTÁVEIS
+# ============================================================
+if "Horas_Originais" not in df.columns:
+
+    df["Horas_Originais"] = (
+
+        pd.to_numeric(
+            df["Horas"],
+            errors="coerce"
+        )
+
+        .fillna(0)
+    )
+
+else:
+
+    df["Horas_Originais"] = (
+
+        pd.to_numeric(
+            df["Horas_Originais"],
+            errors="coerce"
+        )
+
+        .fillna(0)
+    )
+
+
+# ============================================================
+# 🔥 HORAS RESTANTES OPERACIONAIS
+# ============================================================
+df["Horas_Restantes"] = (
+
+    pd.to_numeric(
+        df["Horas_Restantes"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+
+    .clip(lower=0)
 )
 
+
+# ============================================================
+# 🔥 RUNTIME OPERACIONAL APS
+# ============================================================
 df["Horas"] = (
     df["Horas_Restantes"]
 )
 
+
+# ============================================================
+# 🔒 EVITA HORAS NEGATIVAS
+# ============================================================
+df["Horas"] = (
+
+    pd.to_numeric(
+        df["Horas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+
+    .clip(lower=0)
+)
+
+
+# ============================================================
+# 🔥 RESET FINAL
+# ============================================================
 df = (
     df.reset_index(drop=True)
 )
+
 
 # ------------------------------------------------------------
 # 🔥 BASE OPERACIONAL SOBERANA
@@ -6518,7 +6683,7 @@ df_operacional["Data"] = pd.to_datetime(
 
 
 # ============================================================
-# 🔥 REMOVE DUPLICAÇÕES DA BASE APS
+# 🔥 CÓPIA SEGURA DA BASE OPERACIONAL APS
 # ============================================================
 df_operacional = (
 
@@ -6526,6 +6691,7 @@ df_operacional = (
 
     .copy()
 )
+
 
 
 # ============================================================
@@ -6585,19 +6751,28 @@ df_baixas_agg["CHAVE_OPERACAO"] = (
 # ============================================================
 # 🔥 REMOVE DUPLICAÇÕES OPERACIONAIS
 # ============================================================
+colunas_agrupamento = [
+    "CHAVE_OPERACAO",
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Data"
+]
+
+colunas_existentes = [
+
+    c for c in colunas_agrupamento
+
+    if c in df_operacional.columns
+]
+
 df_operacional = (
 
     df_operacional
 
     .groupby(
-        [
-            "CHAVE_OPERACAO",
-            "PV",
-            "Cliente",
-            "CODIGO_PV",
-            "Processo",
-            "Data"
-        ],
+        colunas_existentes,
         as_index=False
     )
 
