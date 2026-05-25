@@ -2666,6 +2666,8 @@ def normalizar_chave_operacao(pv, processo, codigo):
     return f"{pv}||{processo}||{codigo}"
 
 
+
+
 # --------------------------------------------
 # 🔥 GARANTE CHAVE OPERACIONAL OFICIAL APS
 # --------------------------------------------
@@ -2736,17 +2738,19 @@ if not df_operacional.empty:
     # ========================================================
     # 🔥 GARANTE COLUNAS OPERACIONAIS
     # ========================================================
-    if "Horas" not in df_operacional.columns:
+    colunas_obrigatorias_operacional = {
 
-        df_operacional["Horas"] = 0
+        "Horas": 0,
+        "Cliente": "",
+        "Data": pd.NaT,
+        "DATA_ENTREGA_APS": pd.NaT
+    }
 
-    if "Cliente" not in df_operacional.columns:
+    for col, valor_default in colunas_obrigatorias_operacional.items():
 
-        df_operacional["Cliente"] = ""
+        if col not in df_operacional.columns:
 
-    if "Data" not in df_operacional.columns:
-
-        df_operacional["Data"] = pd.NaT
+            df_operacional[col] = valor_default
 
 
     # ========================================================
@@ -2817,7 +2821,8 @@ if not df_operacional.empty:
         "Cliente",
         "CODIGO_PV",
         "Processo",
-        "Data"
+        "Data",
+        "DATA_ENTREGA_APS"
     ]
 
     colunas_existentes_operacional = [
@@ -2826,6 +2831,11 @@ if not df_operacional.empty:
 
         if c in df_operacional.columns
     ]
+
+
+    agregacoes_operacionais = {
+        "Horas": "sum"
+    }
 
 
     df_operacional = (
@@ -2845,9 +2855,7 @@ if not df_operacional.empty:
             as_index=False
         )
 
-        .agg({
-            "Horas": "sum"
-        })
+        .agg(agregacoes_operacionais)
 
         .reset_index(drop=True)
     )
