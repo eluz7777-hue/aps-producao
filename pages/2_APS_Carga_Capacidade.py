@@ -747,6 +747,16 @@ def salvar_baixa_postgresql(nova_baixa):
 
             str(chave_operacao)
 
+            .replace(".0", "")
+
+            .replace("\xa0", "")
+
+            .replace(" | ", "|")
+
+            .replace("|| ", "||")
+
+            .replace(" ||", "||")
+
             .upper()
 
             .strip()
@@ -802,21 +812,97 @@ def salvar_baixa_postgresql(nova_baixa):
                 df_operacional["CHAVE_OPERACAO"] = (
 
                     df_operacional["PV"]
+                    .fillna("")
                     .astype(str)
+                    .str.replace(".0", "", regex=False)
+                    .str.strip()
+                    .str.upper()
 
                     + "||"
 
                     + df_operacional["Processo"]
+                    .fillna("")
                     .astype(str)
+                    .apply(normalizar_processo)
+                    .str.strip()
+                    .str.upper()
 
                     + "||"
 
                     + df_operacional["CODIGO_PV"]
+                    .fillna("")
                     .astype(str)
+                    .str.replace(".0", "", regex=False)
+                    .str.strip()
+                    .str.upper()
                 )
 
             # ------------------------------------------------
-            # 🔥 NORMALIZA CHAVE
+            # 🔥 NORMALIZA CAMPOS BASE OPERACIONAL
+            # ------------------------------------------------
+            df_operacional["PV"] = (
+
+                df_operacional["PV"]
+
+                .fillna("")
+
+                .astype(str)
+
+                .str.replace(".0", "", regex=False)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+            df_operacional["CODIGO_PV"] = (
+
+                df_operacional["CODIGO_PV"]
+
+                .fillna("")
+
+                .astype(str)
+
+                .str.replace(".0", "", regex=False)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+            df_operacional["Processo"] = (
+
+                df_operacional["Processo"]
+
+                .fillna("")
+
+                .astype(str)
+
+                .apply(normalizar_processo)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+            # ------------------------------------------------
+            # 🔥 RECONSTRÓI CHAVE OPERACIONAL APS
+            # ------------------------------------------------
+            df_operacional["CHAVE_OPERACAO"] = (
+
+                df_operacional["PV"]
+
+                + "||"
+
+                + df_operacional["Processo"]
+
+                + "||"
+
+                + df_operacional["CODIGO_PV"]
+            )
+
+            # ------------------------------------------------
+            # 🔥 NORMALIZA CHAVE FINAL
             # ------------------------------------------------
             df_operacional["CHAVE_OPERACAO"] = (
 
@@ -826,21 +912,48 @@ def salvar_baixa_postgresql(nova_baixa):
 
                 .astype(str)
 
-                .str.upper()
+                .str.replace(".0", "", regex=False)
+
+                .str.replace("\xa0", "", regex=False)
+
+                .str.replace(" | ", "|", regex=False)
+
+                .str.replace("|| ", "||", regex=False)
+
+                .str.replace(" ||", "||", regex=False)
 
                 .str.strip()
+
+                .str.upper()
+            )
+
+            # ------------------------------------------------
+            # 🔥 REMOVE DUPLICIDADES OPERACIONAIS
+            # ------------------------------------------------
+            base_operacional_normalizada = (
+
+                df_operacional
+
+                .drop_duplicates(
+                    subset=["CHAVE_OPERACAO"]
+                )
+
+                .copy()
             )
 
             # ------------------------------------------------
             # 🔥 LOCALIZA OPERAÇÃO REAL
             # ------------------------------------------------
-            base_oper = df_operacional[
+            base_oper = base_operacional_normalizada[
 
-                df_operacional[
+                base_operacional_normalizada[
                     "CHAVE_OPERACAO"
                 ] == chave_operacao
             ]
 
+            # ------------------------------------------------
+            # 🔥 RECUPERA HORAS PLANEJADAS
+            # ------------------------------------------------
             if not base_oper.empty:
 
                 horas_planejadas = pd.to_numeric(
@@ -858,7 +971,16 @@ def salvar_baixa_postgresql(nova_baixa):
                     horas_planejadas
                 )
 
-        except:
+        except Exception as e:
+
+            try:
+
+                st.warning(
+                    f"Erro base operacional PostgreSQL: {e}"
+                )
+
+            except:
+                pass
 
             horas_planejadas = 0
 
@@ -1030,6 +1152,7 @@ def salvar_baixa_postgresql(nova_baixa):
             "ok": False,
             "erro": str(e)
         }
+
 
 
 
