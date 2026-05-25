@@ -7747,12 +7747,23 @@ else:
 
 
             # =================================================
-            # 🔥 SALDO DINÂMICO REAL
+            # 🔥 HORAS ORIGINAIS APS
             # =================================================
             horas_planejadas = float(
-                linha["Horas"]
+
+                pd.to_numeric(
+                    linha.get(
+                        "Horas_Originais",
+                        linha["Horas"]
+                    ),
+                    errors="coerce"
+                )
             )
 
+
+            # =================================================
+            # 🔥 SALDO DINÂMICO REAL
+            # =================================================
             saldo_real = max(
                 horas_planejadas -
                 horas_ja_baixadas,
@@ -7944,15 +7955,124 @@ else:
                         .sum()
                     )
 
+                # =================================================
+                # 🔥 HORAS ORIGINAIS APS
+                # =================================================
                 horas_planejadas = float(
-                    linha["Horas"]
+
+                    pd.to_numeric(
+                        linha.get(
+                            "Horas_Originais",
+                            linha["Horas"]
+                        ),
+                        errors="coerce"
+                    )
                 )
 
+                # =================================================
+                # 🔥 SALDO REAL
+                # =================================================
                 saldo_real = max(
                     horas_planejadas -
                     horas_ja_baixadas,
                     0
                 )
+
+
+                # 🔒 BLOQUEIA DUPLICADOS
+                # =============================================
+                if saldo_real <= 0:
+
+                    erros.append(label)
+
+                    continue
+
+
+                # =============================================
+                # 🔥 TIMESTAMP REAL
+                # =============================================
+                data_real = datetime.now(
+                    ZoneInfo("America/Sao_Paulo")
+                )
+
+
+                # =============================================
+                # 🔥 REGISTRO FINAL
+                # =============================================
+                nova_baixa = {
+
+                    "PV": _norm(
+                        linha["PV"]
+                    ),
+
+                    "Cliente": linha.get(
+                        "Cliente",
+                        ""
+                    ),
+
+                    "CODIGO_PV": _norm(
+                        linha["CODIGO_PV"]
+                    ),
+
+                    "Processo": normalizar_processo(
+                        linha["Processo"]
+                    ),
+
+                    "Horas": saldo_real,
+
+                    "Data_Baixa": data_real,
+
+                    "Usuario": "Sistema",
+
+                    "Observacao": "LOTE_CORTE",
+
+                    "Status_Baixa": "ATIVA",
+
+                    "Data_Estorno": "",
+
+                    "Motivo_Estorno": "",
+
+                    "CHAVE_OPERACAO": chave
+                }
+
+
+                # =============================================
+                # 💾 SALVA POSTGRESQL
+                # =============================================
+                resultado = salvar_baixa_postgresql(
+                    nova_baixa
+                )
+
+                if resultado.get("ok"):
+
+                    sucessos.append(label)
+
+                else:
+
+                    erros.append(label)
+
+
+            # =================================================
+            # 🔥 RESULTADOS
+            # =================================================
+            if sucessos:
+
+                st.session_state[
+                    "reset_corte_lote"
+                ] = True
+
+                st.success(
+                    f"{len(sucessos)} operações baixadas"
+                )
+
+            if erros:
+
+                st.warning(
+                    f"{len(erros)} operações não foram baixadas"
+                )
+
+            st.rerun()
+
 
 
                 # 🔒 BLOQUEIA DUPLICADOS
