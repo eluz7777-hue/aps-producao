@@ -3312,8 +3312,10 @@ df = (
 # 🔥 BASE OPERACIONAL SOBERANA
 # ------------------------------------------------------------
 df_operacional = (
-    df.copy()
+    df_planejamento.copy()
 )
+
+
 
 # ------------------------------------------------------------
 # 🔒 GARANTE COLUNAS
@@ -6690,15 +6692,6 @@ df_operacional["Data"] = pd.to_datetime(
 )
 
 
-# ============================================================
-# 🔥 CÓPIA SEGURA DA BASE OPERACIONAL APS
-# ============================================================
-df_operacional = (
-
-    df_operacional
-
-    .copy()
-)
 
 
 
@@ -7485,6 +7478,10 @@ if "CHAVE_OPERACAO" not in base_corte.columns:
     )
 
 
+
+
+
+
 # ============================================================
 # 🔒 PROTEÇÃO FINAL
 # ============================================================
@@ -7605,9 +7602,28 @@ else:
         + " h"
     )
 
+
+    # ========================================================
+    # 🔒 MAPA OPERACIONAL SEGURO
+    # ========================================================
+    mapa_labels = dict(
+
+        zip(
+            base_corte["CHAVE_OPERACAO"],
+            base_corte["LABEL"]
+        )
+    )
+
+
+    # ========================================================
+    # 🔥 OPÇÕES SEGURAS
+    # ========================================================
     opcoes = (
-        base_corte["LABEL"]
+
+        base_corte["CHAVE_OPERACAO"]
+
         .drop_duplicates()
+
         .tolist()
     )
 
@@ -7658,11 +7674,12 @@ else:
     escolha = st.selectbox(
         "Operação",
         opcoes,
+        format_func=lambda x: mapa_labels.get(x, x),
         key="corte_unitario"
     )
 
     linha_sel = base_corte[
-        base_corte["LABEL"] == escolha
+        base_corte["CHAVE_OPERACAO"] == escolha
     ]
 
     if not linha_sel.empty:
@@ -7747,26 +7764,21 @@ else:
 
 
             # =================================================
-            # 🔥 HORAS ORIGINAIS APS
+            # 🔥 SALDO OPERACIONAL REAL APS
             # =================================================
-            horas_planejadas = float(
+            saldo_real = float(
 
                 pd.to_numeric(
                     linha.get(
-                        "Horas_Originais",
-                        linha["Horas"]
+                        "Saldo_Horas",
+                        0
                     ),
                     errors="coerce"
                 )
             )
 
-
-            # =================================================
-            # 🔥 SALDO DINÂMICO REAL
-            # =================================================
             saldo_real = max(
-                horas_planejadas -
-                horas_ja_baixadas,
+                saldo_real,
                 0
             )
 
@@ -7871,6 +7883,7 @@ else:
     selecao = st.multiselect(
         "Selecionar operações",
         opcoes,
+        format_func=lambda x: mapa_labels.get(x, x),
         key="corte_lote"
     )
 
@@ -7934,13 +7947,11 @@ else:
             # =================================================
             # 🔥 LOOP LOTE
             # =================================================
-            for label in selecao:
+            for chave in selecao:
 
                 linha = base_corte[
-                    base_corte["LABEL"] == label
+                    base_corte["CHAVE_OPERACAO"] == chave
                 ].iloc[0]
-
-                chave = linha["CHAVE_OPERACAO"]
 
                 horas_ja_baixadas = 0
 
@@ -7955,26 +7966,23 @@ else:
                         .sum()
                     )
 
+
                 # =================================================
-                # 🔥 HORAS ORIGINAIS APS
+                # 🔥 SALDO OPERACIONAL REAL APS
                 # =================================================
-                horas_planejadas = float(
+                saldo_real = float(
 
                     pd.to_numeric(
                         linha.get(
-                            "Horas_Originais",
-                            linha["Horas"]
+                            "Saldo_Horas",
+                            0
                         ),
                         errors="coerce"
                     )
                 )
 
-                # =================================================
-                # 🔥 SALDO REAL
-                # =================================================
                 saldo_real = max(
-                    horas_planejadas -
-                    horas_ja_baixadas,
+                    saldo_real,
                     0
                 )
 
@@ -7983,7 +7991,7 @@ else:
                 # =============================================
                 if saldo_real <= 0:
 
-                    erros.append(label)
+                    erros.append(chave)
 
                     continue
 
@@ -8045,11 +8053,11 @@ else:
 
                 if resultado.get("ok"):
 
-                    sucessos.append(label)
+                    sucessos.append(chave)
 
                 else:
 
-                    erros.append(label)
+                    erros.append(chave)
 
 
             # =================================================
@@ -8072,6 +8080,8 @@ else:
                 )
 
             st.rerun()
+
+
 
 
 # ============================================================
