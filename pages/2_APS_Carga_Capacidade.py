@@ -6524,6 +6524,71 @@ df_operacional = (
 
     df_operacional
 
+    .copy()
+)
+
+
+# ============================================================
+# 🔥 NORMALIZA CHAVE OPERACIONAL APS
+# ============================================================
+df_operacional["CHAVE_OPERACAO"] = (
+
+    df_operacional["CHAVE_OPERACAO"]
+
+    .fillna("")
+
+    .astype(str)
+
+    .str.replace(".0", "", regex=False)
+
+    .str.replace("\xa0", "", regex=False)
+
+    .str.replace(" | ", "|", regex=False)
+
+    .str.replace("|| ", "||", regex=False)
+
+    .str.replace(" ||", "||", regex=False)
+
+    .str.strip()
+
+    .str.upper()
+)
+
+
+# ============================================================
+# 🔥 NORMALIZA CHAVE BAIXAS APS
+# ============================================================
+df_baixas_agg["CHAVE_OPERACAO"] = (
+
+    df_baixas_agg["CHAVE_OPERACAO"]
+
+    .fillna("")
+
+    .astype(str)
+
+    .str.replace(".0", "", regex=False)
+
+    .str.replace("\xa0", "", regex=False)
+
+    .str.replace(" | ", "|", regex=False)
+
+    .str.replace("|| ", "||", regex=False)
+
+    .str.replace(" ||", "||", regex=False)
+
+    .str.strip()
+
+    .str.upper()
+)
+
+
+# ============================================================
+# 🔥 REMOVE DUPLICAÇÕES OPERACIONAIS
+# ============================================================
+df_operacional = (
+
+    df_operacional
+
     .groupby(
         [
             "CHAVE_OPERACAO",
@@ -6543,6 +6608,51 @@ df_operacional = (
 
 
 # ============================================================
+# 🔥 REMOVE DUPLICAÇÕES DAS BAIXAS
+# ============================================================
+df_baixas_agg = (
+
+    df_baixas_agg
+
+    .groupby(
+        [
+            "CHAVE_OPERACAO"
+        ],
+        as_index=False
+    )
+
+    .agg({
+        "Horas_Baixadas": "sum",
+        "Qtde_Baixas": "sum"
+    })
+)
+
+
+# ============================================================
+# 🔥 AUDITORIA PRÉ-MERGE
+# ============================================================
+df_operacional["CHAVE_DUPLICADA_OPERACIONAL"] = (
+
+    df_operacional
+
+    .duplicated(
+        subset=["CHAVE_OPERACAO"],
+        keep=False
+    )
+)
+
+df_baixas_agg["CHAVE_DUPLICADA_BAIXAS"] = (
+
+    df_baixas_agg
+
+    .duplicated(
+        subset=["CHAVE_OPERACAO"],
+        keep=False
+    )
+)
+
+
+# ============================================================
 # 🔥 MERGE OPERACIONAL REAL
 # ============================================================
 df_operacional = df_operacional.merge(
@@ -6551,8 +6661,46 @@ df_operacional = df_operacional.merge(
 
     on="CHAVE_OPERACAO",
 
-    how="left"
+    how="left",
+
+    validate="many_to_one",
+
+    indicator="_merge_operacional"
 )
+
+
+# ------------------------------------------------------------
+# 🔒 BLINDAGEM NUMÉRICA
+# ------------------------------------------------------------
+df_operacional["Horas"] = pd.to_numeric(
+
+    df_operacional["Horas"],
+
+    errors="coerce"
+
+).fillna(0)
+
+df_operacional["Horas_Baixadas"] = pd.to_numeric(
+
+    df_operacional.get(
+        "Horas_Baixadas",
+        0
+    ),
+
+    errors="coerce"
+
+).fillna(0)
+
+df_operacional["Qtde_Baixas"] = pd.to_numeric(
+
+    df_operacional.get(
+        "Qtde_Baixas",
+        0
+    ),
+
+    errors="coerce"
+
+).fillna(0)
 
 
 # ------------------------------------------------------------
@@ -6560,26 +6708,77 @@ df_operacional = df_operacional.merge(
 # ------------------------------------------------------------
 if "Horas_Baixadas" not in df_operacional.columns:
 
-    df_operacional["Horas_Baixadas"] = (
-        pd.to_numeric(
-            df_operacional.get("Horas_Originais", 0),
-            errors="coerce"
-        ).fillna(0)
-        -
-        pd.to_numeric(
-            df_operacional.get("Horas", 0),
-            errors="coerce"
-        ).fillna(0)
-    ).clip(lower=0)
+    df_operacional["Horas_Baixadas"] = 0
 
-if "Horas_Restantes" not in df_operacional.columns:
 
-    df_operacional["Horas_Restantes"] = (
-        pd.to_numeric(
-            df_operacional.get("Horas", 0),
-            errors="coerce"
-        ).fillna(0)
-    ).clip(lower=0)
+# ============================================================
+# 🔥 RECÁLCULO OFICIAL APS
+# ============================================================
+df_operacional["Horas_Restantes"] = (
+
+    df_operacional["Horas"]
+
+    - df_operacional["Horas_Baixadas"]
+)
+
+
+# ============================================================
+# 🔒 EVITA SALDO NEGATIVO
+# ============================================================
+df_operacional["Horas_Restantes"] = (
+
+    pd.to_numeric(
+        df_operacional["Horas_Restantes"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+
+    .clip(lower=0)
+)
+
+
+# ============================================================
+# 🔥 EVITA BAIXAS MAIORES QUE PLANEJADO
+# ============================================================
+df_operacional["Horas_Baixadas"] = (
+
+    df_operacional[
+        [
+            "Horas_Baixadas",
+            "Horas"
+        ]
+    ]
+
+    .min(axis=1)
+)
+
+
+# ============================================================
+# 🔥 FLAG DE ÓRFÃS OPERACIONAIS
+# ============================================================
+df_operacional["SEM_MATCH_BAIXA"] = (
+
+    df_operacional["_merge_operacional"]
+
+    != "both"
+)
+
+
+# ============================================================
+# 🔥 REMOVE COLUNA TÉCNICA
+# ============================================================
+df_operacional.drop(
+
+    columns=[
+        "_merge_operacional"
+    ],
+
+    inplace=True,
+
+    errors="ignore"
+)
+
 
 
 
