@@ -289,6 +289,109 @@ st.session_state["df_baixas_ativas"] = (
 df_planejamento = df_operacional.copy()
 
 
+
+# ============================================================
+# 🔥 CONSOLIDA BAIXAS REAIS APS
+# ============================================================
+
+df_baixas_consolidadas = (
+
+    df_baixas_ativas
+
+    .groupby(
+        "CHAVE_OPERACAO",
+        as_index=False
+    )["Horas"]
+
+    .sum()
+
+    .rename(columns={
+        "Horas": "Horas_Baixadas"
+    })
+)
+
+# ------------------------------------------------------------
+# 🔥 MERGE BAIXAS x PLANEJAMENTO
+# ------------------------------------------------------------
+df_planejamento = df_planejamento.merge(
+
+    df_baixas_consolidadas,
+
+    on="CHAVE_OPERACAO",
+
+    how="left"
+)
+
+# ------------------------------------------------------------
+# 🔒 BLINDAGEM
+# ------------------------------------------------------------
+df_planejamento["Horas_Baixadas"] = (
+
+    pd.to_numeric(
+        df_planejamento["Horas_Baixadas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+)
+
+df_planejamento["Horas"] = (
+
+    pd.to_numeric(
+        df_planejamento["Horas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+)
+
+# ------------------------------------------------------------
+# 🔥 SALDO REAL APS
+# ------------------------------------------------------------
+df_planejamento["Saldo_Horas"] = (
+
+    df_planejamento["Horas"]
+
+    -
+
+    df_planejamento["Horas_Baixadas"]
+)
+
+# ------------------------------------------------------------
+# 🔒 IMPEDE NEGATIVOS
+# ------------------------------------------------------------
+df_planejamento["Saldo_Horas"] = (
+
+    df_planejamento["Saldo_Horas"]
+
+    .clip(lower=0)
+)
+
+# ------------------------------------------------------------
+# 🔥 BASE OPERACIONAL FINAL APS
+# ------------------------------------------------------------
+df_operacional = df_planejamento.copy()
+
+# ------------------------------------------------------------
+# 🔥 SOMENTE PENDÊNCIAS REAIS
+# ------------------------------------------------------------
+df_operacional = (
+
+    df_operacional[
+        df_operacional["Saldo_Horas"] > 0.0001
+    ]
+
+    .copy()
+)
+
+df_operacional = (
+    df_operacional
+    .reset_index(drop=True)
+)
+
+
+
+
 # ------------------------------------------------------------
 # 🔥 NORMALIZA BASE PLANEJAMENTO
 # ------------------------------------------------------------
@@ -310,35 +413,6 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
         .str.upper()
     )
 
-
-df_planejamento["CHAVE_OPERACAO"] = (
-
-    df_planejamento["PV"]
-
-    .astype(str)
-
-    .str.strip()
-
-    .str.upper()
-
-    + "||"
-
-    + df_planejamento["Processo"]
-
-    .astype(str)
-
-    .apply(normalizar_processo)
-
-    + "||"
-
-    + df_planejamento["CODIGO_PV"]
-
-    .astype(str)
-
-    .str.strip()
-
-    .str.upper()
-)
 
 
 CORE_APS = {
