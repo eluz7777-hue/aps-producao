@@ -289,6 +289,31 @@ st.session_state["df_baixas_ativas"] = (
 df_planejamento = df_operacional.copy()
 
 
+# ============================================================
+# 🔒 GARANTE COLUNAS OPERACIONAIS
+# ============================================================
+if "Horas" not in df_planejamento.columns:
+
+    df_planejamento["Horas"] = 0
+
+if "CHAVE_OPERACAO" not in df_planejamento.columns:
+
+    df_planejamento["CHAVE_OPERACAO"] = ""
+
+if "Processo" not in df_planejamento.columns:
+
+    df_planejamento["Processo"] = ""
+
+if "PV" not in df_planejamento.columns:
+
+    df_planejamento["PV"] = ""
+
+if "CODIGO_PV" not in df_planejamento.columns:
+
+    df_planejamento["CODIGO_PV"] = ""
+
+
+
 
 # ============================================================
 # 🔥 CONSOLIDA BAIXAS REAIS APS
