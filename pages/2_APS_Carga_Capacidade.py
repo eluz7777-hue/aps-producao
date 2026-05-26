@@ -8756,49 +8756,186 @@ st.divider()
 
 st.subheader("🔎 Busca rápida de PV / Cliente")
 
+# ------------------------------------------------------------
+# 🔒 BLINDAGEM BASE_OP
+# ------------------------------------------------------------
+if base_op is None:
+
+    base_op = pd.DataFrame()
+
+colunas_busca = [
+    "PV",
+    "Cliente",
+    "Horas"
+]
+
+for col in colunas_busca:
+
+    if col not in base_op.columns:
+
+        if col == "Horas":
+
+            base_op[col] = 0
+
+        else:
+
+            base_op[col] = ""
+
+# ------------------------------------------------------------
+# 🔥 CAMPOS BUSCA
+# ------------------------------------------------------------
 col_b1, col_b2 = st.columns(2)
 
 busca_pv = col_b1.text_input("Buscar por PV")
-busca_cliente = col_b2.text_input("Buscar por Cliente")
 
+busca_cliente = col_b2.text_input(
+    "Buscar por Cliente"
+)
+
+# ------------------------------------------------------------
+# 🔥 BASE DE BUSCA
+# ------------------------------------------------------------
 busca_df = base_op.copy()
 
+# ------------------------------------------------------------
+# 🔥 FILTRO PV
+# ------------------------------------------------------------
 if busca_pv:
-    busca_df = busca_df[busca_df["PV"].astype(str).str.contains(busca_pv, case=False, na=False)]
 
+    busca_df = (
+
+        busca_df[
+
+            busca_df["PV"]
+
+            .astype(str)
+
+            .str.contains(
+                busca_pv,
+                case=False,
+                na=False
+            )
+        ]
+
+        .copy()
+    )
+
+# ------------------------------------------------------------
+# 🔥 FILTRO CLIENTE
+# ------------------------------------------------------------
 if busca_cliente:
-    busca_df = busca_df[busca_df["Cliente"].astype(str).str.contains(busca_cliente, case=False, na=False)]
 
+    busca_df = (
+
+        busca_df[
+
+            busca_df["Cliente"]
+
+            .astype(str)
+
+            .str.contains(
+                busca_cliente,
+                case=False,
+                na=False
+            )
+        ]
+
+        .copy()
+    )
+
+# ------------------------------------------------------------
+# 🔥 EXIBIÇÃO
+# ------------------------------------------------------------
 if busca_pv or busca_cliente:
-    busca_df["Horas"] = busca_df["Horas"].round(1)
 
-    if "ENTREGA" in busca_df.columns:
-        busca_df["ENTREGA"] = busca_df["ENTREGA"].dt.strftime("%d/%m/%Y")
+    if "Horas" in busca_df.columns:
 
-    st.dataframe(busca_df, use_container_width=True)
+        busca_df["Horas"] = (
+
+            pd.to_numeric(
+                busca_df["Horas"],
+                errors="coerce"
+            )
+
+            .fillna(0)
+
+            .round(1)
+        )
+
+    if (
+
+        "ENTREGA" in busca_df.columns
+
+        and
+
+        not busca_df.empty
+    ):
+
+        busca_df["ENTREGA"] = pd.to_datetime(
+
+            busca_df["ENTREGA"],
+
+            errors="coerce"
+        )
+
+        busca_df["ENTREGA"] = (
+
+            busca_df["ENTREGA"]
+
+            .dt.strftime("%d/%m/%Y")
+        )
+
+    st.dataframe(
+        busca_df,
+        use_container_width=True
+    )
+
+# ============================================================
+# 📥 EXPORTAÇÃO
+# ============================================================
 
 st.subheader("📥 Exportar dados filtrados")
 
 @st.cache_data
 def converter_excel(df_export):
+
     from io import BytesIO
+
     buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df_export.to_excel(writer, index=False)
+
+    with pd.ExcelWriter(
+        buffer,
+        engine="openpyxl"
+    ) as writer:
+
+        df_export.to_excel(
+            writer,
+            index=False
+        )
+
     return buffer.getvalue()
 
+# ------------------------------------------------------------
+# 🔥 DOWNLOAD
+# ------------------------------------------------------------
 if not busca_df.empty:
-    excel_bytes = converter_excel(busca_df)
+
+    excel_bytes = converter_excel(
+        busca_df
+    )
 
     st.download_button(
+
         label="📥 Baixar Excel",
+
         data=excel_bytes,
+
         file_name="consulta_pvs.xlsx",
+
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 st.divider()
-
 
 
 
