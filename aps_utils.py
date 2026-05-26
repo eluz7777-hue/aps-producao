@@ -63,6 +63,39 @@ def normalizar_chave_operacao(pv, processo, codigo):
 
 
 
+
+# ============================================================
+# 🔥 CHAVE OPERACIONAL OFICIAL APS
+# ============================================================
+def gerar_chave_operacao(pv, processo, codigo):
+
+    pv = (
+        str(pv)
+        .replace(".0", "")
+        .replace("\xa0", "")
+        .strip()
+        .upper()
+    )
+
+    processo = (
+        normalizar_processo(processo)
+        .replace(".0", "")
+        .replace("\xa0", "")
+        .strip()
+        .upper()
+    )
+
+    codigo = (
+        str(codigo)
+        .replace(".0", "")
+        .replace("\xa0", "")
+        .strip()
+        .upper()
+    )
+
+    return f"{pv}||{processo}||{codigo}"
+
+
 # ===============================
 # PROCESSOS
 # ===============================
