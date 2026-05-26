@@ -166,8 +166,6 @@ if not df_operacional.empty:
         "Cliente",
         "CODIGO_PV",
         "Processo",
-        "Data",
-        "DATA_ENTREGA_APS"
     ]
 
     colunas_existentes_operacional = [
@@ -269,10 +267,6 @@ df_baixas_ativas = (
 
 
 
-st.write("DEBUG BAIXAS ATIVAS")
-st.dataframe(df_baixas_ativas.head(20))
-
-
 
 
 # ------------------------------------------------------------
@@ -359,13 +353,6 @@ df_planejamento = pd.merge(
 )
 
 
-
-
-st.write("DEBUG COLUNAS PLANEJAMENTO")
-st.write(df_planejamento.columns.tolist())
-
-st.write("DEBUG PLANEJAMENTO")
-st.dataframe(df_planejamento.head(20))
 
 
 
