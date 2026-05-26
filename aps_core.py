@@ -1,5 +1,11 @@
+import pandas as pd
+import streamlit as st
+
+from aps_utils import *
+from aps_banco import *
 
 
+df_operacional = pd.DataFrame()
 
 # --------------------------------------------
 # 🔥 GARANTE CHAVE OPERACIONAL OFICIAL APS
@@ -323,3 +329,8 @@ df_planejamento["CHAVE_OPERACAO"] = (
 
     .str.upper()
 )
+
+
+CORE_APS = {
+    "df_operacional": df_operacional
+}
