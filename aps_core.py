@@ -301,19 +301,21 @@ df_baixas_consolidadas = (
     .groupby(
         "CHAVE_OPERACAO",
         as_index=False
-    )["Horas"]
+    )
 
-    .sum()
-
-    .rename(columns={
-        "Horas": "Horas_Baixadas"
-    })
+    .agg(
+        Horas_Baixadas=("Horas", "sum")
+    )
 )
+
+
 
 # ------------------------------------------------------------
 # 🔥 MERGE BAIXAS x PLANEJAMENTO
 # ------------------------------------------------------------
-df_planejamento = df_planejamento.merge(
+df_planejamento = pd.merge(
+
+    df_planejamento,
 
     df_baixas_consolidadas,
 
@@ -321,6 +323,7 @@ df_planejamento = df_planejamento.merge(
 
     how="left"
 )
+
 
 # ------------------------------------------------------------
 # 🔒 BLINDAGEM
