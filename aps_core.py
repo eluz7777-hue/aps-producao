@@ -266,6 +266,15 @@ df_baixas_ativas = (
     .copy()
 )
 
+
+
+
+st.write("DEBUG BAIXAS ATIVAS")
+st.dataframe(df_baixas_ativas.head(20))
+
+
+
+
 # ------------------------------------------------------------
 # 🔒 GARANTE PADRONIZAÇÃO FINAL
 # ------------------------------------------------------------
@@ -348,6 +357,24 @@ df_planejamento = pd.merge(
 
     how="left"
 )
+
+
+
+
+st.write("DEBUG PLANEJAMENTO")
+st.dataframe(
+    df_planejamento[
+        [
+            "PV",
+            "Processo",
+            "Horas",
+            "Horas_Baixadas",
+            "Saldo_Horas"
+        ]
+    ].head(20)
+)
+
+
 
 
 # ------------------------------------------------------------
