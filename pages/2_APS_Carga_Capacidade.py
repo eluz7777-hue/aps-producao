@@ -3872,14 +3872,31 @@ fila = df_operacional.copy()
 # ============================================================
 # 🔒 GARANTE COLUNAS
 # ============================================================
-for col in [
+colunas_necessarias = [
+    "PV",
+    "Processo",
     "Horas",
     "Horas_Baixadas",
-    "Saldo_Horas"
-]:
+    "Saldo_Horas",
+    "ENTREGA",
+    "CHAVE_OPERACAO"
+]
+
+for col in colunas_necessarias:
 
     if col not in fila.columns:
-        fila[col] = 0
+
+        if col in [
+            "Horas",
+            "Horas_Baixadas",
+            "Saldo_Horas"
+        ]:
+
+            fila[col] = 0
+
+        else:
+
+            fila[col] = ""
 
 
 # ============================================================
@@ -3968,6 +3985,18 @@ fila["Semáforo"] = (
 
 
 # ============================================================
+# 🔥 NORMALIZA PROCESSO
+# ============================================================
+fila["Processo"] = (
+    fila["Processo"]
+    .fillna("")
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
+
+
+# ============================================================
 # 🔍 FILTROS
 # ============================================================
 col_f1, col_f2, col_f3 = st.columns(3)
@@ -4041,17 +4070,6 @@ if pv_fila_sel != "Todas":
 
 
 # ============================================================
-# 🔥 NORMALIZA PROCESSO
-# ============================================================
-fila["Processo"] = (
-    fila["Processo"]
-    .astype(str)
-    .str.strip()
-    .str.upper()
-)
-
-
-# ============================================================
 # 🔥 FILTROS CORTE
 # ============================================================
 if tipo_corte_sel == "Apenas Corte":
@@ -4106,6 +4124,7 @@ col_k3.metric(
     "Horas na Fila",
     f"{fila['Saldo_Horas'].sum():.1f} h"
 )
+
 
 
 # ============================================================
