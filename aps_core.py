@@ -7,14 +7,16 @@ from aps_utils import _padronizar_df_baixas
 from aps_banco import *
 
 
-
 # ============================================================
 # 🔥 BASE OPERACIONAL RECEBIDA DO APS
 # ============================================================
-if "df_operacional" not in globals():
+try:
+
+    df_operacional
+
+except NameError:
 
     df_operacional = pd.DataFrame()
-
 
 
 # --------------------------------------------
@@ -232,14 +234,9 @@ else:
     df_operacional["CHAVE_DUPLICADA"] = False
 
 
-
 # ============================================================
-# BASE OPERACIONAL REAL (EXECUÇÃO SOBERANA APS)
-# ============================================================
-
-# ------------------------------------------------------------
 # 🔥 LEITURA OFICIAL POSTGRESQL APS
-# ------------------------------------------------------------
+# ============================================================
 df_baixas = carregar_baixas_postgresql()
 
 # ------------------------------------------------------------
@@ -276,11 +273,6 @@ df_baixas_ativas = (
     .copy()
 )
 
-
-
-
-
-
 # ------------------------------------------------------------
 # 🔒 GARANTE PADRONIZAÇÃO FINAL
 # ------------------------------------------------------------
@@ -297,191 +289,16 @@ st.session_state["df_baixas_ativas"] = (
     df_baixas_ativas.copy()
 )
 
-
-# ------------------------------------------------------------
-# 🔥 BASE ORIGINAL PV
-# ------------------------------------------------------------
-df_planejamento = df_operacional.copy()
-
-
 # ============================================================
-# 🔒 GARANTE COLUNAS OPERACIONAIS
+# 🔥 CHAVES BAIXADAS APS
 # ============================================================
-if "Horas" not in df_planejamento.columns:
+if not df_baixas_ativas.empty:
 
-    df_planejamento["Horas"] = 0
+    chaves_baixadas = set(
 
-if "CHAVE_OPERACAO" not in df_planejamento.columns:
-
-    df_planejamento["CHAVE_OPERACAO"] = ""
-
-if "Processo" not in df_planejamento.columns:
-
-    df_planejamento["Processo"] = ""
-
-if "PV" not in df_planejamento.columns:
-
-    df_planejamento["PV"] = ""
-
-if "CODIGO_PV" not in df_planejamento.columns:
-
-    df_planejamento["CODIGO_PV"] = ""
-
-
-
-
-# ============================================================
-# 🔥 CONSOLIDA BAIXAS REAIS APS
-# ============================================================
-
-df_baixas_consolidadas = (
-
-    df_baixas_ativas
-
-    .groupby(
-        "CHAVE_OPERACAO",
-        as_index=False
-    )
-
-    .agg(
-        Horas_Baixadas=("Horas", "sum")
-    )
-)
-
-
-
-# ------------------------------------------------------------
-# 🔥 MERGE BAIXAS x PLANEJAMENTO
-# ------------------------------------------------------------
-df_planejamento = pd.merge(
-
-    df_planejamento,
-
-    df_baixas_consolidadas,
-
-    on="CHAVE_OPERACAO",
-
-    how="left"
-)
-
-
-
-
-
-# ------------------------------------------------------------
-# 🔒 BLINDAGEM
-# ------------------------------------------------------------
-df_planejamento["Horas_Baixadas"] = (
-
-    pd.to_numeric(
-        df_planejamento["Horas_Baixadas"],
-        errors="coerce"
-    )
-
-    .fillna(0)
-)
-
-
-
-# ============================================================
-# 🔒 GARANTE HORAS VÁLIDAS
-# ============================================================
-df_planejamento["Horas"] = (
-
-    pd.to_numeric(
-        df_planejamento["Horas"],
-        errors="coerce"
-    )
-
-    .fillna(0)
-)
-
-df_planejamento["Horas_Baixadas"] = (
-
-    pd.to_numeric(
-        df_planejamento["Horas_Baixadas"],
-        errors="coerce"
-    )
-
-    .fillna(0)
-)
-
-
-
-# ------------------------------------------------------------
-# 🔥 SALDO REAL APS
-# ------------------------------------------------------------
-df_planejamento["Saldo_Horas"] = (
-
-    df_planejamento["Horas"]
-
-    -
-
-    df_planejamento["Horas_Baixadas"]
-)
-
-# ============================================================
-# 🔒 GARANTE SALDO VÁLIDO
-# ============================================================
-df_planejamento["Saldo_Horas"] = (
-
-    pd.to_numeric(
-        df_planejamento["Saldo_Horas"],
-        errors="coerce"
-    )
-
-    .fillna(0)
-)
-
-
-
-
-# ------------------------------------------------------------
-# 🔒 IMPEDE NEGATIVOS
-# ------------------------------------------------------------
-df_planejamento["Saldo_Horas"] = (
-
-    df_planejamento["Saldo_Horas"]
-
-    .clip(lower=0)
-)
-
-# ------------------------------------------------------------
-# 🔥 BASE OPERACIONAL FINAL APS
-# ------------------------------------------------------------
-df_operacional = df_planejamento.copy()
-
-# ------------------------------------------------------------
-# 🔥 SOMENTE PENDÊNCIAS REAIS
-# ------------------------------------------------------------
-df_operacional = (
-
-    df_operacional[
-        df_operacional["Saldo_Horas"] > 0.0001
-    ]
-
-    .copy()
-)
-
-df_operacional = (
-    df_operacional
-    .reset_index(drop=True)
-)
-
-
-
-
-# ------------------------------------------------------------
-# 🔥 NORMALIZA BASE PLANEJAMENTO
-# ------------------------------------------------------------
-for col in ["PV", "Processo", "CODIGO_PV"]:
-
-    if col not in df_planejamento.columns:
-        df_planejamento[col] = ""
-
-    df_planejamento[col] = (
-
-        df_planejamento[col]
+        df_baixas_ativas[
+            "CHAVE_OPERACAO"
+        ]
 
         .fillna("")
 
@@ -492,8 +309,36 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
         .str.upper()
     )
 
+else:
 
+    chaves_baixadas = set()
 
+# ============================================================
+# 🔥 REMOVE OPERAÇÕES BAIXADAS DA FILA
+# ============================================================
+df_operacional = (
+
+    df_operacional[
+
+        ~df_operacional["CHAVE_OPERACAO"]
+
+        .isin(chaves_baixadas)
+    ]
+
+    .copy()
+)
+
+# ============================================================
+# 🔥 RESET FINAL
+# ============================================================
+df_operacional = (
+    df_operacional
+    .reset_index(drop=True)
+)
+
+# ============================================================
+# 🔥 EXPORTAÇÃO FINAL APS
+# ============================================================
 CORE_APS = {
     "df_operacional": df_operacional
 }

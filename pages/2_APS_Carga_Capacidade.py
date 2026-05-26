@@ -684,39 +684,199 @@ if not df_original.empty:
 # ============================================================
 # 🔥 BASE OPERACIONAL OFICIAL APS
 # ============================================================
+
 df_operacional = df_original.copy()
 
 
 
+# ------------------------------------------------------------
+# NORMALIZAÇÃO
+# ------------------------------------------------------------
+for col in ["PV", "Processo", "CODIGO_PV"]:
 
-# ============================================================
-# 🔥 INJETA BASE OPERACIONAL GLOBAL APS
-# ============================================================
-import aps_core
-import aps_banco
+    if col not in df_operacional.columns:
+        df_operacional[col] = ""
+
+    # --------------------------------------------------------
+    # 🔥 PROCESSO
+    # --------------------------------------------------------
+    if col == "Processo":
+
+        df_operacional[col] = (
+
+            df_operacional[col]
+
+            .fillna("")
+
+            .astype(str)
+
+            .apply(normalizar_processo)
+
+            .str.strip()
+
+            .str.upper()
+        )
+
+    # --------------------------------------------------------
+    # 🔥 DEMAIS
+    # --------------------------------------------------------
+    else:
+
+        df_operacional[col] = (
+
+            df_operacional[col]
+
+            .fillna("")
+
+            .astype(str)
+
+            .str.strip()
+
+            .str.upper()
+        )
+
 
 # ------------------------------------------------------------
-# 🔥 CORE APS
+# CHAVE OPERACIONAL
 # ------------------------------------------------------------
-aps_core.df_operacional = df_operacional.copy()
+df_operacional["CHAVE_OPERACAO"] = (
+    df_operacional["PV"] + "||" +
+    df_operacional["Processo"] + "||" +
+    df_operacional["CODIGO_PV"]
+)
 
 # ------------------------------------------------------------
-# 🔥 BANCO APS
+# 🔥 LEITURA OFICIAL DAS BAIXAS APS
 # ------------------------------------------------------------
-aps_banco.df_operacional = df_operacional.copy()
+df_baixas_ativas = carregar_baixas_postgresql()
 
 # ------------------------------------------------------------
-# 🔥 IMPORTA CORE PROCESSADO
+# 🔒 PADRONIZAÇÃO OFICIAL
 # ------------------------------------------------------------
-from aps_core import *
+df_baixas_ativas = _padronizar_df_baixas(
+    df_baixas_ativas
+)
+
+# ------------------------------------------------------------
+# 🔥 SOMENTE BAIXAS ATIVAS
+# ------------------------------------------------------------
+if not df_baixas_ativas.empty:
+
+    df_baixas_ativas = (
+
+        df_baixas_ativas[
+
+            df_baixas_ativas["Status_Baixa"]
+
+            .isin([
+                "ATIVA",
+                "TERCEIRIZADA"
+            ])
+        ]
+
+        .copy()
+    )
+
+    # --------------------------------------------------------
+    # 🔒 NORMALIZAÇÃO FINAL
+    # --------------------------------------------------------
+    for col in [
+        "PV",
+        "Processo",
+        "CODIGO_PV"
+    ]:
+
+        if col not in df_baixas_ativas.columns:
+            df_baixas_ativas[col] = ""
+
+        # ----------------------------------------------------
+        # 🔥 PROCESSO
+        # ----------------------------------------------------
+        if col == "Processo":
+
+            df_baixas_ativas[col] = (
+
+                df_baixas_ativas[col]
+
+                .fillna("")
+
+                .astype(str)
+
+                .apply(normalizar_processo)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+        # ----------------------------------------------------
+        # 🔥 DEMAIS
+        # ----------------------------------------------------
+        else:
+
+            df_baixas_ativas[col] = (
+
+                df_baixas_ativas[col]
+
+                .fillna("")
+
+                .astype(str)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+    # --------------------------------------------------------
+    # 🔥 CHAVE OPERACIONAL REAL
+    # --------------------------------------------------------
+    df_baixas_ativas["CHAVE_OPERACAO"] = (
+
+        df_baixas_ativas["PV"]
+
+        + "||"
+
+        + df_baixas_ativas["Processo"]
+
+        + "||"
+
+        + df_baixas_ativas["CODIGO_PV"]
+    )
+
+    # --------------------------------------------------------
+    # 🔥 CHAVES BAIXADAS
+    # --------------------------------------------------------
+    chaves_baixadas = set(
+
+        df_baixas_ativas[
+            "CHAVE_OPERACAO"
+        ]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+else:
+
+    chaves_baixadas = set()
 
 
+# ------------------------------------------------------------
+# REMOVE DA FILA
+# ------------------------------------------------------------
+df_operacional = df_operacional[
+    ~df_operacional["CHAVE_OPERACAO"].isin(chaves_baixadas)
+].copy()
 
-
-# ============================================================
-# 🔥 BASE FINAL PROCESSADA
-# ============================================================
-df = CORE_APS["df_operacional"].copy()
+# ------------------------------------------------------------
+# BASE FINAL APS
+# ------------------------------------------------------------
+df = df_operacional.copy()
 
 # ============================================================
 # 🔒 GARANTIA FINAL
@@ -724,6 +884,8 @@ df = CORE_APS["df_operacional"].copy()
 if df is None or df.empty:
 
     df = df_original.copy()
+
+
 
 
 
@@ -4188,19 +4350,76 @@ def _norm(x):
 # ============================================================
 for col in ["PV", "Processo", "CODIGO_PV"]:
 
+    # --------------------------------------------------------
+    # 🔥 BAIXAS
+    # --------------------------------------------------------
     if col in df_baixas.columns:
 
-        df_baixas[col] = (
-            df_baixas[col]
-            .apply(_norm)
-        )
+        # ----------------------------------------------------
+        # 🔥 PROCESSO
+        # ----------------------------------------------------
+        if col == "Processo":
 
+            df_baixas[col] = (
+
+                df_baixas[col]
+
+                .fillna("")
+
+                .astype(str)
+
+                .apply(normalizar_processo)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+        # ----------------------------------------------------
+        # 🔥 DEMAIS
+        # ----------------------------------------------------
+        else:
+
+            df_baixas[col] = (
+                df_baixas[col]
+                .apply(_norm)
+            )
+
+    # --------------------------------------------------------
+    # 🔥 OPERACIONAL
+    # --------------------------------------------------------
     if col in df_operacional.columns:
 
-        df_operacional[col] = (
-            df_operacional[col]
-            .apply(_norm)
-        )
+        # ----------------------------------------------------
+        # 🔥 PROCESSO
+        # ----------------------------------------------------
+        if col == "Processo":
+
+            df_operacional[col] = (
+
+                df_operacional[col]
+
+                .fillna("")
+
+                .astype(str)
+
+                .apply(normalizar_processo)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+        # ----------------------------------------------------
+        # 🔥 DEMAIS
+        # ----------------------------------------------------
+        else:
+
+            df_operacional[col] = (
+                df_operacional[col]
+                .apply(_norm)
+            )
+
 
 
 # ============================================================
