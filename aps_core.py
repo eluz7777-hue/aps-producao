@@ -361,19 +361,11 @@ df_planejamento = pd.merge(
 
 
 
-st.write("DEBUG PLANEJAMENTO")
-st.dataframe(
-    df_planejamento[
-        [
-            "PV",
-            "Processo",
-            "Horas",
-            "Horas_Baixadas",
-            "Saldo_Horas"
-        ]
-    ].head(20)
-)
+st.write("DEBUG COLUNAS PLANEJAMENTO")
+st.write(df_planejamento.columns.tolist())
 
+st.write("DEBUG PLANEJAMENTO")
+st.dataframe(df_planejamento.head(20))
 
 
 
