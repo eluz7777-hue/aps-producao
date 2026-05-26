@@ -243,32 +243,83 @@ COLUNAS_BAIXAS = [
 ]
 
 
+
+
+
 # ===============================
 # PADRONIZAÇÃO DE BAIXAS APS
 # ===============================
 def _padronizar_df_baixas(df_baixas):
 
+    # ========================================================
+    # 🔒 DATAFRAME VAZIO SEGURO
+    # ========================================================
     if df_baixas is None or df_baixas.empty:
 
-        return pd.DataFrame(
-            columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
-        )
+        return pd.DataFrame({
 
+            "PV": [],
+            "Cliente": [],
+            "CODIGO_PV": [],
+            "Processo": [],
+            "Horas": [],
+            "Data_Baixa": [],
+            "Usuario": [],
+            "Observacao": [],
+            "Status_Baixa": [],
+            "Data_Estorno": [],
+            "Motivo_Estorno": [],
+            "CHAVE_OPERACAO": []
+        })
+
+    # ========================================================
+    # 🔥 CÓPIA SEGURA
+    # ========================================================
     df_baixas = df_baixas.copy()
 
-    for col in COLUNAS_BAIXAS:
+    # ========================================================
+    # 🔒 GARANTE COLUNAS
+    # ========================================================
+    colunas_obrigatorias = [
+
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Horas",
+        "Data_Baixa",
+        "Usuario",
+        "Observacao",
+        "Status_Baixa",
+        "Data_Estorno",
+        "Motivo_Estorno",
+        "CHAVE_OPERACAO"
+    ]
+
+    for col in colunas_obrigatorias:
 
         if col not in df_baixas.columns:
-            df_baixas[col] = None
 
-    if "CHAVE_OPERACAO" not in df_baixas.columns:
-        df_baixas["CHAVE_OPERACAO"] = ""
+            if col == "Horas":
 
+                df_baixas[col] = 0
+
+            else:
+
+                df_baixas[col] = ""
+
+    # ========================================================
+    # 🔥 MANTÉM SOMENTE COLUNAS OFICIAIS
+    # ========================================================
     df_baixas = df_baixas[
-        COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+        colunas_obrigatorias
     ].copy()
 
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO TEXTO
+    # ========================================================
     colunas_texto = [
+
         "PV",
         "Cliente",
         "CODIGO_PV",
@@ -284,83 +335,159 @@ def _padronizar_df_baixas(df_baixas):
     for col in colunas_texto:
 
         df_baixas[col] = (
+
             df_baixas[col]
+
             .fillna("")
+
             .astype(str)
+
+            .str.replace(".0", "", regex=False)
+
+            .str.replace("\xa0", "", regex=False)
+
+            .str.replace("  ", " ", regex=False)
+
             .str.strip()
+
+            .str.upper()
         )
 
-    df_baixas["PV"] = (
-        df_baixas["PV"]
-        .str.upper()
-    )
-
-    df_baixas["CODIGO_PV"] = (
-        df_baixas["CODIGO_PV"]
-        .str.upper()
-    )
-
+    # ========================================================
+    # 🔥 PROCESSO OFICIAL APS
+    # ========================================================
     df_baixas["Processo"] = (
+
         df_baixas["Processo"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
+
         .apply(normalizar_processo)
     )
 
+    # ========================================================
+    # 🔥 CLIENTE PADRÃO
+    # ========================================================
     df_baixas["Cliente"] = (
+
         df_baixas["Cliente"]
+
         .replace("", "SEM CLIENTE")
     )
 
+    # ========================================================
+    # 🔥 STATUS PADRÃO
+    # ========================================================
     df_baixas["Status_Baixa"] = (
+
         df_baixas["Status_Baixa"]
+
         .replace("", "ATIVA")
+
         .str.upper()
     )
 
+    # ========================================================
+    # 🔥 HORAS
+    # ========================================================
     df_baixas["Horas"] = (
+
         pd.to_numeric(
             df_baixas["Horas"],
             errors="coerce"
         )
+
         .fillna(0)
     )
 
+    # ========================================================
+    # 🔥 DATA BAIXA
+    # ========================================================
     df_baixas["Data_Baixa"] = pd.to_datetime(
+
         df_baixas["Data_Baixa"],
+
         errors="coerce"
     )
 
-    df_baixas["Data_Estorno"] = (
-        df_baixas["Data_Estorno"]
-        .fillna("")
-        .astype(str)
-    )
+    # ========================================================
+    # 🔥 CHAVE OPERACIONAL OFICIAL APS
+    # ========================================================
+    df_baixas["CHAVE_OPERACAO"] = df_baixas.apply(
 
-    df_baixas["CHAVE_OPERACAO"] = np.where(
-
-        df_baixas["CHAVE_OPERACAO"].astype(str).str.strip() == "",
-
-        (
-            df_baixas["PV"]
-            + "||"
-            + df_baixas["Processo"]
-            + "||"
-            + df_baixas["CODIGO_PV"]
+        lambda r: gerar_chave_operacao(
+            r["PV"],
+            r["Processo"],
+            r["CODIGO_PV"]
         ),
 
-        df_baixas["CHAVE_OPERACAO"]
+        axis=1
+    )
+
+    # ========================================================
+    # 🔒 REMOVE CHAVES INVÁLIDAS
+    # ========================================================
+    df_baixas = (
+
+        df_baixas[
+
+            df_baixas["CHAVE_OPERACAO"] != ""
+
+        ]
+
+        .copy()
     )
 
     df_baixas = (
+
+        df_baixas[
+
+            df_baixas["CHAVE_OPERACAO"] != "|||"
+
+        ]
+
+        .copy()
+    )
+
+    # ========================================================
+    # 🔒 REMOVE LINHAS VAZIAS
+    # ========================================================
+    df_baixas = (
+
+        df_baixas[
+
+            (df_baixas["PV"] != "")
+
+            &
+
+            (df_baixas["Processo"] != "")
+
+            &
+
+            (df_baixas["CODIGO_PV"] != "")
+
+        ]
+
+        .copy()
+    )
+
+    # ========================================================
+    # 🔥 REMOVE DUPLICADOS
+    # ========================================================
+    df_baixas = (
+
         df_baixas
+
         .drop_duplicates()
+
         .reset_index(drop=True)
     )
 
+    # ========================================================
+    # 🔥 ORDENAÇÃO FINAL
+    # ========================================================
     df_baixas = (
+
         df_baixas
+
         .sort_values(
             by=[
                 "Data_Baixa",
@@ -373,11 +500,8 @@ def _padronizar_df_baixas(df_baixas):
                 True
             ]
         )
+
         .reset_index(drop=True)
     )
 
     return df_baixas
-
-
-
-
