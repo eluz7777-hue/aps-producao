@@ -2881,6 +2881,13 @@ for col in [
 # ============================================================
 base_oper = df_operacional.copy()
 
+# ============================================================
+# 🔒 GARANTIA DE COLUNA PROCESSO
+# ============================================================
+if "Processo" not in base_oper.columns:
+
+    base_oper["Processo"] = "SEM PROCESSO"
+
 for col in [
     "Horas",
     "Horas_Baixadas",
@@ -2945,6 +2952,8 @@ base = base.drop(
     columns=["Horas_Reais"],
     errors="ignore"
 )
+
+
 
 # ============================================================
 # 🔥 GRÁFICO
