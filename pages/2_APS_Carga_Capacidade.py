@@ -21,9 +21,9 @@ import shutil
 
 from aps_utils import *
 from aps_utils import _padronizar_df_baixas
+from aps_utils import gerar_chave_operacao
 
 from aps_banco import *
-
 
 
 
