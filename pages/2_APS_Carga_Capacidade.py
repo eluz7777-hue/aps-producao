@@ -397,31 +397,10 @@ for _, row in df_pv.iterrows():
             # ------------------------------------------------
             # 🔥 CHAVE OPERACIONAL APS
             # ------------------------------------------------
-            chave_operacao = (
-
-                str(pv_atual)
-
-                .strip()
-
-                .upper()
-
-                + "||"
-
-                + str(
-                    processo_normalizado
-                )
-
-                .strip()
-
-                .upper()
-
-                + "||"
-
-                + str(codigo_atual)
-
-                .strip()
-
-                .upper()
+            chave_operacao = gerar_chave_operacao(
+                pv_atual,
+                processo_normalizado,
+                codigo_atual
             )
 
             # ------------------------------------------------
@@ -740,10 +719,15 @@ for col in ["PV", "Processo", "CODIGO_PV"]:
 # ------------------------------------------------------------
 # CHAVE OPERACIONAL
 # ------------------------------------------------------------
-df_operacional["CHAVE_OPERACAO"] = (
-    df_operacional["PV"] + "||" +
-    df_operacional["Processo"] + "||" +
-    df_operacional["CODIGO_PV"]
+df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
+
+    lambda r: gerar_chave_operacao(
+        r["PV"],
+        r["Processo"],
+        r["CODIGO_PV"]
+    ),
+
+    axis=1
 )
 
 # ------------------------------------------------------------
@@ -831,17 +815,15 @@ if not df_baixas_ativas.empty:
     # --------------------------------------------------------
     # 🔥 CHAVE OPERACIONAL REAL
     # --------------------------------------------------------
-    df_baixas_ativas["CHAVE_OPERACAO"] = (
+    df_baixas_ativas["CHAVE_OPERACAO"] = df_baixas_ativas.apply(
 
-        df_baixas_ativas["PV"]
+        lambda r: gerar_chave_operacao(
+            r["PV"],
+            r["Processo"],
+            r["CODIGO_PV"]
+        ),
 
-        + "||"
-
-        + df_baixas_ativas["Processo"]
-
-        + "||"
-
-        + df_baixas_ativas["CODIGO_PV"]
+        axis=1
     )
 
     # --------------------------------------------------------
@@ -885,7 +867,6 @@ df = df_operacional.copy()
 if df is None or df.empty:
 
     df = df_original.copy()
-
 
 
 

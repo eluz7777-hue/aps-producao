@@ -4,6 +4,8 @@ import streamlit as st
 from aps_utils import *
 from aps_utils import _padronizar_df_baixas
 
+from aps_utils import gerar_chave_operacao
+
 from aps_banco import *
 
 
@@ -133,45 +135,17 @@ if not df_operacional.empty:
     )
 
     # ========================================================
-    # 🔥 CHAVE OPERACIONAL DEFINITIVA
+    # 🔥 CHAVE OPERACIONAL DEFINITIVA APS
     # ========================================================
-    df_operacional["CHAVE_OPERACAO"] = (
+    df_operacional["CHAVE_OPERACAO"] = df_operacional.apply(
 
-        df_operacional["PV"]
+        lambda r: gerar_chave_operacao(
+            r["PV"],
+            r["Processo"],
+            r["CODIGO_PV"]
+        ),
 
-        + "||"
-
-        + df_operacional["Processo"]
-
-        + "||"
-
-        + df_operacional["CODIGO_PV"]
-    )
-
-    # ========================================================
-    # 🔥 NORMALIZA CHAVE FINAL
-    # ========================================================
-    df_operacional["CHAVE_OPERACAO"] = (
-
-        df_operacional["CHAVE_OPERACAO"]
-
-        .fillna("")
-
-        .astype(str)
-
-        .str.replace(".0", "", regex=False)
-
-        .str.replace("\xa0", "", regex=False)
-
-        .str.replace(" | ", "|", regex=False)
-
-        .str.replace("|| ", "||", regex=False)
-
-        .str.replace(" ||", "||", regex=False)
-
-        .str.strip()
-
-        .str.upper()
+        axis=1
     )
 
     # ========================================================
@@ -232,6 +206,7 @@ else:
     df_operacional["CHAVE_OPERACAO"] = ""
 
     df_operacional["CHAVE_DUPLICADA"] = False
+
 
 
 # ============================================================
