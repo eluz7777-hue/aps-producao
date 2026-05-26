@@ -381,6 +381,11 @@ df_planejamento["Horas_Baixadas"] = (
     .fillna(0)
 )
 
+
+
+# ============================================================
+# 🔒 GARANTE HORAS VÁLIDAS
+# ============================================================
 df_planejamento["Horas"] = (
 
     pd.to_numeric(
@@ -390,6 +395,18 @@ df_planejamento["Horas"] = (
 
     .fillna(0)
 )
+
+df_planejamento["Horas_Baixadas"] = (
+
+    pd.to_numeric(
+        df_planejamento["Horas_Baixadas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+)
+
+
 
 # ------------------------------------------------------------
 # 🔥 SALDO REAL APS
@@ -402,6 +419,22 @@ df_planejamento["Saldo_Horas"] = (
 
     df_planejamento["Horas_Baixadas"]
 )
+
+# ============================================================
+# 🔒 GARANTE SALDO VÁLIDO
+# ============================================================
+df_planejamento["Saldo_Horas"] = (
+
+    pd.to_numeric(
+        df_planejamento["Saldo_Horas"],
+        errors="coerce"
+    )
+
+    .fillna(0)
+)
+
+
+
 
 # ------------------------------------------------------------
 # 🔒 IMPEDE NEGATIVOS
