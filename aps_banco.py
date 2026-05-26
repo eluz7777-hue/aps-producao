@@ -16,6 +16,14 @@ from aps_utils import *
 from aps_utils import _padronizar_df_baixas
 
 
+# ============================================================
+# 🔥 BASE OPERACIONAL GLOBAL APS
+# ============================================================
+if "df_operacional" not in globals():
+
+    df_operacional = pd.DataFrame()
+
+
 
 def _norm(valor):
 
