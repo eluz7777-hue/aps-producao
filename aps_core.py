@@ -115,6 +115,22 @@ if not df_operacional.empty:
     )
 
     # ========================================================
+    # 🔥 NORMALIZA CLIENTE
+    # ========================================================
+    df_operacional["Cliente"] = (
+
+        df_operacional["Cliente"]
+
+        .fillna("SEM CLIENTE")
+
+        .astype(str)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+    # ========================================================
     # 🔥 CHAVE OPERACIONAL DEFINITIVA
     # ========================================================
     df_operacional["CHAVE_OPERACAO"] = (
@@ -157,46 +173,41 @@ if not df_operacional.empty:
     )
 
     # ========================================================
+    # 🔒 REMOVE CHAVES VAZIAS
+    # ========================================================
+    df_operacional = (
+
+        df_operacional[
+
+            df_operacional["CHAVE_OPERACAO"] != ""
+
+        ]
+
+        .copy()
+    )
+
+    # ========================================================
     # 🔥 CONSOLIDA DUPLICAÇÕES DA PV.xlsx
     # ========================================================
-    colunas_base_operacional = [
-
-        "CHAVE_OPERACAO",
-        "PV",
-        "Cliente",
-        "CODIGO_PV",
-        "Processo",
-    ]
-
-    colunas_existentes_operacional = [
-
-        c for c in colunas_base_operacional
-
-        if c in df_operacional.columns
-    ]
-
-    agregacoes_operacionais = {
-        "Horas": "sum"
-    }
-
     df_operacional = (
 
         df_operacional
 
-        .sort_values(
-            by=[
-                "PV",
-                "Processo",
-                "CODIGO_PV"
-            ]
-        )
-
         .groupby(
-            colunas_existentes_operacional,
-            as_index=False
+            [
+                "CHAVE_OPERACAO",
+                "PV",
+                "Cliente",
+                "CODIGO_PV",
+                "Processo"
+            ],
+            as_index=False,
+            dropna=False
         )
 
-        .agg(agregacoes_operacionais)
+        .agg({
+            "Horas": "sum"
+        })
 
         .reset_index(drop=True)
     )
@@ -219,6 +230,7 @@ else:
     df_operacional["CHAVE_OPERACAO"] = ""
 
     df_operacional["CHAVE_DUPLICADA"] = False
+
 
 
 # ============================================================
