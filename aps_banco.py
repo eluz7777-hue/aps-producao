@@ -1,6 +1,8 @@
 import os
 import shutil
 
+import numpy as np
+
 import pandas as pd
 import streamlit as st
 
@@ -11,6 +13,40 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from aps_utils import *
+
+
+def _norm(valor):
+
+    if pd.isna(valor):
+        return ""
+
+    return (
+        str(valor)
+        .strip()
+        .upper()
+        .replace(".0", "")
+        .replace("\xa0", "")
+    )
+
+
+# =============================== 
+# BAIXAS OPERACIONAIS APS
+# ===============================
+
+COLUNAS_BAIXAS = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Data_Baixa",
+    "Usuario",
+    "Observacao",
+    "Status_Baixa",
+    "Data_Estorno",
+    "Motivo_Estorno"
+]
+
 
 
 # ============================================================
