@@ -5746,6 +5746,7 @@ else:
                 0
             )
 
+            # =================================================
             # 🔒 BLOQUEIO FINAL
             # =================================================
             if saldo_real <= 0:
@@ -5863,6 +5864,251 @@ else:
                     )
                 )
 
+    st.divider()
+
+    # ========================================================
+    # 📦 BAIXA EM LOTE (BLINDADA)
+    # ========================================================
+    st.markdown("#### 📦 Baixa em Lote")
+
+    selecao = st.multiselect(
+        "Selecionar operações",
+        opcoes,
+        format_func=lambda x: mapa_labels.get(x, x),
+        key="corte_lote"
+    )
+
+    if selecao:
+
+        if st.button(
+            "📦 Baixar Corte em Lote",
+            key="btn_corte_lote"
+        ):
+
+            sucessos = []
+
+            erros = []
+
+            # =================================================
+            # 🔥 RECARREGA POSTGRESQL
+            # =================================================
+            df_baixas_atual = (
+                carregar_baixas_postgresql()
+            )
+
+            if not df_baixas_atual.empty:
+
+                df_baixas_atual["Horas"] = pd.to_numeric(
+                    df_baixas_atual["Horas"],
+                    errors="coerce"
+                ).fillna(0)
+
+                df_baixas_atual["Status_Baixa"] = (
+                    df_baixas_atual["Status_Baixa"]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                )
+
+                df_baixas_atual["CHAVE_OPERACAO"] = (
+                    df_baixas_atual["CHAVE_OPERACAO"]
+                    .fillna("")
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
+                )
+
+                df_baixas_validas = (
+                    df_baixas_atual[
+                        df_baixas_atual[
+                            "Status_Baixa"
+                        ].isin([
+                            "ATIVA",
+                            "TERCEIRIZADA"
+                        ])
+                    ]
+                    .copy()
+                )
+
+            else:
+
+                df_baixas_validas = pd.DataFrame()
+
+            # =================================================
+            # 🔥 LOOP LOTE
+            # =================================================
+            for chave in selecao:
+
+                linha_sel_lote = base_corte[
+                    base_corte["CHAVE_OPERACAO"] == chave
+                ]
+
+                # ------------------------------------------------
+                # 🔒 OPERAÇÃO NÃO ENCONTRADA
+                # ------------------------------------------------
+                if linha_sel_lote.empty:
+
+                    erros.append(chave)
+
+                    continue
+
+                linha = linha_sel_lote.iloc[0]
+
+                # ------------------------------------------------
+                # 🔒 VALIDAÇÃO OPERACIONAL
+                # ------------------------------------------------
+                if (
+
+                    not linha["PV"]
+
+                    or not linha["Processo"]
+
+                    or not linha["CODIGO_PV"]
+
+                ):
+
+                    erros.append(chave)
+
+                    continue
+
+                if (
+
+                    not chave
+
+                    or chave == "|||"
+
+                ):
+
+                    erros.append(chave)
+
+                    continue
+
+                horas_ja_baixadas = 0
+
+                if not df_baixas_validas.empty:
+
+                    horas_ja_baixadas = (
+
+                        df_baixas_validas[
+
+                            df_baixas_validas[
+                                "CHAVE_OPERACAO"
+                            ] == chave
+
+                        ]["Horas"]
+
+                        .sum()
+                    )
+
+                # =================================================
+                # 🔥 SALDO OPERACIONAL REAL APS
+                # =================================================
+                saldo_real = float(
+
+                    pd.to_numeric(
+                        linha.get(
+                            "Saldo_Horas",
+                            0
+                        ),
+                        errors="coerce"
+                    )
+                )
+
+                saldo_real = max(
+                    saldo_real,
+                    0
+                )
+
+                # ------------------------------------------------
+                # 🔒 BLOQUEIA DUPLICADOS
+                # ------------------------------------------------
+                if saldo_real <= 0:
+
+                    erros.append(chave)
+
+                    continue
+
+                # =================================================
+                # 🔥 TIMESTAMP REAL
+                # =================================================
+                data_real = datetime.now(
+                    ZoneInfo("America/Sao_Paulo")
+                )
+
+                # =================================================
+                # 🔥 REGISTRO FINAL
+                # =================================================
+                nova_baixa = {
+
+                    "PV": _norm(
+                        linha["PV"]
+                    ),
+
+                    "Cliente": linha.get(
+                        "Cliente",
+                        ""
+                    ),
+
+                    "CODIGO_PV": _norm(
+                        linha["CODIGO_PV"]
+                    ),
+
+                    "Processo": normalizar_processo(
+                        linha["Processo"]
+                    ),
+
+                    "Horas": saldo_real,
+
+                    "Data_Baixa": data_real,
+
+                    "Usuario": "Sistema",
+
+                    "Observacao": "LOTE_CORTE",
+
+                    "Status_Baixa": "ATIVA",
+
+                    "Data_Estorno": "",
+
+                    "Motivo_Estorno": "",
+
+                    "CHAVE_OPERACAO": chave
+                }
+
+                # =================================================
+                # 💾 SALVA POSTGRESQL
+                # =================================================
+                resultado = salvar_baixa_postgresql(
+                    nova_baixa
+                )
+
+                if resultado.get("ok"):
+
+                    sucessos.append(chave)
+
+                else:
+
+                    erros.append(chave)
+
+            # =================================================
+            # 🔥 RESULTADOS
+            # =================================================
+            if sucessos:
+
+                st.session_state[
+                    "reset_corte_lote"
+                ] = True
+
+                st.success(
+                    f"{len(sucessos)} operações baixadas"
+                )
+
+            if erros:
+
+                st.warning(
+                    f"{len(erros)} operações não foram baixadas"
+                )
+
+            st.rerun()
 
 
 
