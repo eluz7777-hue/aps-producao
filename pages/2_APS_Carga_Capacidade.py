@@ -742,6 +742,32 @@ df_baixas_ativas = _padronizar_df_baixas(
     df_baixas_ativas
 )
 
+
+
+
+st.write("COLUNAS BAIXAS:")
+st.write(df_baixas_ativas.columns.tolist())
+
+st.write(df_baixas_ativas.head())
+
+
+
+
+
+
+
+# ------------------------------------------------------------
+# 🔥 LEITURA OFICIAL DAS BAIXAS APS
+# ------------------------------------------------------------
+df_baixas_ativas = carregar_baixas_postgresql()
+
+# ------------------------------------------------------------
+# 🔒 PADRONIZAÇÃO OFICIAL
+# ------------------------------------------------------------
+df_baixas_ativas = _padronizar_df_baixas(
+    df_baixas_ativas
+)
+
 # ------------------------------------------------------------
 # 🔥 SOMENTE BAIXAS ATIVAS
 # ------------------------------------------------------------
@@ -827,6 +853,19 @@ if not df_baixas_ativas.empty:
     )
 
     # --------------------------------------------------------
+    # 🔍 DEBUG TEMPORÁRIO
+    # --------------------------------------------------------
+    if "PV" not in df_baixas_ativas.columns:
+
+        st.error("COLUNA PV SUMIU")
+
+        st.write(df_baixas_ativas.columns.tolist())
+
+        st.write(df_baixas_ativas.head())
+
+        st.stop()
+
+    # --------------------------------------------------------
     # 🔥 CHAVES BAIXADAS
     # --------------------------------------------------------
     chaves_baixadas = set(
@@ -847,6 +886,28 @@ if not df_baixas_ativas.empty:
 else:
 
     chaves_baixadas = set()
+
+
+# ------------------------------------------------------------
+# REMOVE DA FILA
+# ------------------------------------------------------------
+df_operacional = df_operacional[
+    ~df_operacional["CHAVE_OPERACAO"].isin(chaves_baixadas)
+].copy()
+
+# ------------------------------------------------------------
+# BASE FINAL APS
+# ------------------------------------------------------------
+df = df_operacional.copy()
+
+# ============================================================
+# 🔒 GARANTIA FINAL
+# ============================================================
+if df is None or df.empty:
+
+    df = df_original.copy()
+
+
 
 
 # ------------------------------------------------------------
