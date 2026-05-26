@@ -680,6 +680,19 @@ if not df_original.empty:
 
 
 
+
+st.write("DEBUG DF ORIGINAL")
+st.write(df_original.shape)
+
+st.write("DEBUG COLUNAS DF ORIGINAL")
+st.write(df_original.columns.tolist())
+
+st.dataframe(df_original.head(20))
+
+
+
+
+
 # ============================================================
 # 🔥 BASE OPERACIONAL OFICIAL APS
 # ============================================================
