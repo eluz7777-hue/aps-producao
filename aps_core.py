@@ -286,9 +286,15 @@ else:
 
     df_operacional = pd.DataFrame({
 
+        "PV": [],
+        "Processo": [],
+        "CODIGO_PV": [],
+        "Horas": [],
+        "Cliente": [],
         "CHAVE_OPERACAO": [],
         "CHAVE_DUPLICADA": []
     })
+        
 
 
 # ============================================================
