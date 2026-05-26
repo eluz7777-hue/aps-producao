@@ -5,7 +5,17 @@ from aps_utils import *
 from aps_banco import *
 
 
-df_operacional = pd.DataFrame()
+
+
+
+# ============================================================
+# 🔥 BASE OPERACIONAL RECEBIDA DO APS
+# ============================================================
+if "df_operacional" not in globals():
+
+    df_operacional = pd.DataFrame()
+
+
 
 # --------------------------------------------
 # 🔥 GARANTE CHAVE OPERACIONAL OFICIAL APS

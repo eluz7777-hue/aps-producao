@@ -1,5 +1,6 @@
 import pandas as pd
 
+import numpy as np
 
 # ===============================
 # FORMATAÇÃO BR (INALTERADO)
@@ -172,6 +173,177 @@ def normalizar_processo(valor):
     )
 
     return valor
+
+# ===============================
+# NORMALIZAÇÃO DE CÓDIGO
+# ===============================
+def normalizar_codigo(x):
+
+    if pd.isna(x):
+        return ""
+
+    x = str(x)
+
+    x = x.replace("\xa0", "")
+    x = x.replace(" ", "")
+    x = x.replace(".0", "")
+    x = x.strip()
+
+    return x
+
+
+# ===============================
+# BAIXAS APS
+# ===============================
+COLUNAS_BAIXAS = [
+    "PV",
+    "Cliente",
+    "CODIGO_PV",
+    "Processo",
+    "Horas",
+    "Data_Baixa",
+    "Usuario",
+    "Observacao",
+    "Status_Baixa",
+    "Data_Estorno",
+    "Motivo_Estorno"
+]
+
+
+# ===============================
+# PADRONIZAÇÃO DE BAIXAS APS
+# ===============================
+def _padronizar_df_baixas(df_baixas):
+
+    if df_baixas is None or df_baixas.empty:
+
+        return pd.DataFrame(
+            columns=COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+        )
+
+    df_baixas = df_baixas.copy()
+
+    for col in COLUNAS_BAIXAS:
+
+        if col not in df_baixas.columns:
+            df_baixas[col] = None
+
+    if "CHAVE_OPERACAO" not in df_baixas.columns:
+        df_baixas["CHAVE_OPERACAO"] = ""
+
+    df_baixas = df_baixas[
+        COLUNAS_BAIXAS + ["CHAVE_OPERACAO"]
+    ].copy()
+
+    colunas_texto = [
+        "PV",
+        "Cliente",
+        "CODIGO_PV",
+        "Processo",
+        "Usuario",
+        "Observacao",
+        "Status_Baixa",
+        "Data_Estorno",
+        "Motivo_Estorno",
+        "CHAVE_OPERACAO"
+    ]
+
+    for col in colunas_texto:
+
+        df_baixas[col] = (
+            df_baixas[col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+    df_baixas["PV"] = (
+        df_baixas["PV"]
+        .str.upper()
+    )
+
+    df_baixas["CODIGO_PV"] = (
+        df_baixas["CODIGO_PV"]
+        .str.upper()
+    )
+
+    df_baixas["Processo"] = (
+        df_baixas["Processo"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .apply(normalizar_processo)
+    )
+
+    df_baixas["Cliente"] = (
+        df_baixas["Cliente"]
+        .replace("", "SEM CLIENTE")
+    )
+
+    df_baixas["Status_Baixa"] = (
+        df_baixas["Status_Baixa"]
+        .replace("", "ATIVA")
+        .str.upper()
+    )
+
+    df_baixas["Horas"] = (
+        pd.to_numeric(
+            df_baixas["Horas"],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+
+    df_baixas["Data_Baixa"] = pd.to_datetime(
+        df_baixas["Data_Baixa"],
+        errors="coerce"
+    )
+
+    df_baixas["Data_Estorno"] = (
+        df_baixas["Data_Estorno"]
+        .fillna("")
+        .astype(str)
+    )
+
+    df_baixas["CHAVE_OPERACAO"] = np.where(
+
+        df_baixas["CHAVE_OPERACAO"].astype(str).str.strip() == "",
+
+        (
+            df_baixas["PV"]
+            + "||"
+            + df_baixas["Processo"]
+            + "||"
+            + df_baixas["CODIGO_PV"]
+        ),
+
+        df_baixas["CHAVE_OPERACAO"]
+    )
+
+    df_baixas = (
+        df_baixas
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
+    df_baixas = (
+        df_baixas
+        .sort_values(
+            by=[
+                "Data_Baixa",
+                "PV",
+                "Processo"
+            ],
+            ascending=[
+                False,
+                True,
+                True
+            ]
+        )
+        .reset_index(drop=True)
+    )
+
+    return df_baixas
 
 
 
