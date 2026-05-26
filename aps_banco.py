@@ -13,6 +13,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from aps_utils import *
+from aps_utils import _padronizar_df_baixas
+
 
 
 def _norm(valor):
