@@ -681,32 +681,32 @@ if not df_original.empty:
 
 
 
-st.write("DEBUG DF ORIGINAL")
-st.write(df_original.shape)
-
-st.write("DEBUG COLUNAS DF ORIGINAL")
-st.write(df_original.columns.tolist())
-
-st.dataframe(df_original.head(20))
-
-
-
-
-
 # ============================================================
 # 🔥 BASE OPERACIONAL OFICIAL APS
 # ============================================================
 df_operacional = df_original.copy()
 
+# ============================================================
+# 🔥 INJETA BASE NO CORE APS
+# ============================================================
+import aps_core
+
+aps_core.df_operacional = df_operacional.copy()
+
 from aps_core import *
 
+# ============================================================
+# 🔥 BASE FINAL PROCESSADA
+# ============================================================
 df = CORE_APS["df_operacional"].copy()
 
-
-# 🔒 GARANTIA DE ESTRUTURA OPERACIONAL
+# ============================================================
+# 🔒 GARANTIA FINAL
+# ============================================================
 if df is None or df.empty:
 
     df = df_original.copy()
+
 
 
 
