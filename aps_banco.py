@@ -859,17 +859,24 @@ def salvar_baixa_postgresql(nova_baixa):
         try:
 
             # ------------------------------------------------
-            # 🔒 GARANTE DATAFRAME
+            # 🔒 RECUPERA BASE OPERACIONAL COM SEGURANÇA
             # ------------------------------------------------
-            if df_operacional is None:
-
-                df_operacional_local = pd.DataFrame()
-
-            else:
+            try:
 
                 df_operacional_local = (
                     df_operacional.copy()
                 )
+
+            except:
+
+                df_operacional_local = pd.DataFrame({
+
+                    "PV": [],
+                    "Processo": [],
+                    "CODIGO_PV": [],
+                    "Horas": [],
+                    "CHAVE_OPERACAO": []
+                })
 
             # ------------------------------------------------
             # 🔒 GARANTE COLUNAS
@@ -909,6 +916,8 @@ def salvar_baixa_postgresql(nova_baixa):
 
                 .str.replace("\xa0", "", regex=False)
 
+                .str.replace("  ", " ", regex=False)
+
                 .str.strip()
 
                 .str.upper()
@@ -929,6 +938,8 @@ def salvar_baixa_postgresql(nova_baixa):
 
                 .str.replace("\xa0", "", regex=False)
 
+                .str.replace("  ", " ", regex=False)
+
                 .str.strip()
 
                 .str.upper()
@@ -945,11 +956,13 @@ def salvar_baixa_postgresql(nova_baixa):
 
                 .astype(str)
 
-                .apply(normalizar_processo)
-
                 .str.replace("\xa0", "", regex=False)
 
+                .str.replace("  ", " ", regex=False)
+
                 .str.strip()
+
+                .apply(normalizar_processo)
 
                 .str.upper()
             )
@@ -971,6 +984,7 @@ def salvar_baixa_postgresql(nova_baixa):
             # 🔥 RECONSTRÓI CHAVE OFICIAL APS
             # ------------------------------------------------
             df_operacional_local["CHAVE_OPERACAO"] = (
+
                 df_operacional_local.apply(
 
                     lambda r: gerar_chave_operacao(
@@ -984,8 +998,47 @@ def salvar_baixa_postgresql(nova_baixa):
             )
 
             # ------------------------------------------------
+            # 🔒 NORMALIZA CHAVE FINAL
+            # ------------------------------------------------
+            df_operacional_local["CHAVE_OPERACAO"] = (
+
+                df_operacional_local["CHAVE_OPERACAO"]
+
+                .fillna("")
+
+                .astype(str)
+
+                .str.replace(".0", "", regex=False)
+
+                .str.replace("\xa0", "", regex=False)
+
+                .str.replace(" | ", "|", regex=False)
+
+                .str.replace("|| ", "||", regex=False)
+
+                .str.replace(" ||", "||", regex=False)
+
+                .str.strip()
+
+                .str.upper()
+            )
+
+            # ------------------------------------------------
             # 🔒 REMOVE CHAVES INVÁLIDAS
             # ------------------------------------------------
+            df_operacional_local = (
+
+                df_operacional_local[
+
+                    df_operacional_local[
+                        "CHAVE_OPERACAO"
+                    ] != ""
+
+                ]
+
+                .copy()
+            )
+
             df_operacional_local = (
 
                 df_operacional_local[
@@ -1000,7 +1053,29 @@ def salvar_baixa_postgresql(nova_baixa):
             )
 
             # ------------------------------------------------
-            # 🔥 REMOVE DUPLICIDADES OPERACIONAIS
+            # 🔒 REMOVE LINHAS OPERACIONAIS VAZIAS
+            # ------------------------------------------------
+            df_operacional_local = (
+
+                df_operacional_local[
+
+                    (df_operacional_local["PV"] != "")
+
+                    &
+
+                    (df_operacional_local["Processo"] != "")
+
+                    &
+
+                    (df_operacional_local["CODIGO_PV"] != "")
+
+                ]
+
+                .copy()
+            )
+
+            # ------------------------------------------------
+            # 🔥 REMOVE DUPLICIDADES
             # ------------------------------------------------
             base_operacional_normalizada = (
 
@@ -1227,7 +1302,6 @@ def salvar_baixa_postgresql(nova_baixa):
             "ok": False,
             "erro": str(e)
         }
-
 
 
 
