@@ -5396,73 +5396,136 @@ if base_corte.empty:
 else:
 
     # ========================================================
-    # 🔥 GARANTE CHAVE OPERACIONAL
+    # 🔥 BLINDAGEM OPERACIONAL
     # ========================================================
-    if "CHAVE_OPERACAO" not in base_corte.columns:
+    colunas_obrigatorias = [
+        "PV",
+        "Processo",
+        "CODIGO_PV",
+        "Saldo_Horas"
+    ]
 
-        base_corte["CHAVE_OPERACAO"] = (
+    for col in colunas_obrigatorias:
 
-            base_corte["PV"]
-            .astype(str)
+        if col not in base_corte.columns:
+            base_corte[col] = ""
 
-            + "||"
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO OFICIAL APS
+    # ========================================================
+    base_corte["PV"] = (
 
-            + normalizar_processo(
-                base_corte["Processo"]
-            ).astype(str)
+        base_corte["PV"]
 
-            + "||"
+        .fillna("")
 
-            + base_corte["CODIGO_PV"]
-            .astype(str)
+        .astype(str)
+
+        .str.replace(".0", "", regex=False)
+
+        .str.replace("\xa0", "", regex=False)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+    base_corte["CODIGO_PV"] = (
+
+        base_corte["CODIGO_PV"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.replace(".0", "", regex=False)
+
+        .str.replace("\xa0", "", regex=False)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+    base_corte["Processo"] = (
+
+        base_corte["Processo"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .apply(normalizar_processo)
+
+        .str.replace("\xa0", "", regex=False)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+    # ========================================================
+    # 🔥 SALDO NUMÉRICO
+    # ========================================================
+    base_corte["Saldo_Horas"] = (
+
+        pd.to_numeric(
+            base_corte["Saldo_Horas"],
+            errors="coerce"
         )
 
-    else:
+        .fillna(0)
+    )
 
-        base_corte["CHAVE_OPERACAO"] = (
+    # ========================================================
+    # 🔥 CHAVE OPERACIONAL OFICIAL APS
+    # ========================================================
+    base_corte["CHAVE_OPERACAO"] = base_corte.apply(
 
-            base_corte["CHAVE_OPERACAO"]
+        lambda r: gerar_chave_operacao(
+            r["PV"],
+            r["Processo"],
+            r["CODIGO_PV"]
+        ),
 
-            .fillna("")
+        axis=1
+    )
 
-            .astype(str)
+    # ========================================================
+    # 🔒 REMOVE CHAVES INVÁLIDAS
+    # ========================================================
+    base_corte = (
 
-            .str.strip()
-        )
+        base_corte[
 
-        mascara_chave_vazia = (
-            base_corte["CHAVE_OPERACAO"] == ""
-        )
+            base_corte["CHAVE_OPERACAO"] != "|||"
 
-        if mascara_chave_vazia.any():
+        ]
 
-            base_corte.loc[
-                mascara_chave_vazia,
-                "CHAVE_OPERACAO"
-            ] = (
+        .copy()
+    )
 
-                base_corte.loc[
-                    mascara_chave_vazia,
-                    "PV"
-                ].astype(str)
+    # ========================================================
+    # 🔒 REMOVE VAZIOS OPERACIONAIS
+    # ========================================================
+    base_corte = (
 
-                + "||"
+        base_corte[
 
-                + normalizar_processo(
-                    base_corte.loc[
-                        mascara_chave_vazia,
-                        "Processo"
-                    ]
-                ).astype(str)
+            (base_corte["PV"] != "")
 
-                + "||"
+            &
 
-                + base_corte.loc[
-                    mascara_chave_vazia,
-                    "CODIGO_PV"
-                ].astype(str)
-            )
+            (base_corte["Processo"] != "")
 
+            &
+
+            (base_corte["CODIGO_PV"] != "")
+
+        ]
+
+        .copy()
+    )
 
     # ========================================================
     # 🔥 NORMALIZA CHAVE FINAL
@@ -5480,13 +5543,13 @@ else:
         .str.strip()
     )
 
-
     # ========================================================
     # 🔥 LABEL VISUAL
     # ========================================================
     base_corte["LABEL"] = (
 
         "PV "
+
         + base_corte["PV"].astype(str)
 
         + " | "
@@ -5506,7 +5569,6 @@ else:
         + " h"
     )
 
-
     # ========================================================
     # 🔒 MAPA OPERACIONAL SEGURO
     # ========================================================
@@ -5518,7 +5580,6 @@ else:
         )
     )
 
-
     # ========================================================
     # 🔥 OPÇÕES SEGURAS
     # ========================================================
@@ -5528,9 +5589,22 @@ else:
 
         .drop_duplicates()
 
+        .dropna()
+
         .tolist()
     )
 
+    # ========================================================
+    # 🔒 REMOVE CHAVES VAZIAS
+    # ========================================================
+    opcoes = [
+
+        o
+
+        for o in opcoes
+
+        if o and o != "|||"
+    ]
 
     # ========================================================
     # 🔄 CONTROLE DE RESET
@@ -5540,7 +5614,6 @@ else:
 
     if "reset_corte_lote" not in st.session_state:
         st.session_state["reset_corte_lote"] = False
-
 
     # ========================================================
     # 🔥 RESET UNITÁRIO
@@ -5557,7 +5630,6 @@ else:
             "reset_corte_unitario"
         ] = False
 
-
     # ========================================================
     # 🔥 RESET LOTE
     # ========================================================
@@ -5568,7 +5640,6 @@ else:
         st.session_state[
             "reset_corte_lote"
         ] = False
-
 
     # ========================================================
     # 🔹 BAIXA UNITÁRIA
@@ -5610,197 +5681,6 @@ else:
                 )
 
                 st.stop()
-
-
-            # =================================================
-            # 🔥 RECARREGA POSTGRESQL
-            # =================================================
-            df_baixas_atual = (
-                carregar_baixas_postgresql()
-            )
-
-            if not df_baixas_atual.empty:
-
-                df_baixas_atual["Horas"] = pd.to_numeric(
-                    df_baixas_atual["Horas"],
-                    errors="coerce"
-                ).fillna(0)
-
-                df_baixas_atual["Status_Baixa"] = (
-                    df_baixas_atual["Status_Baixa"]
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                )
-
-                df_baixas_atual["CHAVE_OPERACAO"] = (
-                    df_baixas_atual["CHAVE_OPERACAO"]
-                    .fillna("")
-                    .astype(str)
-                    .str.upper()
-                    .str.strip()
-                )
-
-                df_baixas_validas = (
-                    df_baixas_atual[
-                        df_baixas_atual[
-                            "Status_Baixa"
-                        ].isin([
-                            "ATIVA",
-                            "TERCEIRIZADA"
-                        ])
-                    ]
-                    .copy()
-                )
-
-                horas_ja_baixadas = (
-                    df_baixas_validas[
-                        df_baixas_validas[
-                            "CHAVE_OPERACAO"
-                        ] == linha["CHAVE_OPERACAO"]
-                    ]["Horas"]
-                    .sum()
-                )
-
-            else:
-
-                horas_ja_baixadas = 0
-
-
-            # =================================================
-            # 🔥 SALDO OPERACIONAL REAL APS
-            # =================================================
-            saldo_real = float(
-
-                pd.to_numeric(
-                    linha.get(
-                        "Saldo_Horas",
-                        0
-                    ),
-                    errors="coerce"
-                )
-            )
-
-            saldo_real = max(
-                saldo_real,
-                0
-            )
-
-
-            # 🔒 BLOQUEIO FINAL
-            # =================================================
-            if saldo_real <= 0:
-
-                st.warning(
-                    "⚠️ Operação já totalmente baixada"
-                )
-
-                st.stop()
-
-
-            # =================================================
-            # 🔥 TIMESTAMP REAL
-            # =================================================
-            data_real = datetime.now(
-                ZoneInfo("America/Sao_Paulo")
-            )
-
-
-            # =================================================
-            # 🔥 REGISTRO FINAL
-            # =================================================
-            nova_baixa = {
-
-                "PV": _norm(linha["PV"]),
-
-                "Cliente": linha.get(
-                    "Cliente",
-                    ""
-                ),
-
-                "CODIGO_PV": _norm(
-                    linha["CODIGO_PV"]
-                ),
-
-                "Processo": normalizar_processo(
-                    linha["Processo"]
-                ),
-
-                "Horas": saldo_real,
-
-                "Data_Baixa": data_real,
-
-                "Usuario": "Sistema",
-
-                "Observacao": "UNITARIO_CORTE",
-
-                "Status_Baixa": "ATIVA",
-
-                "Data_Estorno": "",
-
-                "Motivo_Estorno": "",
-
-                "CHAVE_OPERACAO": linha[
-                    "CHAVE_OPERACAO"
-                ]
-            }
-
-
-            # =================================================
-            # 💾 SALVA POSTGRESQL
-            # =================================================
-            resultado = salvar_baixa_postgresql(
-                nova_baixa
-            )
-
-
-            if resultado.get("ok"):
-
-                st.session_state[
-                    "reset_corte_unitario"
-                ] = True
-
-                st.success(
-                    f"✅ Baixa registrada ({saldo_real:.2f}h)"
-                )
-
-                st.rerun()
-
-            else:
-
-                st.error(
-                    resultado.get(
-                        "erro",
-                        "Erro ao registrar baixa"
-                    )
-                )
-
-    st.divider()
-
-
-
-    # ========================================================
-    # 📦 BAIXA EM LOTE (BLINDADA)
-    # ========================================================
-    st.markdown("#### 📦 Baixa em Lote")
-
-    selecao = st.multiselect(
-        "Selecionar operações",
-        opcoes,
-        format_func=lambda x: mapa_labels.get(x, x),
-        key="corte_lote"
-    )
-
-    if selecao:
-
-        if st.button(
-            "📦 Baixar Corte em Lote",
-            key="btn_corte_lote"
-        ):
-
-            sucessos = []
-            erros = []
-
 
             # =================================================
             # 🔥 RECARREGA POSTGRESQL
@@ -5847,188 +5727,143 @@ else:
 
                 df_baixas_validas = pd.DataFrame()
 
-
             # =================================================
-            # 🔥 LOOP LOTE
+            # 🔥 SALDO OPERACIONAL REAL APS
             # =================================================
-            for chave in selecao:
+            saldo_real = float(
 
-                linha = base_corte[
-                    base_corte["CHAVE_OPERACAO"] == chave
-                ].iloc[0]
+                pd.to_numeric(
+                    linha.get(
+                        "Saldo_Horas",
+                        0
+                    ),
+                    errors="coerce"
+                )
+            )
 
-                horas_ja_baixadas = 0
+            saldo_real = max(
+                saldo_real,
+                0
+            )
 
-                if not df_baixas_validas.empty:
+            # 🔒 BLOQUEIO FINAL
+            # =================================================
+            if saldo_real <= 0:
 
-                    horas_ja_baixadas = (
-                        df_baixas_validas[
-                            df_baixas_validas[
-                                "CHAVE_OPERACAO"
-                            ] == chave
-                        ]["Horas"]
-                        .sum()
-                    )
-
-
-                # =================================================
-                # 🔥 SALDO OPERACIONAL REAL APS
-                # =================================================
-                saldo_real = float(
-
-                    pd.to_numeric(
-                        linha.get(
-                            "Saldo_Horas",
-                            0
-                        ),
-                        errors="coerce"
-                    )
+                st.warning(
+                    "⚠️ Operação já totalmente baixada"
                 )
 
-                saldo_real = max(
-                    saldo_real,
-                    0
-                )
-
-
-                # 🔒 BLOQUEIA DUPLICADOS
-                # =============================================
-                if saldo_real <= 0:
-
-                    erros.append(chave)
-
-                    continue
-
-
-                # =============================================
-                # 🔥 TIMESTAMP REAL
-                # =============================================
-                data_real = datetime.now(
-                    ZoneInfo("America/Sao_Paulo")
-                )
-
-
-                # =============================================
-                # 🔥 REGISTRO FINAL
-                # =============================================
-                nova_baixa = {
-
-                    "PV": _norm(
-                        linha["PV"]
-                    ),
-
-                    "Cliente": linha.get(
-                        "Cliente",
-                        ""
-                    ),
-
-                    "CODIGO_PV": _norm(
-                        linha["CODIGO_PV"]
-                    ),
-
-                    "Processo": normalizar_processo(
-                        linha["Processo"]
-                    ),
-
-                    "Horas": saldo_real,
-
-                    "Data_Baixa": data_real,
-
-                    "Usuario": "Sistema",
-
-                    "Observacao": "LOTE_CORTE",
-
-                    "Status_Baixa": "ATIVA",
-
-                    "Data_Estorno": "",
-
-                    "Motivo_Estorno": "",
-
-                    "CHAVE_OPERACAO": chave
-                }
-
-
-                # =============================================
-                # 💾 SALVA POSTGRESQL
-                # =============================================
-                resultado = salvar_baixa_postgresql(
-                    nova_baixa
-                )
-
-                if resultado.get("ok"):
-
-                    sucessos.append(chave)
-
-                else:
-
-                    erros.append(chave)
-
+                st.stop()
 
             # =================================================
-            # 🔥 RESULTADOS
+            # 🔒 VALIDAÇÃO OPERACIONAL FINAL
             # =================================================
-            if sucessos:
+            if (
+
+                not linha["PV"]
+
+                or not linha["Processo"]
+
+                or not linha["CODIGO_PV"]
+
+            ):
+
+                st.error(
+                    "Erro: operação inválida."
+                )
+
+                st.stop()
+
+            if (
+
+                not linha["CHAVE_OPERACAO"]
+
+                or linha["CHAVE_OPERACAO"] == "|||"
+
+            ):
+
+                st.error(
+                    "Erro: CHAVE_OPERACAO inválida."
+                )
+
+                st.stop()
+
+            # =================================================
+            # 🔥 TIMESTAMP REAL
+            # =================================================
+            data_real = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
+            )
+
+            # =================================================
+            # 🔥 REGISTRO FINAL
+            # =================================================
+            nova_baixa = {
+
+                "PV": _norm(linha["PV"]),
+
+                "Cliente": linha.get(
+                    "Cliente",
+                    ""
+                ),
+
+                "CODIGO_PV": _norm(
+                    linha["CODIGO_PV"]
+                ),
+
+                "Processo": normalizar_processo(
+                    linha["Processo"]
+                ),
+
+                "Horas": saldo_real,
+
+                "Data_Baixa": data_real,
+
+                "Usuario": "Sistema",
+
+                "Observacao": "UNITARIO_CORTE",
+
+                "Status_Baixa": "ATIVA",
+
+                "Data_Estorno": "",
+
+                "Motivo_Estorno": "",
+
+                "CHAVE_OPERACAO": linha[
+                    "CHAVE_OPERACAO"
+                ]
+            }
+
+            # =================================================
+            # 💾 SALVA POSTGRESQL
+            # =================================================
+            resultado = salvar_baixa_postgresql(
+                nova_baixa
+            )
+
+            if resultado.get("ok"):
 
                 st.session_state[
-                    "reset_corte_lote"
+                    "reset_corte_unitario"
                 ] = True
 
                 st.success(
-                    f"{len(sucessos)} operações baixadas"
+                    f"✅ Baixa registrada ({saldo_real:.2f}h)"
                 )
 
-            if erros:
+                st.rerun()
 
-                st.warning(
-                    f"{len(erros)} operações não foram baixadas"
+            else:
+
+                st.error(
+                    resultado.get(
+                        "erro",
+                        "Erro ao registrar baixa"
+                    )
                 )
 
-            st.rerun()
 
-
-
-
-# ============================================================
-# 🔥 FUNÇÃO LOCAL - CARREGAR BAIXAS POSTGRESQL
-# ============================================================
-def carregar_baixas_postgresql_local():
-
-    try:
-
-        conn = get_connection()
-
-        df = pd.read_sql(
-
-            text("""
-
-                SELECT *
-
-                FROM baixas
-
-            """),
-
-            conn
-        )
-
-        conn.close()
-
-        if df is None or df.empty:
-
-            return pd.DataFrame(
-                columns=COLUNAS_BAIXAS + [
-                    "CHAVE_OPERACAO"
-                ]
-            )
-
-        return _padronizar_df_baixas(df)
-
-    except Exception:
-
-        return pd.DataFrame(
-            columns=COLUNAS_BAIXAS + [
-                "CHAVE_OPERACAO"
-            ]
-        )
 
 
 # =========================================================
