@@ -21,13 +21,21 @@ except NameError:
     df_operacional = pd.DataFrame()
 
 
+# ============================================================
+# 🔒 GARANTE DATAFRAME VÁLIDO
+# ============================================================
+if df_operacional is None:
+
+    df_operacional = pd.DataFrame()
+
+
 # --------------------------------------------
 # 🔥 GARANTE CHAVE OPERACIONAL OFICIAL APS
 # --------------------------------------------
 if not df_operacional.empty:
 
     # ========================================================
-    # 🔒 NORMALIZAÇÃO TOTAL
+    # 🔒 BLINDAGEM DEFINITIVA DE COLUNAS
     # ========================================================
     for col in [
         "PV",
@@ -36,7 +44,17 @@ if not df_operacional.empty:
     ]:
 
         if col not in df_operacional.columns:
+
             df_operacional[col] = ""
+
+    # ========================================================
+    # 🔥 NORMALIZAÇÃO TOTAL
+    # ========================================================
+    for col in [
+        "PV",
+        "Processo",
+        "CODIGO_PV"
+    ]:
 
         # ----------------------------------------------------
         # 🔥 PROCESSOS
@@ -50,6 +68,10 @@ if not df_operacional.empty:
                 .fillna("")
 
                 .astype(str)
+
+                .str.replace("\xa0", "", regex=False)
+
+                .str.replace("  ", " ", regex=False)
 
                 .str.strip()
 
@@ -149,13 +171,72 @@ if not df_operacional.empty:
     )
 
     # ========================================================
-    # 🔒 REMOVE CHAVES VAZIAS
+    # 🔒 NORMALIZA CHAVE FINAL
+    # ========================================================
+    df_operacional["CHAVE_OPERACAO"] = (
+
+        df_operacional["CHAVE_OPERACAO"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.replace(".0", "", regex=False)
+
+        .str.replace("\xa0", "", regex=False)
+
+        .str.replace(" | ", "|", regex=False)
+
+        .str.replace("|| ", "||", regex=False)
+
+        .str.replace(" ||", "||", regex=False)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+    # ========================================================
+    # 🔒 REMOVE CHAVES INVÁLIDAS
     # ========================================================
     df_operacional = (
 
         df_operacional[
 
             df_operacional["CHAVE_OPERACAO"] != ""
+
+        ]
+
+        .copy()
+    )
+
+    df_operacional = (
+
+        df_operacional[
+
+            df_operacional["CHAVE_OPERACAO"] != "|||"
+
+        ]
+
+        .copy()
+    )
+
+    # ========================================================
+    # 🔒 REMOVE LINHAS OPERACIONAIS VAZIAS
+    # ========================================================
+    df_operacional = (
+
+        df_operacional[
+
+            (df_operacional["PV"] != "")
+
+            &
+
+            (df_operacional["Processo"] != "")
+
+            &
+
+            (df_operacional["CODIGO_PV"] != "")
 
         ]
 
@@ -203,10 +284,11 @@ if not df_operacional.empty:
 
 else:
 
-    df_operacional["CHAVE_OPERACAO"] = ""
+    df_operacional = pd.DataFrame({
 
-    df_operacional["CHAVE_DUPLICADA"] = False
-
+        "CHAVE_OPERACAO": [],
+        "CHAVE_DUPLICADA": []
+    })
 
 
 # ============================================================
@@ -215,11 +297,30 @@ else:
 df_baixas = carregar_baixas_postgresql()
 
 # ------------------------------------------------------------
+# 🔒 GARANTE DATAFRAME VÁLIDO
+# ------------------------------------------------------------
+if df_baixas is None:
+
+    df_baixas = pd.DataFrame()
+
+# ------------------------------------------------------------
 # 🔒 GARANTE PADRONIZAÇÃO
 # ------------------------------------------------------------
 df_baixas = _padronizar_df_baixas(
     df_baixas
 )
+
+# ------------------------------------------------------------
+# 🔒 GARANTE COLUNAS OBRIGATÓRIAS
+# ------------------------------------------------------------
+for col in [
+    "CHAVE_OPERACAO",
+    "Status_Baixa"
+]:
+
+    if col not in df_baixas.columns:
+
+        df_baixas[col] = ""
 
 # ------------------------------------------------------------
 # 🔥 SESSION STATE OFICIAL
@@ -236,6 +337,14 @@ df_baixas_ativas = (
     df_baixas[
 
         df_baixas["Status_Baixa"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.strip()
+
+        .str.upper()
 
         .isin([
 
@@ -255,6 +364,58 @@ df_baixas_ativas = (
     _padronizar_df_baixas(
         df_baixas_ativas
     )
+)
+
+# ------------------------------------------------------------
+# 🔒 GARANTE CHAVE OPERACIONAL
+# ------------------------------------------------------------
+if "CHAVE_OPERACAO" not in df_baixas_ativas.columns:
+
+    df_baixas_ativas["CHAVE_OPERACAO"] = ""
+
+# ------------------------------------------------------------
+# 🔥 NORMALIZA CHAVE DAS BAIXAS
+# ------------------------------------------------------------
+df_baixas_ativas["CHAVE_OPERACAO"] = (
+
+    df_baixas_ativas["CHAVE_OPERACAO"]
+
+    .fillna("")
+
+    .astype(str)
+
+    .str.replace(".0", "", regex=False)
+
+    .str.replace("\xa0", "", regex=False)
+
+    .str.strip()
+
+    .str.upper()
+)
+
+# ------------------------------------------------------------
+# 🔒 REMOVE CHAVES INVÁLIDAS
+# ------------------------------------------------------------
+df_baixas_ativas = (
+
+    df_baixas_ativas[
+
+        df_baixas_ativas["CHAVE_OPERACAO"] != ""
+
+    ]
+
+    .copy()
+)
+
+df_baixas_ativas = (
+
+    df_baixas_ativas[
+
+        df_baixas_ativas["CHAVE_OPERACAO"] != "|||"
+
+    ]
+
+    .copy()
 )
 
 # ------------------------------------------------------------
@@ -291,6 +452,10 @@ else:
 # ============================================================
 # 🔥 REMOVE OPERAÇÕES BAIXADAS DA FILA
 # ============================================================
+if "CHAVE_OPERACAO" not in df_operacional.columns:
+
+    df_operacional["CHAVE_OPERACAO"] = ""
+
 df_operacional = (
 
     df_operacional[
