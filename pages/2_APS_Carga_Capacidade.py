@@ -690,6 +690,12 @@ from aps_core import *
 df = CORE_APS["df_operacional"].copy()
 
 
+# 🔒 GARANTIA DE ESTRUTURA OPERACIONAL
+if df is None or df.empty:
+
+    df = df_original.copy()
+
+
 
 # ===============================
 # LOGO + TÍTULO (INALTERADO)
