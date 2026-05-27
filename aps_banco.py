@@ -1207,10 +1207,16 @@ def salvar_baixa_postgresql(nova_baixa):
             # ====================================================
             # 💾 INSERT POSTGRESQL
             # ====================================================
-            conn.execute(
+
+            st.warning("🔥 ANTES DO EXECUTE")
+
+
+
+            resultado_insert = conn.execute(
 
                 text("""
 
+                    
                     INSERT INTO baixas (
 
                         PV,
@@ -1266,6 +1272,15 @@ def salvar_baixa_postgresql(nova_baixa):
                     "CHAVE_OPERACAO": chave_operacao
 
                 }
+            )
+
+            st.warning("🔥 EXECUTE PASSOU")            
+
+            print("🔥 ROWCOUNT:")
+            print(resultado_insert.rowcount)
+
+            st.warning(
+                f"🔥 ROWCOUNT: {resultado_insert.rowcount}"
             )
 
             print("🔥 INSERT EXECUTADO")
