@@ -559,7 +559,7 @@ def carregar_baixas_postgresql():
 
 
 
-# ============================================================
+## ============================================================
 # 🔥 SALVAR BAIXA POSTGRESQL (VERSÃO DEFINITIVA BLINDADA APS)
 # ============================================================
 def salvar_baixa_postgresql(nova_baixa):
@@ -1174,6 +1174,30 @@ def salvar_baixa_postgresql(nova_baixa):
                 horas
             )
 
+
+
+            print("\n===============================")
+            print("🔥 DEBUG PERSISTÊNCIA")
+            print("===============================")
+
+            print("CHAVE_OPERACAO:")
+            print(chave_operacao)
+
+            print("HORAS RECEBIDAS:")
+            print(horas)
+
+            print("HORAS EXISTENTES:")
+            print(horas_existentes)
+
+            print("HORAS PLANEJADAS:")
+            print(horas_planejadas)
+
+
+
+
+
+
+
         # ====================================================
         # 🔥 SALDO RESTANTE
         # ====================================================
@@ -1189,7 +1213,10 @@ def salvar_baixa_postgresql(nova_baixa):
         # ====================================================
         # 🔒 EVITA DUPLICIDADE
         # ====================================================
-        if saldo_restante <= 0:
+            print("SALDO_RESTANTE:")
+            print(saldo_restante)
+
+            if saldo_restante <= 0:
 
             try:
                 trans.rollback()
@@ -1298,10 +1325,20 @@ def salvar_baixa_postgresql(nova_baixa):
         except:
             pass
 
+        
+        import traceback
+        print("\n===============================")
+        print("❌ EXCEPTION salvar_baixa_postgresql")
+        print("===============================")
+
+        print(traceback.format_exc())
+
+
         return {
             "ok": False,
             "erro": str(e)
         }
+
 
 
 
