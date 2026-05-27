@@ -1213,10 +1213,10 @@ def salvar_baixa_postgresql(nova_baixa):
         # ====================================================
         # 🔒 EVITA DUPLICIDADE
         # ====================================================
-            print("SALDO_RESTANTE:")
-            print(saldo_restante)
+        print("SALDO_RESTANTE:")
+        print(saldo_restante)
 
-            if saldo_restante <= 0:
+        if saldo_restante <= 0:
 
             try:
                 trans.rollback()
