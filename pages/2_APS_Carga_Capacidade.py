@@ -5846,6 +5846,21 @@ else:
                     nova_baixa
                 )
 
+
+
+                teste_df = carregar_baixas_postgresql()
+
+                st.warning(
+                    f"🔥 BAIXAS CARREGADAS: {teste_df.shape}"
+                )
+
+                st.dataframe(
+                    teste_df.tail(5),
+                    use_container_width=True
+                )
+
+
+
                 st.warning(f"🔥 RESULTADO: {resultado}")
 
                 print("📥 RETORNO:")
