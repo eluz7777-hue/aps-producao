@@ -1279,6 +1279,15 @@ def salvar_baixa_postgresql(nova_baixa):
 
         import traceback
 
+        st.error(
+            f"🔥 ERRO REAL: {e}"
+        )
+
+        st.code(
+            traceback.format_exc()
+        )
+
+
         print("\n===============================")
         print("❌ EXCEPTION salvar_baixa_postgresql")
         print("===============================")
