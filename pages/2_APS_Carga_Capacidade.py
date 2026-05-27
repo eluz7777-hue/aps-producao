@@ -5628,10 +5628,15 @@ else:
         # ----------------------------------------------------
         # 🔥 BOTÃO BAIXA
         # ----------------------------------------------------
+
+        st.warning("🔥 ANTES DO BOTAO")
+
         if st.button(
             "💾 Confirmar Baixa",
             key="btn_corte_unitario"
         ):
+
+            st.warning("🔥 DENTRO DO BOTAO")
 
             st.session_state["DEBUG_BAIXA"] = "ENTROU NO CLICK"
 
