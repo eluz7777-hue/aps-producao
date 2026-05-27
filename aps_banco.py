@@ -292,270 +292,41 @@ inicializar_banco()
 # ============================================================
 def carregar_baixas_postgresql():
 
-    conn = None
-
     try:
 
-        # ====================================================
-        # 🔥 CONEXÃO
-        # ====================================================
-        conn = get_connection()
+        with engine.begin() as conn:
 
-        # ====================================================
-        # 🔥 LEITURA POSTGRESQL
-        # ====================================================
-        df = pd.read_sql(
+            df = pd.read_sql(
 
-            text("""
+                text("""
 
-                SELECT *
+                    SELECT *
 
-                FROM baixas
+                    FROM baixas
 
-            """),
+                    ORDER BY Data_Baixa DESC
 
-            conn
-        )
+                """),
 
-        # ====================================================
-        # 🔥 GARANTE COLUNAS PADRÃO APS
-        # ====================================================
-        for col in [
-
-            "id",
-            "PV",
-            "Cliente",
-            "CODIGO_PV",
-            "Processo",
-            "Horas",
-            "Horas_Planejadas",
-            "Data_Baixa",
-            "Usuario",
-            "Observacao",
-            "Status_Baixa",
-            "Data_Estorno",
-            "Motivo_Estorno",
-            "CHAVE_OPERACAO"
-
-        ]:
-
-            if col not in df.columns:
-
-                if col in [
-
-                    "Horas",
-                    "Horas_Planejadas"
-
-                ]:
-
-                    df[col] = 0
-
-                else:
-
-                    df[col] = ""
-
-        # ====================================================
-        # 🔒 SEM DADOS
-        # ====================================================
-        if df is None or df.empty:
-
-            conn.close()
-
-            return pd.DataFrame(
-                columns=COLUNAS_BAIXAS + [
-                    "CHAVE_OPERACAO"
-                ]
+                conn
             )
 
-        # ====================================================
-        # 🔥 GARANTE COLUNA
-        # ====================================================
-        if "CHAVE_OPERACAO" not in df.columns:
-
-            df["CHAVE_OPERACAO"] = ""
-
-        # ====================================================
-        # 🔥 NORMALIZA CAMPOS
-        # ====================================================
-        for col in [
-
-            "PV",
-            "CODIGO_PV",
-            "Processo",
-            "CHAVE_OPERACAO"
-
-        ]:
-
-            df[col] = (
-
-                df[col]
-
-                .fillna("")
-
-                .astype(str)
-
-                .str.strip()
-
-                .str.upper()
-            )
-
-        # ====================================================
-        # 🔥 CONVERSÕES NUMÉRICAS
-        # ====================================================
-        df["Horas"] = pd.to_numeric(
-            df["Horas"],
-            errors="coerce"
-        ).fillna(0)
-
-        df["Horas_Planejadas"] = pd.to_numeric(
-            df["Horas_Planejadas"],
-            errors="coerce"
-        ).fillna(0)
-
-        # ====================================================
-        # 🔥 RECUPERA CHAVES ANTIGAS
-        # ====================================================
-        mascara_chave_vazia = (
-
-            df["CHAVE_OPERACAO"]
-
-            .astype(str)
-
-            .str.strip()
-
-            == ""
-        )
-
-        if mascara_chave_vazia.any():
-
-            df.loc[
-                mascara_chave_vazia,
-                "CHAVE_OPERACAO"
-            ] = (
-
-                df.loc[
-                    mascara_chave_vazia,
-                    "PV"
-                ]
-
-                + "||"
-
-                + df.loc[
-                    mascara_chave_vazia,
-                    "Processo"
-                ]
-
-                + "||"
-
-                + df.loc[
-                    mascara_chave_vazia,
-                    "CODIGO_PV"
-                ]
-            )
-
-            # ================================================
-            # 🔥 ATUALIZA CHAVES RECUPERADAS
-            # ================================================
-            try:
-
-                with engine.begin() as trans_conn:
-
-                    for _, row in df.loc[
-                        mascara_chave_vazia
-                    ].iterrows():
-
-                        if str(row["id"]).strip() != "":
-
-                            trans_conn.execute(
-
-                                text("""
-
-                                    UPDATE baixas
-
-                                    SET CHAVE_OPERACAO = :chave
-
-                                    WHERE id = :id
-
-                                """),
-
-                                {
-                                    "chave": row["CHAVE_OPERACAO"],
-                                    "id": int(row["id"])
-                                }
-                            )
-
-            except Exception as e:
-
-                st.warning(
-                    f"Erro atualização chaves PostgreSQL: {e}"
-                )
-
-        # ====================================================
-        # 🔥 PADRONIZA
-        # ====================================================
-        df = _padronizar_df_baixas(df)
-
-        # ====================================================
-        # 🔥 REMOVE DUPLICIDADES
-        # ====================================================
-        df = (
-
-            df
-
-            .drop_duplicates()
-
-            .reset_index(drop=True)
-        )
-
-        # ====================================================
-        # 🔥 ORDENAÇÃO FINAL
-        # ====================================================
-        df = (
-
-            df
-
-            .sort_values(
-
-                by=[
-                    "Data_Baixa",
-                    "PV",
-                    "Processo"
-                ],
-
-                ascending=[
-                    False,
-                    True,
-                   True
-                ]
-            )
-
-            .reset_index(drop=True)
-        )
-
-        # ====================================================
-        # 🔥 FECHA CONEXÃO
-        # ====================================================
-        conn.close()
+        print("🔥 DF POSTGRESQL:")
+        print(df.shape)
 
         return df
 
     except Exception as e:
 
-        try:
-            conn.close()
-        except:
-            pass
+        import traceback
 
-        st.warning(
-            f"Erro PostgreSQL baixas: {e}"
+        print(traceback.format_exc())
+
+        st.error(
+            f"Erro carregar_baixas_postgresql: {e}"
         )
 
-        return pd.DataFrame(
-            columns=COLUNAS_BAIXAS + [
-                "CHAVE_OPERACAO"
-            ]
-        )
-
+        return pd.DataFrame()
 
 
 
