@@ -5629,6 +5629,8 @@ else:
             key="btn_corte_unitario"
         ):
 
+            st.session_state["DEBUG_BAIXA"] = "ENTROU NO CLICK"
+
             print("\n===============================")
             print("🔥 BOTÃO BAIXA ACIONADO")
             print("===============================")
