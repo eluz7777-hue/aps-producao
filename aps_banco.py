@@ -1271,9 +1271,11 @@ def salvar_baixa_postgresql(nova_baixa):
             print("🔥 INSERT EXECUTADO")
             print("🔥 RETORNANDO OK TRUE")
 
-            return {
+            resultado_final = {
                 "ok": True
             }
+
+        return resultado_final
 
     except Exception as e:
 
