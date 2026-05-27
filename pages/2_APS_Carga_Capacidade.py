@@ -1,15 +1,5 @@
 import streamlit as st
 
-
-print("🔥 2_APS REAL CARREGADO 🔥")
-
-# ===============================
-# 🔐 BLOQUEIO DE ACESSO GLOBAL
-# ===============================
-if "logado" not in st.session_state or not st.session_state.logado:
-    st.warning("🔒 Acesso não autorizado. Redirecionando para login...")
-    st.switch_page("app.py")
-
 # ===============================
 # IMPORTS (ORGANIZADOS)
 # ===============================
@@ -28,6 +18,20 @@ from aps_utils import gerar_chave_operacao
 
 from aps_banco import *
 
+print("🔥 2_APS REAL CARREGADO 🔥")
+
+st.error("🔥 PAGINA APS REAL")
+
+# ===============================
+# 🔐 BLOQUEIO DE ACESSO GLOBAL
+# ===============================
+if "logado" not in st.session_state or not st.session_state.logado:
+
+    st.warning(
+        "🔒 Acesso não autorizado. Redirecionando para login..."
+    )
+
+    st.switch_page("app.py")
 
 
 # ===============================
