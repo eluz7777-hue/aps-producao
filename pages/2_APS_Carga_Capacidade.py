@@ -1,5 +1,8 @@
 import streamlit as st
 
+
+print("🔥 2_APS REAL CARREGADO 🔥")
+
 # ===============================
 # 🔐 BLOQUEIO DE ACESSO GLOBAL
 # ===============================
