@@ -7460,9 +7460,14 @@ else:
             }
 
 
+
+            st.warning("🔥 GARGALO ENTROU")
+
             resultado = salvar_baixa_postgresql(
                 nova_baixa
             )
+            
+            st.warning(f"🔥 RESULTADO: {resultado}")
 
             st.session_state[
                 "lock_gargalo_unitario"
