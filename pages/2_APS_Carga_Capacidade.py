@@ -5626,8 +5626,20 @@ else:
             key="btn_corte_unitario"
         ):
 
+            print("\n===============================")
+            print("🔥 BOTÃO BAIXA ACIONADO")
+            print("===============================")
+
+            print("📌 CHAVE_OPERACAO:")
+            print(linha["CHAVE_OPERACAO"])
+
+            print("📌 SALDO:")
+            print(saldo_real)
+
             # 🔒 BLOQUEIA ZERADOS
             if saldo_real <= 0:
+
+                print("❌ SALDO <= 0")
 
                 st.warning(
                     "⚠️ Operação já totalmente baixada"
@@ -5638,9 +5650,14 @@ else:
             # =================================================
             # 🔥 RECARREGA POSTGRESQL
             # =================================================
+            print("🔄 RECARREGANDO POSTGRESQL")
+
             df_baixas_atual = (
                 carregar_baixas_postgresql()
             )
+
+            print("📦 SHAPE DF:")
+            print(df_baixas_atual.shape)
 
             if not df_baixas_atual.empty:
 
@@ -5699,10 +5716,15 @@ else:
                 0
             )
 
+            print("📌 SALDO REAL FINAL:")
+            print(saldo_real)
+
             # =================================================
             # 🔒 BLOQUEIO FINAL
             # =================================================
             if saldo_real <= 0:
+
+                print("❌ BLOQUEADO POR SALDO")
 
                 st.warning(
                     "⚠️ Operação já totalmente baixada"
@@ -5723,6 +5745,8 @@ else:
 
             ):
 
+                print("❌ OPERAÇÃO INVÁLIDA")
+
                 st.error(
                     "Erro: operação inválida."
                 )
@@ -5736,6 +5760,8 @@ else:
                 or linha["CHAVE_OPERACAO"] == "|||"
 
             ):
+
+                print("❌ CHAVE_OPERACAO INVÁLIDA")
 
                 st.error(
                     "Erro: CHAVE_OPERACAO inválida."
@@ -5789,14 +5815,46 @@ else:
                 ]
             }
 
+            print("📦 PAYLOAD FINAL:")
+            print(nova_baixa)
+
             # =================================================
             # 💾 SALVA POSTGRESQL
             # =================================================
-            resultado = salvar_baixa_postgresql(
-                nova_baixa
-            )
+            try:
 
-            if resultado.get("ok"):
+                print("🚀 CHAMANDO salvar_baixa_postgresql()")
+
+                resultado = salvar_baixa_postgresql(
+                    nova_baixa
+                )
+
+                print("📥 RETORNO:")
+                print(resultado)
+
+            except Exception as e:
+
+                import traceback
+
+                print("❌ EXCEPTION NA PERSISTÊNCIA")
+                print(traceback.format_exc())
+
+                resultado = {
+                    "ok": False,
+                    "erro": str(e)
+                }
+
+            if not resultado:
+
+                print("❌ RESULTADO NONE/VÁZIO")
+
+                st.error(
+                    "Erro: retorno vazio da persistência."
+                )
+
+            elif resultado.get("ok"):
+
+                print("✅ BAIXA PERSISTIDA")
 
                 st.session_state[
                     "reset_corte_unitario"
@@ -5809,6 +5867,9 @@ else:
                 st.rerun()
 
             else:
+
+                print("❌ FALHA NA PERSISTÊNCIA")
+                print(resultado)
 
                 st.error(
                     resultado.get(
