@@ -564,6 +564,9 @@ def carregar_baixas_postgresql():
 # ============================================================
 def salvar_baixa_postgresql(nova_baixa):
 
+
+    print("\n🔥🔥🔥 ENTROU EM salvar_baixa_postgresql 🔥🔥🔥")
+
     conn = None
 
     trans = None
