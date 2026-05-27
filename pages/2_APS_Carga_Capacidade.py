@@ -5825,8 +5825,9 @@ else:
             # 💾 SALVA POSTGRESQL
             # =================================================
             try:
-
+                st.error("🔥 ANTES salvar_baixa_postgresql")
                 print("🚀 CHAMANDO salvar_baixa_postgresql()")
+                
 
                 resultado = salvar_baixa_postgresql(
                     nova_baixa
@@ -7337,9 +7338,17 @@ else:
             }
 
 
+            st.error("🔥 ANTES salvar_baixa_postgresql")
+            print("🔥 ANTES salvar_baixa_postgresql")
+
             resultado = salvar_baixa_postgresql(
                 nova_baixa
             )
+
+    
+            st.error(f"🔥 RESULTADO: {resultado}")
+            print(f"🔥 RESULTADO: {resultado}")
+
 
             st.session_state[
                 "lock_gargalo_unitario"
