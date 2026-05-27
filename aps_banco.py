@@ -566,136 +566,99 @@ def carregar_baixas_postgresql():
 # ============================================================
 def salvar_baixa_postgresql(nova_baixa):
 
-
     print("\n🔥🔥🔥 ENTROU EM salvar_baixa_postgresql 🔥🔥🔥")
-
-    conn = None
-
-    trans = None
 
     try:
 
         # ====================================================
-        # 🔥 CONEXÃO
+        # 🔥 TRANSAÇÃO OFICIAL SQLALCHEMY 2.x
         # ====================================================
-        conn = get_connection()
+        with engine.begin() as conn:
 
-        # ====================================================
-        # 🔥 TRANSAÇÃO
-        # ====================================================
-        trans = conn.begin()
-
-        # ====================================================
-        # 🔥 NORMALIZAÇÃO TOTAL
-        # ====================================================
-        pv = _norm(
-            nova_baixa.get("PV", "")
-        )
-
-        cliente = str(
-            nova_baixa.get("Cliente", "")
-        ).strip()
-
-        codigo_pv = _norm(
-            nova_baixa.get("CODIGO_PV", "")
-        )
-
-        # ----------------------------------------------------
-        # 🔥 PROCESSO NORMALIZADO APS
-        # ----------------------------------------------------
-        processo = normalizar_processo(
-            nova_baixa.get("Processo", "")
-        )
-
-        usuario = str(
-            nova_baixa.get("Usuario", "Sistema")
-        ).strip()
-
-        observacao = str(
-            nova_baixa.get("Observacao", "")
-        ).strip()
-
-        status_baixa = str(
-            nova_baixa.get("Status_Baixa", "ATIVA")
-        ).strip().upper()
-
-        motivo_estorno = str(
-            nova_baixa.get("Motivo_Estorno", "")
-        ).strip()
-
-        chave_operacao = str(
-            nova_baixa.get("CHAVE_OPERACAO", "")
-        ).strip()
-
-        # ====================================================
-        # 🔥 HORAS SEGURAS
-        # ====================================================
-        horas = pd.to_numeric(
-            nova_baixa.get("Horas", 0),
-            errors="coerce"
-        )
-
-        if pd.isna(horas):
-
-            horas = 0
-
-        horas = float(horas)
-
-        # ====================================================
-        # 🔥 DATA BAIXA REAL
-        # ====================================================
-        data_baixa = nova_baixa.get(
-            "Data_Baixa"
-        )
-
-        # ----------------------------------------------------
-        # datetime
-        # ----------------------------------------------------
-        if isinstance(
-            data_baixa,
-            datetime
-        ):
-
-            data_baixa = data_baixa.strftime(
-                "%Y-%m-%d %H:%M:%S"
+            # ====================================================
+            # 🔥 NORMALIZAÇÃO TOTAL
+            # ====================================================
+            pv = _norm(
+                nova_baixa.get("PV", "")
             )
 
-        # ----------------------------------------------------
-        # vazio
-        # ----------------------------------------------------
-        elif (
-            data_baixa is None
-            or str(data_baixa).strip() == ""
-            or str(data_baixa).strip().upper() == "NONE"
-            or str(data_baixa).strip().upper() == "NAT"
-        ):
+            cliente = str(
+                nova_baixa.get("Cliente", "")
+            ).strip()
 
-            data_baixa = datetime.now(
-                ZoneInfo("America/Sao_Paulo")
-            ).strftime(
-                "%Y-%m-%d %H:%M:%S"
+            codigo_pv = _norm(
+                nova_baixa.get("CODIGO_PV", "")
             )
 
-        else:
+            # ----------------------------------------------------
+            # 🔥 PROCESSO NORMALIZADO APS
+            # ----------------------------------------------------
+            processo = normalizar_processo(
+                nova_baixa.get("Processo", "")
+            )
 
-            try:
+            usuario = str(
+                nova_baixa.get("Usuario", "Sistema")
+            ).strip()
 
-                data_baixa = pd.to_datetime(
-                    data_baixa,
-                    errors="coerce"
-                )
+            observacao = str(
+                nova_baixa.get("Observacao", "")
+            ).strip()
 
-                if pd.isna(data_baixa):
+            status_baixa = str(
+                nova_baixa.get("Status_Baixa", "ATIVA")
+            ).strip().upper()
 
-                    data_baixa = datetime.now(
-                        ZoneInfo("America/Sao_Paulo")
-                    )
+            motivo_estorno = str(
+                nova_baixa.get("Motivo_Estorno", "")
+            ).strip()
+
+            chave_operacao = str(
+                nova_baixa.get("CHAVE_OPERACAO", "")
+            ).strip()
+
+            # ====================================================
+            # 🔥 HORAS SEGURAS
+            # ====================================================
+            horas = pd.to_numeric(
+                nova_baixa.get("Horas", 0),
+                errors="coerce"
+            )
+
+            if pd.isna(horas):
+
+                horas = 0
+
+            horas = float(horas)
+
+            # ====================================================
+            # 🔥 DATA BAIXA REAL
+            # ====================================================
+            data_baixa = nova_baixa.get(
+                "Data_Baixa"
+            )
+
+            # ----------------------------------------------------
+            # datetime
+            # ----------------------------------------------------
+            if isinstance(
+                data_baixa,
+                datetime
+            ):
 
                 data_baixa = data_baixa.strftime(
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-            except:
+            # ----------------------------------------------------
+            # vazio
+            # ----------------------------------------------------
+            elif (
+                data_baixa is None
+                or str(data_baixa).strip() == ""
+                or str(data_baixa).strip().upper() == "NONE"
+                or str(data_baixa).strip().upper() == "NAT"
+            ):
 
                 data_baixa = datetime.now(
                     ZoneInfo("America/Sao_Paulo")
@@ -703,457 +666,153 @@ def salvar_baixa_postgresql(nova_baixa):
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-        # ====================================================
-        # 🔥 DATA ESTORNO
-        # ====================================================
-        data_estorno = nova_baixa.get(
-            "Data_Estorno",
-            ""
-        )
+            else:
 
-        if (
-            data_estorno is None
-            or str(data_estorno).strip().upper() in [
-                "",
-                "NONE",
-                "NAT"
-            ]
-        ):
+                try:
 
-            data_estorno = ""
-
-        else:
-
-            try:
-
-                data_estorno = pd.to_datetime(
-                    data_estorno,
-                    errors="coerce"
-                )
-
-                if pd.isna(data_estorno):
-
-                    data_estorno = ""
-
-                else:
-
-                    data_estorno = (
-                        data_estorno.strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        )
+                    data_baixa = pd.to_datetime(
+                        data_baixa,
+                        errors="coerce"
                     )
 
-            except:
+                    if pd.isna(data_baixa):
+
+                        data_baixa = datetime.now(
+                            ZoneInfo("America/Sao_Paulo")
+                        )
+
+                    data_baixa = data_baixa.strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+
+                except:
+
+                    data_baixa = datetime.now(
+                        ZoneInfo("America/Sao_Paulo")
+                    ).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+
+            # ====================================================
+            # 🔥 DATA ESTORNO
+            # ====================================================
+            data_estorno = nova_baixa.get(
+                "Data_Estorno",
+                ""
+            )
+
+            if (
+                data_estorno is None
+                or str(data_estorno).strip().upper() in [
+                    "",
+                    "NONE",
+                    "NAT"
+                ]
+            ):
 
                 data_estorno = ""
 
-        # ====================================================
-        # 🔒 CHAVE OPERACIONAL
-        # ====================================================
-        if chave_operacao.strip() == "":
+            else:
 
-            chave_operacao = gerar_chave_operacao(
-                pv,
-                processo,
-                codigo_pv
-            )
+                try:
 
-        # ====================================================
-        # 🔥 NORMALIZA CHAVE FINAL
-        # ====================================================
-        chave_operacao = (
+                    data_estorno = pd.to_datetime(
+                        data_estorno,
+                        errors="coerce"
+                    )
 
-            str(chave_operacao)
+                    if pd.isna(data_estorno):
 
-            .replace(".0", "")
-
-            .replace("\xa0", "")
-
-            .replace(" | ", "|")
-
-            .replace("|| ", "||")
-
-            .replace(" ||", "||")
-
-            .upper()
-
-            .strip()
-        )
-
-        # ====================================================
-        # 🔒 BLOQUEIO CHAVE INVÁLIDA
-        # ====================================================
-        if (
-            chave_operacao == ""
-            or chave_operacao == "|||"
-        ):
-
-            try:
-                trans.rollback()
-            except:
-                pass
-
-            conn.close()
-
-            return {
-                "ok": False,
-                "erro": "CHAVE_OPERACAO inválida"
-            }
-
-        # ====================================================
-        # 🔒 BLOQUEIO DADOS VAZIOS
-        # ====================================================
-        if (
-            pv == ""
-            or processo == ""
-            or codigo_pv == ""
-        ):
-
-            try:
-                trans.rollback()
-            except:
-                pass
-
-            conn.close()
-
-            return {
-                "ok": False,
-                "erro": "Dados operacionais inválidos"
-            }
-
-        # ====================================================
-        # 🔒 BLOQUEIO DUPLICIDADE
-        # ====================================================
-        resultado_existente = conn.execute(
-
-            text("""
-
-                SELECT
-                    COALESCE(SUM(Horas), 0)
-
-                FROM baixas
-
-                WHERE CHAVE_OPERACAO = :chave
-
-                AND UPPER(Status_Baixa)
-                IN ('ATIVA', 'TERCEIRIZADA')
-
-            """),
-
-            {
-                "chave": chave_operacao
-            }
-
-        ).fetchone()
-
-        horas_existentes = resultado_existente[0]
-
-        if horas_existentes is None:
-
-            horas_existentes = 0
-
-        horas_existentes = float(
-            horas_existentes
-        )
-
-        # ====================================================
-        # 🔥 BASE OPERACIONAL
-        # ====================================================
-        horas_planejadas = 0
-
-        try:
-
-            # ------------------------------------------------
-            # 🔒 RECUPERA BASE OPERACIONAL COM SEGURANÇA
-            # ------------------------------------------------
-            try:
-
-                df_operacional_local = (
-                    df_operacional.copy()
-                )
-
-            except:
-
-                df_operacional_local = pd.DataFrame({
-
-                    "PV": [],
-                    "Processo": [],
-                    "CODIGO_PV": [],
-                    "Horas": [],
-                    "CHAVE_OPERACAO": []
-                })
-
-            # ------------------------------------------------
-            # 🔒 GARANTE COLUNAS
-            # ------------------------------------------------
-            colunas_obrigatorias = [
-                "PV",
-                "Processo",
-                "CODIGO_PV",
-                "Horas",
-                "CHAVE_OPERACAO"
-            ]
-
-            for col in colunas_obrigatorias:
-
-                if col not in df_operacional_local.columns:
-
-                    if col == "Horas":
-
-                        df_operacional_local[col] = 0
+                        data_estorno = ""
 
                     else:
 
-                        df_operacional_local[col] = ""
+                        data_estorno = (
+                            data_estorno.strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
+                        )
 
-            # ------------------------------------------------
-            # 🔥 NORMALIZA PV
-            # ------------------------------------------------
-            df_operacional_local["PV"] = (
+                except:
 
-                df_operacional_local["PV"]
+                    data_estorno = ""
 
-                .fillna("")
+            # ====================================================
+            # 🔒 CHAVE OPERACIONAL
+            # ====================================================
+            if chave_operacao.strip() == "":
 
-                .astype(str)
-
-                .str.replace(".0", "", regex=False)
-
-                .str.replace("\xa0", "", regex=False)
-
-                .str.replace("  ", " ", regex=False)
-
-                .str.strip()
-
-                .str.upper()
-            )
-
-            # ------------------------------------------------
-            # 🔥 NORMALIZA CODIGO_PV
-            # ------------------------------------------------
-            df_operacional_local["CODIGO_PV"] = (
-
-                df_operacional_local["CODIGO_PV"]
-
-                .fillna("")
-
-                .astype(str)
-
-                .str.replace(".0", "", regex=False)
-
-                .str.replace("\xa0", "", regex=False)
-
-                .str.replace("  ", " ", regex=False)
-
-                .str.strip()
-
-                .str.upper()
-            )
-
-            # ------------------------------------------------
-            # 🔥 NORMALIZA PROCESSO
-            # ------------------------------------------------
-            df_operacional_local["Processo"] = (
-
-                df_operacional_local["Processo"]
-
-                .fillna("")
-
-                .astype(str)
-
-                .str.replace("\xa0", "", regex=False)
-
-                .str.replace("  ", " ", regex=False)
-
-                .str.strip()
-
-                .apply(normalizar_processo)
-
-                .str.upper()
-            )
-
-            # ------------------------------------------------
-            # 🔥 NORMALIZA HORAS
-            # ------------------------------------------------
-            df_operacional_local["Horas"] = (
-
-                pd.to_numeric(
-                    df_operacional_local["Horas"],
-                    errors="coerce"
+                chave_operacao = gerar_chave_operacao(
+                    pv,
+                    processo,
+                    codigo_pv
                 )
 
-                .fillna(0)
+            # ====================================================
+            # 🔥 NORMALIZA CHAVE FINAL
+            # ====================================================
+            chave_operacao = (
+
+                str(chave_operacao)
+
+                .replace(".0", "")
+
+                .replace("\xa0", "")
+
+                .replace(" | ", "|")
+
+                .replace("|| ", "||")
+
+                .replace(" ||", "||")
+
+                .upper()
+
+                .strip()
             )
 
-            # ------------------------------------------------
-            # 🔥 RECONSTRÓI CHAVE OFICIAL APS
-            # ------------------------------------------------
-            df_operacional_local["CHAVE_OPERACAO"] = (
+            # ====================================================
+            # 🔒 BLOQUEIO CHAVE INVÁLIDA
+            # ====================================================
+            if (
+                chave_operacao == ""
+                or chave_operacao == "|||"
+            ):
 
-                df_operacional_local.apply(
+                return {
+                    "ok": False,
+                    "erro": "CHAVE_OPERACAO inválida"
+                }
 
-                    lambda r: gerar_chave_operacao(
-                        r["PV"],
-                        r["Processo"],
-                        r["CODIGO_PV"]
-                    ),
+            # ====================================================
+            # 🔒 BLOQUEIO DADOS VAZIOS
+            # ====================================================
+            if (
+                pv == ""
+                or processo == ""
+                or codigo_pv == ""
+            ):
 
-                    axis=1
-                )
-            )
+                return {
+                    "ok": False,
+                    "erro": "Dados operacionais inválidos"
+                }
 
-            # ------------------------------------------------
-            # 🔒 NORMALIZA CHAVE FINAL
-            # ------------------------------------------------
-            df_operacional_local["CHAVE_OPERACAO"] = (
-
-                df_operacional_local["CHAVE_OPERACAO"]
-
-                .fillna("")
-
-                .astype(str)
-
-                .str.replace(".0", "", regex=False)
-
-                .str.replace("\xa0", "", regex=False)
-
-                .str.replace(" | ", "|", regex=False)
-
-                .str.replace("|| ", "||", regex=False)
-
-                .str.replace(" ||", "||", regex=False)
-
-                .str.strip()
-
-                .str.upper()
-            )
-
-            # ------------------------------------------------
-            # 🔒 REMOVE CHAVES INVÁLIDAS
-            # ------------------------------------------------
-            df_operacional_local = (
-
-                df_operacional_local[
-
-                    df_operacional_local[
-                        "CHAVE_OPERACAO"
-                    ] != ""
-
-                ]
-
-                .copy()
-            )
-
-            df_operacional_local = (
-
-                df_operacional_local[
-
-                    df_operacional_local[
-                        "CHAVE_OPERACAO"
-                    ] != "|||"
-
-                ]
-
-                .copy()
-            )
-
-            # ------------------------------------------------
-            # 🔒 REMOVE LINHAS OPERACIONAIS VAZIAS
-            # ------------------------------------------------
-            df_operacional_local = (
-
-                df_operacional_local[
-
-                    (df_operacional_local["PV"] != "")
-
-                    &
-
-                    (df_operacional_local["Processo"] != "")
-
-                    &
-
-                    (df_operacional_local["CODIGO_PV"] != "")
-
-                ]
-
-                .copy()
-            )
-
-            # ------------------------------------------------
-            # 🔥 REMOVE DUPLICIDADES
-            # ------------------------------------------------
-            base_operacional_normalizada = (
-
-                df_operacional_local
-
-                .drop_duplicates(
-                    subset=["CHAVE_OPERACAO"]
-                )
-
-                .copy()
-            )
-
-            # ------------------------------------------------
-            # 🔥 LOCALIZA OPERAÇÃO REAL
-            # ------------------------------------------------
-            base_oper = base_operacional_normalizada[
-
-                base_operacional_normalizada[
-                    "CHAVE_OPERACAO"
-                ] == chave_operacao
-            ]
-
-            # ------------------------------------------------
-            # 🔥 RECUPERA HORAS PLANEJADAS
-            # ------------------------------------------------
-            if not base_oper.empty:
-
-                valor_horas = pd.to_numeric(
-
-                    base_oper.iloc[0].get(
-                        "Horas",
-                        0
-                    ),
-
-                    errors="coerce"
-                )
-
-                if pd.isna(valor_horas):
-
-                    valor_horas = 0
-
-                horas_planejadas = float(
-                    valor_horas
-                )
-
-        except Exception as e:
-
-            try:
-
-                st.warning(
-                    f"Erro base operacional PostgreSQL: {e}"
-                )
-
-            except:
-                pass
-
-            horas_planejadas = 0
-
-        # ====================================================
-        # 🔒 BLINDAGEM INDUSTRIAL
-        # ====================================================
-        if horas_planejadas <= 0:
-
-            resultado_planejado = conn.execute(
+            # ====================================================
+            # 🔒 BLOQUEIO DUPLICIDADE
+            # ====================================================
+            resultado_existente = conn.execute(
 
                 text("""
 
                     SELECT
-                        COALESCE(MAX(Horas_Planejadas), 0)
+                        COALESCE(SUM(Horas), 0)
 
                     FROM baixas
 
                     WHERE CHAVE_OPERACAO = :chave
+
+                    AND UPPER(Status_Baixa)
+                    IN ('ATIVA', 'TERCEIRIZADA')
 
                 """),
 
@@ -1163,187 +822,473 @@ def salvar_baixa_postgresql(nova_baixa):
 
             ).fetchone()
 
-            horas_antigas = resultado_planejado[0]
+            horas_existentes = resultado_existente[0]
 
-            if horas_antigas is None:
+            if horas_existentes is None:
 
-                horas_antigas = 0
+                horas_existentes = 0
 
-            horas_antigas = float(
-                horas_antigas
+            horas_existentes = float(
+                horas_existentes
             )
 
-            horas_planejadas = max(
-                horas_antigas,
-                horas_existentes,
-                horas
-            )
-
-
-
-            print("\n===============================")
-            print("🔥 DEBUG PERSISTÊNCIA")
-            print("===============================")
-
-            print("CHAVE_OPERACAO:")
-            print(chave_operacao)
-
-            print("HORAS RECEBIDAS:")
-            print(horas)
-
-            print("HORAS EXISTENTES:")
-            print(horas_existentes)
-
-            print("HORAS PLANEJADAS:")
-            print(horas_planejadas)
-
-
-
-
-
-
-
-        # ====================================================
-        # 🔥 SALDO RESTANTE
-        # ====================================================
-        saldo_restante = max(
-
-            horas_planejadas
-
-            - horas_existentes,
-
-            0
-        )
-
-        # ====================================================
-        # 🔒 EVITA DUPLICIDADE
-        # ====================================================
-        print("SALDO_RESTANTE:")
-        print(saldo_restante)
-
-        if saldo_restante <= 0:
+            # ====================================================
+            # 🔥 BASE OPERACIONAL
+            # ====================================================
+            horas_planejadas = 0
 
             try:
-                trans.rollback()
-            except:
-                pass
 
-            conn.close()
+                # ------------------------------------------------
+                # 🔒 RECUPERA BASE OPERACIONAL COM SEGURANÇA
+                # ------------------------------------------------
+                try:
+
+                    df_operacional_local = (
+                        df_operacional.copy()
+                    )
+
+                except:
+
+                    df_operacional_local = pd.DataFrame({
+
+                        "PV": [],
+                        "Processo": [],
+                        "CODIGO_PV": [],
+                        "Horas": [],
+                        "CHAVE_OPERACAO": []
+                    })
+
+                # ------------------------------------------------
+                # 🔒 GARANTE COLUNAS
+                # ------------------------------------------------
+                colunas_obrigatorias = [
+                    "PV",
+                    "Processo",
+                    "CODIGO_PV",
+                    "Horas",
+                    "CHAVE_OPERACAO"
+                ]
+
+                for col in colunas_obrigatorias:
+
+                    if col not in df_operacional_local.columns:
+
+                        if col == "Horas":
+
+                            df_operacional_local[col] = 0
+
+                        else:
+
+                            df_operacional_local[col] = ""
+
+                # ------------------------------------------------
+                # 🔥 NORMALIZA PV
+                # ------------------------------------------------
+                df_operacional_local["PV"] = (
+
+                    df_operacional_local["PV"]
+
+                    .fillna("")
+
+                    .astype(str)
+
+                    .str.replace(".0", "", regex=False)
+
+                    .str.replace("\xa0", "", regex=False)
+
+                    .str.replace("  ", " ", regex=False)
+
+                    .str.strip()
+
+                    .str.upper()
+                )
+
+                # ------------------------------------------------
+                # 🔥 NORMALIZA CODIGO_PV
+                # ------------------------------------------------
+                df_operacional_local["CODIGO_PV"] = (
+
+                    df_operacional_local["CODIGO_PV"]
+
+                    .fillna("")
+
+                    .astype(str)
+
+                    .str.replace(".0", "", regex=False)
+
+                    .str.replace("\xa0", "", regex=False)
+
+                    .str.replace("  ", " ", regex=False)
+
+                    .str.strip()
+
+                    .str.upper()
+                )
+
+                # ------------------------------------------------
+                # 🔥 NORMALIZA PROCESSO
+                # ------------------------------------------------
+                df_operacional_local["Processo"] = (
+
+                    df_operacional_local["Processo"]
+
+                    .fillna("")
+
+                    .astype(str)
+
+                    .str.replace("\xa0", "", regex=False)
+
+                    .str.replace("  ", " ", regex=False)
+
+                    .str.strip()
+
+                    .apply(normalizar_processo)
+
+                    .str.upper()
+                )
+
+                # ------------------------------------------------
+                # 🔥 NORMALIZA HORAS
+                # ------------------------------------------------
+                df_operacional_local["Horas"] = (
+
+                    pd.to_numeric(
+                        df_operacional_local["Horas"],
+                        errors="coerce"
+                    )
+
+                    .fillna(0)
+                )
+
+                # ------------------------------------------------
+                # 🔥 RECONSTRÓI CHAVE OFICIAL APS
+                # ------------------------------------------------
+                df_operacional_local["CHAVE_OPERACAO"] = (
+
+                    df_operacional_local.apply(
+
+                        lambda r: gerar_chave_operacao(
+                            r["PV"],
+                            r["Processo"],
+                            r["CODIGO_PV"]
+                        ),
+
+                        axis=1
+                    )
+                )
+
+                # ------------------------------------------------
+                # 🔒 NORMALIZA CHAVE FINAL
+                # ------------------------------------------------
+                df_operacional_local["CHAVE_OPERACAO"] = (
+
+                    df_operacional_local["CHAVE_OPERACAO"]
+
+                    .fillna("")
+
+                    .astype(str)
+
+                    .str.replace(".0", "", regex=False)
+
+                    .str.replace("\xa0", "", regex=False)
+
+                    .str.replace(" | ", "|", regex=False)
+
+                    .str.replace("|| ", "||", regex=False)
+
+                    .str.replace(" ||", "||", regex=False)
+
+                    .str.strip()
+
+                    .str.upper()
+                )
+
+                # ------------------------------------------------
+                # 🔒 REMOVE CHAVES INVÁLIDAS
+                # ------------------------------------------------
+                df_operacional_local = (
+
+                    df_operacional_local[
+
+                        df_operacional_local[
+                            "CHAVE_OPERACAO"
+                        ] != ""
+
+                    ]
+
+                    .copy()
+                )
+
+                df_operacional_local = (
+
+                    df_operacional_local[
+
+                        df_operacional_local[
+                            "CHAVE_OPERACAO"
+                        ] != "|||"
+
+                    ]
+
+                    .copy()
+                )
+
+                # ------------------------------------------------
+                # 🔒 REMOVE LINHAS OPERACIONAIS VAZIAS
+                # ------------------------------------------------
+                df_operacional_local = (
+
+                    df_operacional_local[
+
+                        (df_operacional_local["PV"] != "")
+
+                        &
+
+                        (df_operacional_local["Processo"] != "")
+
+                        &
+
+                        (df_operacional_local["CODIGO_PV"] != "")
+
+                    ]
+
+                    .copy()
+                )
+
+                # ------------------------------------------------
+                # 🔥 REMOVE DUPLICIDADES
+                # ------------------------------------------------
+                base_operacional_normalizada = (
+
+                    df_operacional_local
+
+                    .drop_duplicates(
+                        subset=["CHAVE_OPERACAO"]
+                    )
+
+                    .copy()
+                )
+
+                # ------------------------------------------------
+                # 🔥 LOCALIZA OPERAÇÃO REAL
+                # ------------------------------------------------
+                base_oper = base_operacional_normalizada[
+
+                    base_operacional_normalizada[
+                        "CHAVE_OPERACAO"
+                    ] == chave_operacao
+                ]
+
+                # ------------------------------------------------
+                # 🔥 RECUPERA HORAS PLANEJADAS
+                # ------------------------------------------------
+                if not base_oper.empty:
+
+                    valor_horas = pd.to_numeric(
+
+                        base_oper.iloc[0].get(
+                            "Horas",
+                            0
+                        ),
+
+                        errors="coerce"
+                    )
+
+                    if pd.isna(valor_horas):
+
+                        valor_horas = 0
+
+                    horas_planejadas = float(
+                        valor_horas
+                    )
+
+            except Exception as e:
+
+                try:
+
+                    st.warning(
+                        f"Erro base operacional PostgreSQL: {e}"
+                    )
+
+                except:
+                    pass
+
+                horas_planejadas = 0
+
+            # ====================================================
+            # 🔒 BLINDAGEM INDUSTRIAL
+            # ====================================================
+            if horas_planejadas <= 0:
+
+                resultado_planejado = conn.execute(
+
+                    text("""
+
+                        SELECT
+                            COALESCE(MAX(Horas_Planejadas), 0)
+
+                        FROM baixas
+
+                        WHERE CHAVE_OPERACAO = :chave
+
+                    """),
+
+                    {
+                        "chave": chave_operacao
+                    }
+
+                ).fetchone()
+
+                horas_antigas = resultado_planejado[0]
+
+                if horas_antigas is None:
+
+                    horas_antigas = 0
+
+                horas_antigas = float(
+                    horas_antigas
+                )
+
+                horas_planejadas = max(
+                    horas_antigas,
+                    horas_existentes,
+                    horas
+                )
+
+                print("\n===============================")
+                print("🔥 DEBUG PERSISTÊNCIA")
+                print("===============================")
+
+                print("CHAVE_OPERACAO:")
+                print(chave_operacao)
+
+                print("HORAS RECEBIDAS:")
+                print(horas)
+
+                print("HORAS EXISTENTES:")
+                print(horas_existentes)
+
+                print("HORAS PLANEJADAS:")
+                print(horas_planejadas)
+
+            # ====================================================
+            # 🔥 SALDO RESTANTE
+            # ====================================================
+            saldo_restante = max(
+
+                horas_planejadas
+
+                - horas_existentes,
+
+                0
+            )
+
+            # ====================================================
+            # 🔒 EVITA DUPLICIDADE
+            # ====================================================
+            print("SALDO_RESTANTE:")
+            print(saldo_restante)
+
+            if saldo_restante <= 0:
+
+                return {
+                    "ok": False,
+                    "erro": "Operação já totalmente baixada"
+                }
+
+            # ====================================================
+            # 🔥 AJUSTA HORAS
+            # ====================================================
+            horas = min(
+                horas,
+                saldo_restante
+            )
+
+            # ====================================================
+            # 💾 INSERT POSTGRESQL
+            # ====================================================
+            conn.execute(
+
+                text("""
+
+                    INSERT INTO baixas (
+
+                        PV,
+                        Cliente,
+                        CODIGO_PV,
+                        Processo,
+                        Horas,
+                        Horas_Planejadas,
+                        Data_Baixa,
+                        Usuario,
+                        Observacao,
+                        Status_Baixa,
+                        Data_Estorno,
+                        Motivo_Estorno,
+                        CHAVE_OPERACAO
+
+                    )
+
+                    VALUES (
+
+                        :PV,
+                        :Cliente,
+                        :CODIGO_PV,
+                        :Processo,
+                        :Horas,
+                        :Horas_Planejadas,
+                        :Data_Baixa,
+                        :Usuario,
+                        :Observacao,
+                        :Status_Baixa,
+                        :Data_Estorno,
+                        :Motivo_Estorno,
+                        :CHAVE_OPERACAO
+
+                    )
+
+                """),
+
+                {
+
+                    "PV": pv,
+                    "Cliente": cliente,
+                    "CODIGO_PV": codigo_pv,
+                    "Processo": processo,
+                    "Horas": horas,
+                    "Horas_Planejadas": horas_planejadas,
+                    "Data_Baixa": data_baixa,
+                    "Usuario": usuario,
+                    "Observacao": observacao,
+                    "Status_Baixa": status_baixa,
+                    "Data_Estorno": data_estorno,
+                    "Motivo_Estorno": motivo_estorno,
+                    "CHAVE_OPERACAO": chave_operacao
+
+                }
+            )
+
+            print("🔥 INSERT EXECUTADO")
+            print("🔥 RETORNANDO OK TRUE")
 
             return {
-                "ok": False,
-                "erro": "Operação já totalmente baixada"
+                "ok": True
             }
-
-        # ====================================================
-        # 🔥 AJUSTA HORAS
-        # ====================================================
-        horas = min(
-            horas,
-            saldo_restante
-        )
-
-        # ====================================================
-        # 💾 INSERT POSTGRESQL
-        # ====================================================
-        conn.execute(
-
-            text("""
-
-                INSERT INTO baixas (
-
-                    PV,
-                    Cliente,
-                    CODIGO_PV,
-                    Processo,
-                    Horas,
-                    Horas_Planejadas,
-                    Data_Baixa,
-                    Usuario,
-                    Observacao,
-                    Status_Baixa,
-                    Data_Estorno,
-                    Motivo_Estorno,
-                    CHAVE_OPERACAO
-
-                )
-
-                VALUES (
-
-                    :PV,
-                    :Cliente,
-                    :CODIGO_PV,
-                    :Processo,
-                    :Horas,
-                    :Horas_Planejadas,
-                    :Data_Baixa,
-                    :Usuario,
-                    :Observacao,
-                    :Status_Baixa,
-                    :Data_Estorno,
-                    :Motivo_Estorno,
-                    :CHAVE_OPERACAO
-
-                )
-
-            """),
-
-            {
-
-                "PV": pv,
-                "Cliente": cliente,
-                "CODIGO_PV": codigo_pv,
-                "Processo": processo,
-                "Horas": horas,
-                "Horas_Planejadas": horas_planejadas,
-                "Data_Baixa": data_baixa,
-                "Usuario": usuario,
-                "Observacao": observacao,
-                "Status_Baixa": status_baixa,
-                "Data_Estorno": data_estorno,
-                "Motivo_Estorno": motivo_estorno,
-                "CHAVE_OPERACAO": chave_operacao
-
-            }
-        )
-
-        # ====================================================
-        # 🔥 COMMIT OFICIAL
-        # ====================================================
-        trans.commit()
-
-        conn.close()
-
-        return {
-            "ok": True
-        }
 
     except Exception as e:
 
-        try:
-            trans.rollback()
-        except:
-            pass
-
-        try:
-            conn.close()
-        except:
-            pass
-
-        
         import traceback
+
         print("\n===============================")
         print("❌ EXCEPTION salvar_baixa_postgresql")
         print("===============================")
 
         print(traceback.format_exc())
 
-
         return {
             "ok": False,
             "erro": str(e)
         }
-
 
 
 
