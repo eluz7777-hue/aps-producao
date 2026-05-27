@@ -5840,7 +5840,7 @@ else:
                 print("🚀 CHAMANDO salvar_baixa_postgresql()")
                 
 
-               st.warning("🔥 CHAMANDO FUNÇÃO")         
+                st.warning("🔥 CHAMANDO FUNÇÃO")         
        
                 resultado = salvar_baixa_postgresql(
                     nova_baixa
