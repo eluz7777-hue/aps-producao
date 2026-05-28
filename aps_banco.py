@@ -605,6 +605,8 @@ def salvar_baixa_postgresql(nova_baixa):
                 nova_baixa.get("CHAVE_OPERACAO", "")
             ).strip()
 
+
+
             # ====================================================
             # 🔥 HORAS SEGURAS
             # ====================================================
@@ -618,6 +620,18 @@ def salvar_baixa_postgresql(nova_baixa):
                 horas = 0
 
             horas = float(horas)
+
+
+
+            # ====================================================
+            # 🔥 HORAS PLANEJADAS
+            # ====================================================
+            horas_planejadas = float(
+                nova_baixa.get(
+                    "Horas_Planejadas",
+                    0
+                )
+            )
 
             # ====================================================
             # 🔥 DATA BAIXA REAL
