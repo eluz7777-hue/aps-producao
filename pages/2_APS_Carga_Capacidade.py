@@ -4468,12 +4468,28 @@ if not df_baixas.empty:
 
 
     df_baixas["Status_Baixa"] = (
-
         df_baixas["Status_Baixa"]
+        
+        .fillna("")
+
         .astype(str)
+
+        .str.replace("\xa0", "", regex=False)
+
         .str.strip()
+    
         .str.upper()
     )
+
+
+
+    st.warning("🔥 STATUS ENCONTRADOS")
+
+    st.write(
+        df_baixas["Status_Baixa"]
+        .value_counts(dropna=False)
+    )
+
 
 
     # ========================================================
