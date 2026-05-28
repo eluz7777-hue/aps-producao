@@ -4459,6 +4459,13 @@ if "CHAVE_OPERACAO" not in df_baixas.columns:
 # ============================================================
 # 🔥 TRATAMENTO DAS BAIXAS
 # ============================================================
+st.warning(
+    f"🔥 DF_BAIXAS EMPTY: {df_baixas.empty}"
+)
+
+st.write(df_baixas.head())
+
+
 if not df_baixas.empty:
 
     df_baixas["Horas"] = pd.to_numeric(
