@@ -370,23 +370,23 @@ def carregar_baixas_postgresql():
 
                     df[col] = ""
 
-    if df is None or df.empty:
+        if df is None or df.empty:
 
-        st.error("⚠️ DF VEIO VAZIO DO POSTGRESQL")
+            st.error("⚠️ DF VEIO VAZIO DO POSTGRESQL")
 
-        try:
+            try:
 
-            st.warning(f"🔥 DF VAZIO: {df.shape}")
+                st.warning(f"🔥 DF VAZIO: {df.shape}")
 
-        except:
-            pass
+            except:
+                pass
 
 
-        return pd.DataFrame(
-            columns=COLUNAS_BAIXAS + [
-                "CHAVE_OPERACAO"
-            ]
-        )
+            return pd.DataFrame(
+                columns=COLUNAS_BAIXAS + [
+                    "CHAVE_OPERACAO"
+                ]
+            )
 
         # ====================================================
         # 🔥 GARANTE COLUNA
