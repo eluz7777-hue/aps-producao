@@ -543,6 +543,21 @@ def carregar_baixas_postgresql():
             .reset_index(drop=True)
         )
 
+        print("\n======================")
+        print("🔥 DF FINAL RETORNADO")
+        print("======================")
+
+        print(df.shape)
+
+        try:
+
+            print(df.head())
+
+        except:
+            pass
+
+
+
         return df
 
     except Exception as e:
