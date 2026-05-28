@@ -5835,6 +5835,8 @@ else:
 
                 "Horas": saldo_real,
 
+                "Horas_Planejadas": linha["Horas"],
+
                 "Data_Baixa": data_real,
 
                 "Usuario": "Sistema",
@@ -5852,8 +5854,7 @@ else:
                 ]
             }
 
-            print("📦 PAYLOAD FINAL:")
-            print(nova_baixa)
+            
 
             # =================================================
             # 💾 SALVA POSTGRESQL
@@ -6130,6 +6131,8 @@ else:
 
                     "Horas": saldo_real,
 
+                    "Horas_Planejadas": linha["Horas"],
+
                     "Data_Baixa": data_real,
 
                     "Usuario": "Sistema",
@@ -6142,8 +6145,13 @@ else:
 
                     "Motivo_Estorno": "",
 
-                    "CHAVE_OPERACAO": chave
+                    "CHAVE_OPERACAO": linha[
+                        "CHAVE_OPERACAO"
+                    ]
+
                 }
+
+            
 
                 # =================================================
                 # 💾 SALVA POSTGRESQL
@@ -7375,6 +7383,8 @@ else:
 
                 "Horas": saldo_real,
 
+                "Horas_Planejadas": linha["Horas"],
+
                 "Data_Baixa": data_real,
 
                 "Usuario": "Sistema",
@@ -7494,6 +7504,8 @@ else:
                 ),
 
                 "Horas": saldo_real,
+
+                "Horas_Planejadas": linha["Horas"],
 
                 "Data_Baixa": data_real,
 
@@ -7662,6 +7674,8 @@ else:
                     ),
 
                     "Horas": saldo_real,
+
+                    "Horas_Planejadas": linha["Horas"],
 
                     "Data_Baixa": data_real,
 
