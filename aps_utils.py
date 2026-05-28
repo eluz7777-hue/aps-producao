@@ -374,10 +374,7 @@ def _padronizar_df_baixas(df_baixas):
         .apply(normalizar_processo)
     )
 
-    st.warning(
-        f"🔥 PROCESSOS APÓS NORMALIZAÇÃO: "
-        f"{df_baixas['Processo'].unique()[:10]}"
-    )
+    
 
     # ========================================================
     # 🔥 CLIENTE PADRÃO
