@@ -559,7 +559,9 @@ def salvar_baixa_postgresql(nova_baixa):
         # ====================================================
         # 🔥 TRANSAÇÃO OFICIAL SQLALCHEMY 2.x
         # ====================================================
-        with engine.begin() as conn:
+        with engine.connect() as conn:
+   
+            trans = conn.begin()
 
             # ====================================================
             # 🔥 NORMALIZAÇÃO TOTAL
@@ -1262,6 +1264,12 @@ def salvar_baixa_postgresql(nova_baixa):
 
             st.warning("🔥 EXECUTE PASSOU")            
 
+            
+            trans.commit()
+
+            conn.commit()
+
+
             print("🔥 ROWCOUNT:")
             print(resultado_insert.rowcount)
 
@@ -1296,6 +1304,7 @@ def salvar_baixa_postgresql(nova_baixa):
         print("===============================")
 
         print(traceback.format_exc())
+
 
         return {
             "ok": False,
