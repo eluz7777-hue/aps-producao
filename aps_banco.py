@@ -375,7 +375,20 @@ def carregar_baixas_postgresql():
         # ====================================================
         # 🔒 SEM DADOS
         # ====================================================
+
         if df is None or df.empty:
+
+            print("\n======================")
+            print("⚠️ DF VEIO VAZIO DO POSTGRESQL")
+            print("======================")
+
+            try:
+
+                print(df.shape)
+
+            except:
+                pass
+
 
             return pd.DataFrame(
                 columns=COLUNAS_BAIXAS + [
