@@ -249,6 +249,8 @@ COLUNAS_BAIXAS = [
 # ===============================
 # PADRONIZAÇÃO DE BAIXAS APS
 # ===============================
+st.warning(f"🔥 PADRONIZAR INÍCIO: {df.shape}")
+
 def _padronizar_df_baixas(df_baixas):
 
     # ========================================================
@@ -504,4 +506,6 @@ def _padronizar_df_baixas(df_baixas):
         .reset_index(drop=True)
     )
 
+    st.error(f"🔥 PADRONIZAR FINAL: {df_baixas.shape}")
+    
     return df_baixas
