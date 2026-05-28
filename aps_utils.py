@@ -482,52 +482,7 @@ def _padronizar_df_baixas(df_baixas):
         .copy()
     )
 
-    # ========================================================
-    # 🔒 REMOVE LINHAS VAZIAS
-    # ========================================================
-    for col in [
-
-        "PV",
-        "Processo",
-        "CODIGO_PV"
-
-    ]:
-
-        df_baixas[col] = (
-
-            df_baixas[col]
-
-            .fillna("")
-
-            .astype(str)
-
-            .str.strip()
-
-            .replace("NAN", "")
-
-            .replace("NONE", "")
-
-            .replace("NULL", "")
-        )
-
-    df_baixas = (
-
-        df_baixas[
-
-            (df_baixas["PV"] != "")
-
-            &
-
-            (df_baixas["Processo"] != "")
-
-            &
-
-            (df_baixas["CODIGO_PV"] != "")
-
-        ]
-
-        .copy()
-    )
+    
 
     # ========================================================
     # 🔥 REMOVE DUPLICADOS
