@@ -252,7 +252,9 @@ COLUNAS_BAIXAS = [
 
 def _padronizar_df_baixas(df_baixas):
 
-    st.warning(f"PADRONIZAR INÍCIO: {df_baixas.shape}")
+    st.warning(
+        f"PADRONIZAR INICIO: {df_baixas.shape}"
+    )
 
     # ========================================================
     # 🔒 DATAFRAME VAZIO SEGURO
@@ -414,36 +416,61 @@ def _padronizar_df_baixas(df_baixas):
     # ========================================================
     # 🔥 CHAVE OPERACIONAL OFICIAL APS
     # ========================================================
-    df_baixas["CHAVE_OPERACAO"] = df_baixas.apply(
 
-        lambda r: gerar_chave_operacao(
-            r["PV"],
-            r["Processo"],
-            r["CODIGO_PV"]
-        ),
+    # 🔒 mantém chave original do PostgreSQL
+    df_baixas["CHAVE_OPERACAO"] = (
 
-        axis=1
+        df_baixas["CHAVE_OPERACAO"]
+
+        .fillna("")
+
+        .astype(str)
+
+        .str.strip()
+
+        .str.upper()
     )
 
+    # 🔥 gera chave apenas se vier vazia
+    mascara_chave_vazia = (
+
+        (df_baixas["CHAVE_OPERACAO"] == "")
+
+        |
+
+        (df_baixas["CHAVE_OPERACAO"] == "|||")
+    )
+
+    if mascara_chave_vazia.any():
+
+        df_baixas.loc[
+            mascara_chave_vazia,
+            "CHAVE_OPERACAO"
+        ] = df_baixas.loc[
+            mascara_chave_vazia
+        ].apply(
+
+            lambda r: gerar_chave_operacao(
+                r["PV"],
+                r["Processo"],
+                r["CODIGO_PV"]
+            ),
+
+            axis=1
+        )
+
     # ========================================================
-    # 🔒 REMOVE CHAVES INVÁLIDAS
+    # 🔒 REMOVE CHAVES REALMENTE INVÁLIDAS
     # ========================================================
     df_baixas = (
 
         df_baixas[
 
-            df_baixas["CHAVE_OPERACAO"] != ""
+            (df_baixas["CHAVE_OPERACAO"] != "")
 
-        ]
+            &
 
-        .copy()
-    )
-
-    df_baixas = (
-
-        df_baixas[
-
-            df_baixas["CHAVE_OPERACAO"] != "|||"
+            (df_baixas["CHAVE_OPERACAO"] != "|||")
 
         ]
 
@@ -507,6 +534,8 @@ def _padronizar_df_baixas(df_baixas):
         .reset_index(drop=True)
     )
 
-    st.error(f"🔥 PADRONIZAR FINAL: {df_baixas.shape}")
-    
+    st.error(
+        f"PADRONIZAR FINAL: {df_baixas.shape}"
+    )
+
     return df_baixas
