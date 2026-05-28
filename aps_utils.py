@@ -252,7 +252,7 @@ COLUNAS_BAIXAS = [
 
 def _padronizar_df_baixas(df_baixas):
 
-    st.warning(f"🔥 PADRONIZAR INÍCIO: {df_baixas.shape}")
+    st.warning(f"PADRONIZAR INÍCIO: {df_baixas.shape}")
 
     # ========================================================
     # 🔒 DATAFRAME VAZIO SEGURO
