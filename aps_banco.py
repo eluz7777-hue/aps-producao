@@ -515,6 +515,8 @@ def carregar_baixas_postgresql():
         # 🔥 PADRONIZA
         # ====================================================
         df = _padronizar_df_baixas(df)
+        
+        st.error(f"🔥 APÓS PADRONIZAÇÃO: {df.shape}")
 
         # ====================================================
         # 🔥 REMOVE DUPLICIDADES
@@ -527,6 +529,9 @@ def carregar_baixas_postgresql():
 
             .reset_index(drop=True)
         )
+
+
+        st.warning(f"🔥 APÓS DUPLICIDADES: {df.shape}")
 
         # ====================================================
         # 🔥 ORDENAÇÃO FINAL
