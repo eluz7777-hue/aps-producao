@@ -252,12 +252,10 @@ COLUNAS_BAIXAS = [
 
 def _padronizar_df_baixas(df_baixas):
 
-    st.warning(f"PADRONIZAR INICIO: {df_baixas.shape}")
-
     # ========================================================
     # 🔒 DATAFRAME VAZIO SEGURO
     # ========================================================
-    if df_baixas is None or df_baixas.empty:
+    if df_baixas is None or len(df_baixas) == 0:
 
         return pd.DataFrame({
 
@@ -412,10 +410,8 @@ def _padronizar_df_baixas(df_baixas):
     )
 
     # ========================================================
-    # 🔥 CHAVE OPERACIONAL OFICIAL APS
+    # 🔥 CHAVE OPERACIONAL
     # ========================================================
-
-    # 🔒 mantém chave original do PostgreSQL
     df_baixas["CHAVE_OPERACAO"] = (
 
         df_baixas["CHAVE_OPERACAO"]
@@ -429,7 +425,6 @@ def _padronizar_df_baixas(df_baixas):
         .str.upper()
     )
 
-    # 🔥 gera chave apenas se vier vazia
     mascara_chave_vazia = (
 
         (df_baixas["CHAVE_OPERACAO"] == "")
@@ -458,7 +453,7 @@ def _padronizar_df_baixas(df_baixas):
         )
 
     # ========================================================
-    # 🔒 REMOVE CHAVES REALMENTE INVÁLIDAS
+    # 🔒 REMOVE CHAVES INVÁLIDAS
     # ========================================================
     df_baixas = (
 
@@ -531,7 +526,5 @@ def _padronizar_df_baixas(df_baixas):
 
         .reset_index(drop=True)
     )
-
-    st.error(f"PADRONIZAR FINAL: {df_baixas.shape}")
 
     return df_baixas
