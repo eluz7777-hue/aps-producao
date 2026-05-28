@@ -294,6 +294,11 @@ def carregar_baixas_postgresql():
 
     try:
 
+        print("\n======================")
+        print("🔥 ENTROU carregar_baixas_postgresql")
+        print("======================")
+
+
         # ====================================================
         # 🔥 LEITURA POSTGRESQL
         # ====================================================
@@ -563,6 +568,11 @@ def carregar_baixas_postgresql():
     except Exception as e:
 
         import traceback
+
+        print("\n======================")
+        print("❌ ERRO carregar_baixas_postgresql")
+        print("======================")
+
 
         print(traceback.format_exc())
 
