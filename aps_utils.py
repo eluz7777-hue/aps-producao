@@ -357,11 +357,26 @@ def _padronizar_df_baixas(df_baixas):
     # ========================================================
     # 🔥 PROCESSO OFICIAL APS
     # ========================================================
+    df_baixas["Processo_Original"] = (
+        df_baixas["Processo"]
+    )
+
     df_baixas["Processo"] = (
 
         df_baixas["Processo"]
 
+        .fillna("")
+
+        .astype(str)
+
+        .str.strip()
+
         .apply(normalizar_processo)
+    )
+
+    st.warning(
+        f"🔥 PROCESSOS APÓS NORMALIZAÇÃO: "
+        f"{df_baixas['Processo'].unique()[:10]}"
     )
 
     # ========================================================
