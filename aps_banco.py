@@ -294,10 +294,8 @@ def carregar_baixas_postgresql():
 
     try:
 
-        print("\n======================")
-        print("🔥 ENTROU carregar_baixas_postgresql")
-        print("======================")
-
+        st.warning("🔥 ENTROU carregar_baixas_postgresql")
+        
 
         # ====================================================
         # 🔥 LEITURA POSTGRESQL
@@ -324,7 +322,7 @@ def carregar_baixas_postgresql():
         print("🔥 DF BRUTO POSTGRESQL")
         print("======================")
 
-        print(df.shape)
+        st.warning(f"🔥 DF BRUTO: {df.shape}")
 
         try:
 
@@ -372,19 +370,9 @@ def carregar_baixas_postgresql():
 
                     df[col] = ""
 
-        # ====================================================
-        # 🔒 SEM DADOS
-        # ====================================================
+        st.error("⚠️ DF VEIO VAZIO DO POSTGRESQL")
 
-        if df is None or df.empty:
-
-            print("\n======================")
-            print("⚠️ DF VEIO VAZIO DO POSTGRESQL")
-            print("======================")
-
-            try:
-
-                print(df.shape)
+                st.success(f"🔥 DF FINAL: {df.shape}")
 
             except:
                 pass
