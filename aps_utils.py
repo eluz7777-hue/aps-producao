@@ -504,6 +504,36 @@ def _padronizar_df_baixas(df_baixas):
         errors="coerce"
     )
 
+
+    # ========================================================
+    # 🔥 DATA ESTORNO
+    # ========================================================
+    df_baixas["Data_Estorno"] = pd.to_datetime(
+
+        df_baixas["Data_Estorno"],
+
+        errors="coerce"
+    )
+
+    # ========================================================
+    # 🔥 REMOVE DATAS FALSAS DE ESTORNO
+    # ========================================================
+    df_baixas.loc[
+
+        (
+            df_baixas["Status_Baixa"]
+            .astype(str)
+            .str.upper()
+            != "ESTORNADA"
+        ),
+
+        "Data_Estorno"
+
+    ] = pd.NaT
+
+
+
+
     # ========================================================
     # 🔥 NORMALIZA CHAVE
     # ========================================================
