@@ -69,6 +69,9 @@ def normalizar_chave_operacao(pv, processo, codigo):
 # ============================================================
 def gerar_chave_operacao(pv, processo, codigo):
 
+    # ========================================================
+    # 🔥 PV
+    # ========================================================
     pv = (
         str(pv)
         .replace(".0", "")
@@ -77,14 +80,22 @@ def gerar_chave_operacao(pv, processo, codigo):
         .upper()
     )
 
+    # ========================================================
+    # 🔥 PROCESSO
+    # ========================================================
     processo = (
-        normalizar_processo(processo)
+        str(processo)
         .replace(".0", "")
         .replace("\xa0", "")
         .strip()
         .upper()
     )
 
+    processo = normalizar_processo(processo)
+
+    # ========================================================
+    # 🔥 CÓDIGO
+    # ========================================================
     codigo = (
         str(codigo)
         .replace(".0", "")
@@ -93,8 +104,30 @@ def gerar_chave_operacao(pv, processo, codigo):
         .upper()
     )
 
-    return f"{pv}||{processo}||{codigo}"
+    # ========================================================
+    # 🔥 LIMPEZA DE VALORES INVÁLIDOS
+    # ========================================================
+    invalidos = {
 
+        "",
+        "NONE",
+        "NAN",
+        "NULL"
+    }
+
+    if pv in invalidos:
+        pv = "SEM_PV"
+
+    if processo in invalidos:
+        processo = "SEM_PROCESSO"
+
+    if codigo in invalidos:
+        codigo = "SEM_CODIGO"
+
+    # ========================================================
+    # 🔥 CHAVE FINAL
+    # ========================================================
+    return f"{pv}||{processo}||{codigo}"
 
 # ===============================
 # PROCESSOS
