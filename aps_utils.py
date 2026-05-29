@@ -329,10 +329,19 @@ def _padronizar_df_baixas(df_baixas):
 
     df_baixas = df_baixas.rename(
         columns=mapeamento_colunas
-    )    
+    ) 
+
+    
+    # ========================================================
+    # 🔥 REMOVE COLUNAS DUPLICADAS
+    # ========================================================
+    df_baixas = df_baixas.loc[
+        :,
+        ~df_baixas.columns.duplicated()
+    ].copy()
+       
 
 
- 
 
     # ========================================================
     # 🔒 GARANTE COLUNAS
