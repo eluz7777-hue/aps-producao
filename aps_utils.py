@@ -610,6 +610,24 @@ def _padronizar_df_baixas(df_baixas):
     )
 
     
+    # ========================================================
+    # 🔥 REMOVE DUPLICADOS REAIS
+    # ========================================================
+    df_baixas = (
+
+        df_baixas
+
+        .drop_duplicates(
+            subset=[
+                "CHAVE_OPERACAO",
+                "Data_Baixa"
+            ]
+        )
+
+        .reset_index(drop=True)
+    )
+
+
 
     # ========================================================
     # 🔥 ORDENAÇÃO FINAL
