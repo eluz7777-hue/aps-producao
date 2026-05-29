@@ -280,6 +280,60 @@ def _padronizar_df_baixas(df_baixas):
     # ========================================================
     df_baixas = df_baixas.copy()
 
+
+
+    # ========================================================
+    # 🔥 NORMALIZA NOMES DAS COLUNAS
+    # ========================================================
+    df_baixas.columns = [
+
+        str(col)
+        .strip()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .upper()
+
+        for col in df_baixas.columns
+    ]
+
+    # ========================================================
+    # 🔥 MAPEAMENTO OFICIAL
+    # ========================================================
+    mapeamento_colunas = {
+
+        "PV": "PV",
+
+        "CLIENTE": "Cliente",
+
+        "CODIGO": "CODIGO_PV",
+        "CODIGO_PV": "CODIGO_PV",
+
+        "PROCESSO": "Processo",
+
+        "HORAS": "Horas",
+
+        "DATA_BAIXA": "Data_Baixa",
+
+        "USUARIO": "Usuario",
+
+        "OBSERVACAO": "Observacao",
+
+        "STATUS_BAIXA": "Status_Baixa",
+
+        "DATA_ESTORNO": "Data_Estorno",
+
+        "MOTIVO_ESTORNO": "Motivo_Estorno",
+
+        "CHAVE_OPERACAO": "CHAVE_OPERACAO"
+    }
+
+    df_baixas = df_baixas.rename(
+        columns=mapeamento_colunas
+    )    
+
+
+ 
+
     # ========================================================
     # 🔒 GARANTE COLUNAS
     # ========================================================
@@ -483,17 +537,7 @@ def _padronizar_df_baixas(df_baixas):
         df_baixas["CHAVE_OPERACAO"] == ""
     )
 
-    # ========================================================
-    # 🔥 REMOVE DUPLICADOS
-    # ========================================================
-    df_baixas = (
-
-        df_baixas
-
-        .drop_duplicates()
-
-        .reset_index(drop=True)
-    )
+    
 
     # ========================================================
     # 🔥 ORDENAÇÃO FINAL
