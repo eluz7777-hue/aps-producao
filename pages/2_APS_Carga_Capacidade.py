@@ -5845,7 +5845,7 @@ else:
 
                 "Status_Baixa": "ATIVA",
 
-                "Data_Estorno": "",
+                "Data_Estorno": None,
 
                 "Motivo_Estorno": "",
 
@@ -6141,7 +6141,7 @@ else:
 
                     "Status_Baixa": "ATIVA",
 
-                    "Data_Estorno": "",
+                    "Data_Estorno": None,
 
                     "Motivo_Estorno": "",
 
@@ -7393,7 +7393,7 @@ else:
 
                 "Status_Baixa": "ATIVA",
 
-                "Data_Estorno": "",
+                "Data_Estorno": None,
 
                 "Motivo_Estorno": "",
 
@@ -7515,7 +7515,7 @@ else:
 
                 "Status_Baixa": "TERCEIRIZADA",
 
-                "Data_Estorno": "",
+                "Data_Estorno": None,
 
                 "Motivo_Estorno": "",
 
@@ -7685,7 +7685,7 @@ else:
 
                     "Status_Baixa": "ATIVA",
 
-                    "Data_Estorno": "",
+                    "Data_Estorno": None,
 
                     "Motivo_Estorno": "",
 
