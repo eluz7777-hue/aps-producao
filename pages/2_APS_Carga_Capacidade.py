@@ -4510,11 +4510,27 @@ if not df_baixas.empty:
     # ========================================================
     # 🔥 SOMENTE BAIXAS ATIVAS
     # ========================================================
-    df_baixas_validas = df_baixas[
+    df_baixas["STATUS_NORMALIZADO"] = (
 
         df_baixas["Status_Baixa"]
-        .isin(["ATIVA", "TERCEIRIZADA"])
 
+        .astype(str)
+
+        .str.strip()
+
+        .str.upper()
+    )
+
+    df_baixas_validas = df_baixas[
+
+        df_baixas["STATUS_NORMALIZADO"]
+
+        .isin([
+            "ATIVA",
+            "TERCEIRIZADA"
+        ])
+
+        
     ].copy()
 
 
