@@ -874,39 +874,7 @@ else:
 
 
 
-st.error("🔥 TOTAL CHAVES FILA")
-st.write(
-    df_operacional["CHAVE_OPERACAO"]
-    .astype(str)
-    .nunique()
-)
 
-st.error("🔥 TOTAL CHAVES BAIXADAS")
-st.write(
-    df_baixas_validas["CHAVE_OPERACAO"]
-    .astype(str)
-    .nunique()
-)
-
-st.error("🔥 CHAVES NÃO ENCONTRADAS")
-
-faltantes = df_operacional[
-    ~df_operacional["CHAVE_OPERACAO"].isin(
-        df_baixas_validas["CHAVE_OPERACAO"]
-    )
-]
-
-st.dataframe(
-
-    faltantes[
-        [
-            "PV",
-            "Processo",
-            "CODIGO_PV",
-            "CHAVE_OPERACAO"
-        ]
-    ].head(30)
-)
 
 
 
@@ -7824,6 +7792,26 @@ if not df_baixas_ativas.empty:
             "TERCEIRIZADA"
         ])
     ].copy()
+
+
+
+
+    st.error("🔥 TOTAL CHAVES FILA")
+    st.write(
+        df_operacional["CHAVE_OPERACAO"]
+        .astype(str)
+        .nunique()
+    )
+
+    st.error("🔥 TOTAL CHAVES BAIXADAS")
+    st.write(
+        df_baixas_validas["CHAVE_OPERACAO"]
+        .astype(str)
+        .nunique()
+    )     
+
+
+
 
     # --------------------------------------------------------
     # 🔥 HORAS NUMÉRICAS
