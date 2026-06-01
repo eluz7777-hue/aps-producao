@@ -2653,7 +2653,16 @@ def resumo_cards_gargalos(df_dash):
         ),
 
         "total_baixas_ativas": int(
-            df_dash["Qtd_Baixas_Ativas"].sum()
+
+            df_dash[
+                "Qtd_Baixas_Ativas"
+            ]
+
+            .fillna(0)
+
+            .astype(int)
+
+            .max()
         ),
 
         "gargalo_critico": gargalo_critico,
