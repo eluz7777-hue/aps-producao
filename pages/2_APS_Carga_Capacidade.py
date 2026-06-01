@@ -872,6 +872,46 @@ else:
 
 
 
+
+
+st.error("🔥 TOTAL CHAVES FILA")
+st.write(
+    df_operacional["CHAVE_OPERACAO"]
+    .astype(str)
+    .nunique()
+)
+
+st.error("🔥 TOTAL CHAVES BAIXADAS")
+st.write(
+    df_baixas_validas["CHAVE_OPERACAO"]
+    .astype(str)
+    .nunique()
+)
+
+st.error("🔥 CHAVES NÃO ENCONTRADAS")
+
+faltantes = df_operacional[
+    ~df_operacional["CHAVE_OPERACAO"].isin(
+        df_baixas_validas["CHAVE_OPERACAO"]
+    )
+]
+
+st.dataframe(
+
+    faltantes[
+        [
+            "PV",
+            "Processo",
+            "CODIGO_PV",
+            "CHAVE_OPERACAO"
+        ]
+    ].head(30)
+)
+
+
+
+
+
 # ------------------------------------------------------------
 # REMOVE DA FILA
 # ------------------------------------------------------------
@@ -5860,9 +5900,7 @@ else:
             # 💾 SALVA POSTGRESQL
             # =================================================
             try:
-                st.error("🔥 ANTES salvar_baixa_postgresql")
-                print("🚀 CHAMANDO salvar_baixa_postgresql()")
-                
+                               
 
                 st.warning("🔥 CHAMANDO FUNÇÃO")         
        
@@ -7409,10 +7447,7 @@ else:
             )
 
     
-            st.error(f"🔥 RESULTADO: {resultado}")
-            print(f"🔥 RESULTADO: {resultado}")
-
-
+            
             st.session_state[
                 "lock_gargalo_unitario"
             ] = False
@@ -7524,13 +7559,13 @@ else:
 
 
 
-            st.warning("🔥 GARGALO ENTROU")
+            
 
             resultado = salvar_baixa_postgresql(
                 nova_baixa
             )
             
-            st.warning(f"🔥 RESULTADO: {resultado}")
+            
 
             st.session_state[
                 "lock_gargalo_unitario"
