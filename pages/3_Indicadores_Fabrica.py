@@ -1913,12 +1913,26 @@ with tab3:
     #
     # ========================================================
 
+    # ========================================================
+          # 🔒 GARANTE SOMENTE COLUNAS EXISTENTES
+          # ========================================================
+    processos_existentes = [
+
+              p for p in processos_excel
+
+              if p in carga.columns
+          ]
+
+
+         # ========================================================
+         # 🔥 SOMA TEMPOS ROTEIRO
+         # ========================================================
     carga["TEMPO_TOTAL_ROTEIRO"] = (
 
-        carga[processos_excel]
+             carga[processos_existentes]
 
-        .sum(axis=1)
-    )
+             .sum(axis=1)
+         )
 
     # ========================================================
     # 🔥 CARGA TOTAL DA PV (HORAS)
@@ -1943,7 +1957,7 @@ with tab3:
 
     lista_resumo = []
 
-    for processo in processos_excel:
+    for processo in processos_existentes:
 
         # ====================================================
         # 🔥 HORAS PLANEJADAS DO PROCESSO
