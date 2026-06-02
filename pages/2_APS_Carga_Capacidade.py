@@ -894,9 +894,9 @@ df_operacional["CHAVE_OPERACAO"] = (
     .str.strip()
 )
 
-df_baixas_validas["CHAVE_OPERACAO"] = (
+df_baixas["CHAVE_OPERACAO"] = (
 
-    df_baixas_validas["CHAVE_OPERACAO"]
+    df_baixas["CHAVE_OPERACAO"]
 
     .astype(str)
 
