@@ -4517,12 +4517,6 @@ if "CHAVE_OPERACAO" not in df_baixas.columns:
 # ============================================================
 # 🔥 TRATAMENTO DAS BAIXAS
 # ============================================================
-st.warning(
-    f"🔥 DF_BAIXAS EMPTY: {df_baixas.empty}"
-)
-
-st.write(df_baixas.head())
-
 
 if not df_baixas.empty:
 
@@ -4548,15 +4542,7 @@ if not df_baixas.empty:
 
 
 
-    st.warning("🔥 STATUS ENCONTRADOS")
-
-    st.write(
-        df_baixas["Status_Baixa"]
-        .value_counts(dropna=False)
-    )
-
-
-
+    
     # ========================================================
     # 🔥 SOMENTE BAIXAS ATIVAS
     # ========================================================
