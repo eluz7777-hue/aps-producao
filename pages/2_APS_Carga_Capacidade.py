@@ -7256,9 +7256,9 @@ else:
 
 
     # =================================================
-    # 🔥 RECARREGA POSTGRESQL
+    # 🔥 REUTILIZA SNAPSHOT OFICIAL APS
     # =================================================
-    df_baixas_sql = df_baixas_ativas.copy()
+    df_baixas_atual = df_baixas_ativas.copy()
 
     if not df_baixas_atual.empty:
 
