@@ -2114,7 +2114,7 @@ with tab3:
     # 🔵 CAPACIDADE
     fig2.add_bar(
 
-        name="Capacidade Disponível",
+        name="Capacidade  Restante",
 
         x=resumo_cap["PROCESSO_REAL"],
 
@@ -2136,7 +2136,7 @@ with tab3:
 
         hovertemplate=
             "<b>%{x}</b><br>" +
-            "Capacidade Disponível: %{y:.2f} h<br>" +
+            "Capacidade Restante: %{y:.2f} h<br>" +
             "Dias Computados: %{customdata[0]}<br>" +
             "Dias Restantes: %{customdata[1]}<br>" +
             "<extra></extra>"
@@ -2149,7 +2149,7 @@ with tab3:
         height=750,
 
         title=(
-            f"Carga Planejada x Capacidade Disponível "
+            f"Carga Planejada x Capacidade Restante "
             f"({dias_uteis_restantes} dias úteis restantes)"
         ),
 
