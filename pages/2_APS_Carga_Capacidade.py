@@ -4344,8 +4344,7 @@ col_k3.metric(
 # 🔥 CONSOLIDAÇÃO REAL DE BAIXAS (POSTGRESQL → OPERACIONAL)
 # ============================================================
 
-df_baixas = carregar_baixas_postgresql()
-
+df_baixas = df_baixas_ativas.copy()
 
 
 # ============================================================
@@ -5720,10 +5719,10 @@ else:
             # =================================================
             # 🔥 RECARREGA POSTGRESQL
             # =================================================
-            print("🔄 RECARREGANDO POSTGRESQL")
+            print("🔄 REUTILIZANDO BASE OFICIAL APS")
 
             df_baixas_atual = (
-                carregar_baixas_postgresql()
+                df_baixas_ativas.copy()
             )
 
             print("📦 SHAPE DF:")
@@ -5903,7 +5902,7 @@ else:
 
 
 
-                teste_df = carregar_baixas_postgresql()
+                teste_df = df_baixas_ativas.copy()
 
                 st.warning(
                     f"🔥 BAIXAS CARREGADAS: {teste_df.shape}"
@@ -5996,7 +5995,7 @@ else:
             # 🔥 RECARREGA POSTGRESQL
             # =================================================
             df_baixas_atual = (
-                carregar_baixas_postgresql()
+                df_baixas_ativas.copy()
             )
 
             if not df_baixas_atual.empty:
@@ -6438,7 +6437,7 @@ fila_corte_dash = fila_corte_dash.reset_index(drop=True)
 # =========================================================
 # 🔥 HISTÓRICO POSTGRESQL
 # =========================================================
-df_baixas = carregar_baixas_postgresql()
+df_baixas = df_baixas_ativas.copy()
 
 hist_corte_dash = df_baixas.copy()
 
@@ -6851,7 +6850,7 @@ for col in [
 # ============================================================
 # 🔥 HISTÓRICO POSTGRESQL REAL
 # ============================================================
-df_baixas_sql = carregar_baixas_postgresql()
+df_baixas_sql = df_baixas_ativas.copy()
 
 if not df_baixas_sql.empty:
 
@@ -7259,7 +7258,7 @@ else:
     # =================================================
     # 🔥 RECARREGA POSTGRESQL
     # =================================================
-    df_baixas_atual = carregar_baixas_postgresql()
+    df_baixas_sql = df_baixas_ativas.copy()
 
     if not df_baixas_atual.empty:
 
@@ -7775,7 +7774,7 @@ st.markdown("## 🔥 Mini Dashboard por Gargalo")
 # ============================================================
 # 🔥 BASE REAL DAS BAIXAS (POSTGRESQL)
 # ============================================================
-df_baixas_ativas = carregar_baixas_postgresql()
+df_baixas_ativas = df_baixas_ativas.copy()
 
 if df_baixas_ativas is None:
     df_baixas_ativas = pd.DataFrame()
