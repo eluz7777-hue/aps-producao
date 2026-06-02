@@ -2449,6 +2449,8 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
             "Ranking"
         ])
 
+
+
     # ========================================================
     # 🔥 BASE DA FILA (REAL)
     # ========================================================
@@ -2458,6 +2460,27 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
         fila_tmp,
         "Processo"
     )
+
+
+
+    print("\n========== DEBUG FILA GARGALOS ==========")
+
+    print("LINHAS:", len(fila_tmp))
+
+    print(
+        "CHAVES UNICAS:",
+        fila_tmp["CHAVE_OPERACAO"]
+        .astype(str)
+        .nunique()
+    )
+
+    print(
+        fila_tmp["Processo"]
+        .value_counts()
+    )
+
+
+
 
     # --------------------------------------------------------
     # 🔒 GARANTE COLUNA OFICIAL
