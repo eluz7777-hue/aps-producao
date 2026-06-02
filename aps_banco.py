@@ -294,7 +294,7 @@ def carregar_baixas_postgresql():
 
     try:
 
-        st.warning("🔥 ENTROU carregar_baixas_postgresql")
+        
         
 
         # ====================================================
@@ -315,23 +315,7 @@ def carregar_baixas_postgresql():
                 conn
             )
 
-        # ====================================================
-        # 🔥 DEBUG DF BRUTO
-        # ====================================================
-        print("\n======================")
-        print("🔥 DF BRUTO POSTGRESQL")
-        print("======================")
-
-        st.warning(f"🔥 DF BRUTO: {df.shape}")
-
-        try:
-
-            print(df.head())
-
-        except:
-            pass
-
-
+        
 
         # ====================================================
         # 🔥 GARANTE COLUNAS PADRÃO APS
@@ -516,7 +500,7 @@ def carregar_baixas_postgresql():
         # ====================================================
         df = _padronizar_df_baixas(df)
         
-        st.error(f"🔥 APÓS PADRONIZAÇÃO: {df.shape}")
+        
 
         # ====================================================
         # 🔥 REMOVE DUPLICIDADES
@@ -531,7 +515,7 @@ def carregar_baixas_postgresql():
         )
 
 
-        st.warning(f"🔥 APÓS DUPLICIDADES: {df.shape}")
+        
 
         # ====================================================
         # 🔥 ORDENAÇÃO FINAL
