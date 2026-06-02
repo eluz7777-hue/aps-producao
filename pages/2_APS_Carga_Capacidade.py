@@ -7836,23 +7836,7 @@ if not df_baixas_ativas.empty:
 
 
 
-    st.error("🔥 TOTAL CHAVES FILA")
-    st.write(
-        df_operacional["CHAVE_OPERACAO"]
-        .astype(str)
-        .nunique()
-    )
-
-    st.error("🔥 TOTAL CHAVES BAIXADAS")
-    st.write(
-        df_baixas_validas["CHAVE_OPERACAO"]
-        .astype(str)
-        .nunique()
-    )     
-
-
-
-
+    
     # --------------------------------------------------------
     # 🔥 HORAS NUMÉRICAS
     # --------------------------------------------------------
