@@ -894,9 +894,9 @@ df_operacional["CHAVE_OPERACAO"] = (
     .str.strip()
 )
 
-df_baixas["CHAVE_OPERACAO"] = (
+df_baixas_ativas["CHAVE_OPERACAO"] = (
 
-    df_baixas["CHAVE_OPERACAO"]
+    df_baixas_ativas["CHAVE_OPERACAO"]
 
     .astype(str)
 
@@ -906,7 +906,7 @@ df_baixas["CHAVE_OPERACAO"] = (
 # 🔥 CHAVES ÚNICAS BAIXADAS
 chaves_baixadas = set(
 
-    df_baixas_validas[
+    df_baixas_ativas[
         "CHAVE_OPERACAO"
     ]
 
