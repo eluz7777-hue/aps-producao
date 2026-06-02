@@ -18,9 +18,6 @@ from aps_utils import gerar_chave_operacao
 
 from aps_banco import *
 
-print("🔥 2_APS REAL CARREGADO 🔥")
-
-st.error("🔥 PAGINA APS REAL")
 
 # ===============================
 # 🔐 BLOQUEIO DE ACESSO GLOBAL
@@ -5732,7 +5729,7 @@ else:
         # 🔥 BOTÃO BAIXA
         # ----------------------------------------------------
 
-        st.warning("🔥 ANTES DO BOTAO")
+       
 
         if st.button(
             "💾 Confirmar Baixa",
@@ -5930,7 +5927,7 @@ else:
             try:
                                
 
-                st.warning("🔥 CHAMANDO FUNÇÃO")         
+                         
        
                 resultado = salvar_baixa_postgresql(
                     nova_baixa
@@ -5951,10 +5948,7 @@ else:
 
 
 
-                st.warning(f"🔥 RESULTADO: {resultado}")
-
-                print("📥 RETORNO:")
-                print(resultado)
+                
 
             except Exception as e:
 

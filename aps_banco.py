@@ -128,9 +128,7 @@ try:
             text("SELECT 1")
         )
 
-    st.success(
-        "✅ PostgreSQL Supabase conectado"
-    )
+    
 
 except Exception as e:
 
