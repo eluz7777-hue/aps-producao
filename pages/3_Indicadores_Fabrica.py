@@ -1691,9 +1691,7 @@ with tab3:
     # ========================================================
     # 📊 CARGA x CAPACIDADE
     # ========================================================
-    st.subheader(
-        "📊 Carga Planejada x Capacidade Disponível"
-    )
+    st.subheader("📊 Carga Planejada x Capacidade Restante")
 
     # ========================================================
     # 🔥 RECURSOS

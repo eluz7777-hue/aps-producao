@@ -2192,8 +2192,8 @@ st.subheader("📌 Indicadores Principais")
 
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("🏭 Carga Total (h)", fmt_br_num(carga_total, 1))
-k2.metric("⚙️ Capacidade Mensal (h)", fmt_br_num(capacidade_total, 1))
-k3.metric("📈 Utilização Global", fmt_br_pct(utilizacao_total, 1))
+k2.metric("⚙️ Capacidade Total do Mês (h)", fmt_br_num(capacidade_total, 1))
+k3.metric("📈 Utilização Macro do Mês", fmt_br_pct(utilizacao_total, 1))
 k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
 
 # ===============================
