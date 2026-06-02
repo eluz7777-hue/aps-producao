@@ -835,18 +835,7 @@ if not df_baixas_ativas.empty:
         axis=1
     )
 
-    # --------------------------------------------------------
-    # 🔍 DEBUG TEMPORÁRIO
-    # --------------------------------------------------------
-    if "PV" not in df_baixas_ativas.columns:
-
-        st.error("COLUNA PV SUMIU")
-
-        st.write(df_baixas_ativas.columns.tolist())
-
-        st.write(df_baixas_ativas.head())
-
-        st.stop()
+    
 
     # --------------------------------------------------------
     # 🔥 CHAVES BAIXADAS
@@ -2463,25 +2452,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
 
 
 
-    print("\n========== DEBUG FILA GARGALOS ==========")
-
-    print("LINHAS:", len(fila_tmp))
-
-    print(
-        "CHAVES UNICAS:",
-        fila_tmp["CHAVE_OPERACAO"]
-        .astype(str)
-        .nunique()
-    )
-
-    print(
-        fila_tmp["Processo"]
-        .value_counts()
-    )
-
-
-
-
+    
     # --------------------------------------------------------
     # 🔒 GARANTE COLUNA OFICIAL
     # --------------------------------------------------------
@@ -5445,17 +5416,6 @@ base_corte = base_corte[
 ].copy()
 
 
-# ============================================================
-# 🔍 DEBUG PROCESSOS DO CORTE
-# ============================================================
-print("\n========== PROCESSOS CORTE ==========")
-
-print(
-    base_corte["Processo"]
-    .value_counts()
-    .sort_index()
-)
-
 
 
 # ============================================================
@@ -5779,24 +5739,12 @@ else:
             key="btn_corte_unitario"
         ):
 
-            st.warning("🔥 DENTRO DO BOTAO")
-
-            st.session_state["DEBUG_BAIXA"] = "ENTROU NO CLICK"
-
-            print("\n===============================")
-            print("🔥 BOTÃO BAIXA ACIONADO")
-            print("===============================")
-
-            print("📌 CHAVE_OPERACAO:")
-            print(linha["CHAVE_OPERACAO"])
-
-            print("📌 SALDO:")
-            print(saldo_real)
+            
 
             # 🔒 BLOQUEIA ZERADOS
             if saldo_real <= 0:
 
-                print("❌ SALDO <= 0")
+                
 
                 st.warning(
                     "⚠️ Operação já totalmente baixada"
