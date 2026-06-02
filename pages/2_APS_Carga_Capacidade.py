@@ -881,11 +881,59 @@ else:
 
 
 # ------------------------------------------------------------
-# REMOVE DA FILA
+# 🔥 REMOVE OPERAÇÕES JÁ BAIXADAS
 # ------------------------------------------------------------
-df_operacional = df_operacional[
-    ~df_operacional["CHAVE_OPERACAO"].isin(chaves_baixadas)
-].copy()
+
+# 🔒 PADRONIZA CHAVES
+df_operacional["CHAVE_OPERACAO"] = (
+
+    df_operacional["CHAVE_OPERACAO"]
+
+    .astype(str)
+
+    .str.strip()
+)
+
+df_baixas_validas["CHAVE_OPERACAO"] = (
+
+    df_baixas_validas["CHAVE_OPERACAO"]
+
+    .astype(str)
+
+    .str.strip()
+)
+
+# 🔥 CHAVES ÚNICAS BAIXADAS
+chaves_baixadas = set(
+
+    df_baixas_validas[
+        "CHAVE_OPERACAO"
+    ]
+
+    .dropna()
+
+    .unique()
+)
+
+# 🔥 REMOVE COMPLETAMENTE DA FILA
+df_operacional = (
+
+    df_operacional[
+
+        ~df_operacional[
+            "CHAVE_OPERACAO"
+        ].isin(chaves_baixadas)
+
+    ]
+
+    .copy()
+)
+
+df_operacional = (
+    df_operacional
+    .reset_index(drop=True)
+)
+
 
 # ------------------------------------------------------------
 # BASE FINAL APS
