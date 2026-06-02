@@ -1220,9 +1220,6 @@ with tab2:
 
 
 
-
-
-
 # ============================================================
 # 🏭 PRODUÇÃO — TEMPO REAL (ATRASO + CARGA x CAPACIDADE)
 # ============================================================
@@ -1785,19 +1782,6 @@ with tab3:
     # ========================================================
     # 🔥 CAPACIDADE REAL
     # ========================================================
-    #
-    # 1 recurso:
-    #
-    # (4×9)+(1×8)
-    # = 44h semana
-    #
-    # 44 × 0.8
-    # = 35.2h semana
-    #
-    # 35.2 / 5
-    # = 7.04h dia
-    #
-    # ========================================================
     horas_semana_recurso = 44
 
     horas_semana_efetiva = (
@@ -1898,46 +1882,28 @@ with tab3:
             ).fillna(0)
 
     # ========================================================
-    # 🔥 SOMA TEMPOS ROTEIRO
+    # 🔒 GARANTE SOMENTE COLUNAS EXISTENTES
     # ========================================================
-    #
-    # TEMPOS DO PV.xlsx ESTÃO EM MINUTOS
-    #
-    # REGRA:
-    #
-    # quantidade × soma dos tempos
-    #
-    # depois:
-    #
-    # ÷ 60 para converter em horas
-    #
-    # ========================================================
-
-    # ========================================================
-          # 🔒 GARANTE SOMENTE COLUNAS EXISTENTES
-          # ========================================================
     processos_existentes = [
 
-              p for p in processos_excel
+        p for p in processos_excel
 
-              if p in carga.columns
-          ]
+        if p in carga.columns
+    ]
 
-
-         # ========================================================
-         # 🔥 SOMA TEMPOS ROTEIRO
-         # ========================================================
+    # ========================================================
+    # 🔥 SOMA TEMPOS ROTEIRO
+    # ========================================================
     carga["TEMPO_TOTAL_ROTEIRO"] = (
 
-             carga[processos_existentes]
+        carga[processos_existentes]
 
-             .sum(axis=1)
-         )
+        .sum(axis=1)
+    )
 
     # ========================================================
     # 🔥 CARGA TOTAL DA PV (HORAS)
     # ========================================================
-
     carga["CARGA_TOTAL_PV"] = (
 
         (
@@ -1954,20 +1920,9 @@ with tab3:
     # ========================================================
     # 🔥 RESUMO PROCESSOS
     # ========================================================
-
     lista_resumo = []
 
     for processo in processos_existentes:
-
-        # ====================================================
-        # 🔥 HORAS PLANEJADAS DO PROCESSO
-        # ====================================================
-        #
-        # quantidade × tempo do processo
-        #
-        # dividido por 60
-        #
-        # ====================================================
 
         horas_processo = (
 
@@ -1987,10 +1942,6 @@ with tab3:
             horas_processo,
             2
         )
-
-        # ====================================================
-        # 🔥 CAPACIDADE DISPONÍVEL
-        # ====================================================
 
         recursos = MAQUINAS.get(
             processo,
@@ -2015,10 +1966,6 @@ with tab3:
             2
         )
 
-        # ====================================================
-        # 🔥 UTILIZAÇÃO
-        # ====================================================
-
         utilizacao = (
 
             (
@@ -2036,10 +1983,6 @@ with tab3:
             utilizacao,
             2
         )
-
-        # ====================================================
-        # 🔥 RESUMO
-        # ====================================================
 
         lista_resumo.append({
 
@@ -2087,52 +2030,48 @@ with tab3:
         ascending=False
     )
 
-
-
     # ========================================================
-          # 🔥 CONTEXTO HOVER
-          # ========================================================
+    # 🔥 CONTEXTO HOVER
+    # ========================================================
     resumo_cap["Dias_Computados"] = dias_uteis_restantes
 
-resumo_cap["Dias_Restantes"] = dias_uteis_restantes
-
-
+    resumo_cap["Dias_Restantes"] = dias_uteis_restantes
 
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
-
     fig2 = go.Figure()
 
-
     # 🔴 CARGA
-
     fig2.add_bar(
 
         name="Carga Planejada",
-         x=resumo_cap["PROCESSO_REAL"], 
-                     y=resumo_cap["Carga"],
-                     marker_color="#d62728",
+
+        x=resumo_cap["PROCESSO_REAL"],
+
+        y=resumo_cap["Carga"],
+
+        marker_color="#d62728",
+
         text=resumo_cap["Carga"],
+
         textposition="outside",
-                    customdata=np.array([ 
 
+        customdata=np.array([
 
-            resumo_cap["Dias_Computados"], 
+            resumo_cap["Dias_Computados"],
 
             resumo_cap["Dias_Restantes"]
-  
-                     ]).T,
 
-                      hovertemplate=
+        ]).T,
 
+        hovertemplate=
             "<b>%{x}</b><br>" +
             "Carga Planejada: %{y:.2f} h<br>" +
             "Dias Computados: %{customdata[0]}<br>" +
             "Dias Restantes: %{customdata[1]}<br>" +
-            "<extra></extra>" 
-            )
-
+            "<extra></extra>"
+    )
 
     # 🔵 CAPACIDADE
     fig2.add_bar(
@@ -2152,19 +2091,18 @@ resumo_cap["Dias_Restantes"] = dias_uteis_restantes
         customdata=np.array([
 
             resumo_cap["Dias_Computados"],
-                              resumo_cap["Dias_Restantes"]
+
+            resumo_cap["Dias_Restantes"]
+
         ]).T,
 
         hovertemplate=
             "<b>%{x}</b><br>" +
-                              "Capacidade Disponível: %{y:.2f} h<br>" +
-                              "Dias Computados: %{customdata[0]}<br>" +
-                              "Dias Restantes: %{customdata[1]}<br>" +
-                              "<extra></extra>"
-                     )
-
-
-
+            "Capacidade Disponível: %{y:.2f} h<br>" +
+            "Dias Computados: %{customdata[0]}<br>" +
+            "Dias Restantes: %{customdata[1]}<br>" +
+            "<extra></extra>"
+    )
 
     fig2.update_layout(
 
@@ -2188,6 +2126,8 @@ resumo_cap["Dias_Restantes"] = dias_uteis_restantes
         fig2,
         use_container_width=True
     )
+
+
 
     # ========================================================
     # 📋 RESUMO EXECUTIVO
