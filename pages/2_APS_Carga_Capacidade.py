@@ -2488,7 +2488,7 @@ def montar_mini_dashboard_gargalos(fila, df_baixas_ativas=None):
     resumo_fila = (
         fila_tmp.groupby("Processo", dropna=False)
         .agg(
-            Qtd_Fila=("Processo", "size"),
+            Qtd_Fila=("CHAVE_OPERACAO", "nunique"),
             Horas_Fila=("Horas", "sum")
         )
         .reset_index()
