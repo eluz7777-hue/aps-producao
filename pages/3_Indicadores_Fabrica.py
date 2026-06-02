@@ -2087,26 +2087,52 @@ with tab3:
         ascending=False
     )
 
+
+
+    # ========================================================
+          # 🔥 CONTEXTO HOVER
+          # ========================================================
+    resumo_cap["Dias_Computados"] = dias_uteis_restantes
+
+resumo_cap["Dias_Restantes"] = dias_uteis_restantes
+
+
+
     # ========================================================
     # 📊 GRÁFICO
     # ========================================================
+
     fig2 = go.Figure()
 
+
     # 🔴 CARGA
+
     fig2.add_bar(
 
         name="Carga Planejada",
-
-        x=resumo_cap["PROCESSO_REAL"],
-
-        y=resumo_cap["Carga"],
-
-        marker_color="#d62728",
-
+         x=resumo_cap["PROCESSO_REAL"], 
+                     y=resumo_cap["Carga"],
+                     marker_color="#d62728",
         text=resumo_cap["Carga"],
+        textposition="outside",
+                    customdata=np.array([ 
 
-        textposition="outside"
-    )
+
+            resumo_cap["Dias_Computados"], 
+
+            resumo_cap["Dias_Restantes"]
+  
+                     ]).T,
+
+                      hovertemplate=
+
+            "<b>%{x}</b><br>" +
+            "Carga Planejada: %{y:.2f} h<br>" +
+            "Dias Computados: %{customdata[0]}<br>" +
+            "Dias Restantes: %{customdata[1]}<br>" +
+            "<extra></extra>" 
+            )
+
 
     # 🔵 CAPACIDADE
     fig2.add_bar(
@@ -2121,8 +2147,24 @@ with tab3:
 
         text=resumo_cap["Capacidade"],
 
-        textposition="outside"
-    )
+        textposition="outside",
+
+        customdata=np.array([
+
+            resumo_cap["Dias_Computados"],
+                              resumo_cap["Dias_Restantes"]
+        ]).T,
+
+        hovertemplate=
+            "<b>%{x}</b><br>" +
+                              "Capacidade Disponível: %{y:.2f} h<br>" +
+                              "Dias Computados: %{customdata[0]}<br>" +
+                              "Dias Restantes: %{customdata[1]}<br>" +
+                              "<extra></extra>"
+                     )
+
+
+
 
     fig2.update_layout(
 
