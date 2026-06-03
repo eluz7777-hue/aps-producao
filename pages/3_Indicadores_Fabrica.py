@@ -1356,19 +1356,7 @@ with tab3:
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
-    # ========================================================
-          # 🚨 ATRASOS
-          # ========================================================
-    base_data = df_pv.copy()
-
-    base_data[coluna_data] = pd.to_datetime(base_data[coluna_data], errors="coerce")
-
-    base_data = base_data.dropna(subset=[coluna_data]).copy()
-
-    base_data["Atraso_dias"] = (hoje - base_data[coluna_data]).dt.days
-    base_data["Atrasada"] = (base_data["Atraso_dias"] > 0)
-
-    atrasadas = base_data[base_data["Atrasada"]].copy()
+    
 
     # ========================================================
     # 🔥 LEITURA PV.xlsx
@@ -1442,6 +1430,23 @@ with tab3:
         st.write(df_pv.columns.tolist())
 
         st.stop()
+
+
+
+    # ========================================================   
+          # 🚨 ATRASOS
+          # ========================================================
+    base_data = df_pv.copy()
+
+    base_data[coluna_data] = pd.to_datetime(base_data[coluna_data], errors="coerce")
+
+    base_data = base_data.dropna(subset=[coluna_data]).copy()
+
+    base_data["Atraso_dias"] = (hoje - base_data[coluna_data]).dt.days
+    base_data["Atrasada"] = (base_data["Atraso_dias"] > 0)
+
+    atrasadas = base_data[base_data["Atrasada"]].copy()
+
 
     # ========================================================
     # 🔥 TOTAL REAL DE PVs
