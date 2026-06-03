@@ -1433,10 +1433,19 @@ with tab3:
 
 
 
-    # ========================================================   
+    # ========================================================
           # 🚨 ATRASOS
           # ========================================================
     base_data = df_pv.copy()
+
+    pvs_ativas = df_aps["PV"].astype(str).str.strip().unique()
+
+    base_data = base_data[
+                    base_data[coluna_pv]
+                    .astype(str)
+                    .str.strip()
+                    .isin(pvs_ativas)
+           ].copy()
 
     base_data[coluna_data] = pd.to_datetime(base_data[coluna_data], errors="coerce")
 
