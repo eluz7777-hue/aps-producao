@@ -1443,9 +1443,14 @@ with tab3:
     base_data = base_data.dropna(subset=[coluna_data]).copy()
 
     base_data["Atraso_dias"] = (hoje - base_data[coluna_data]).dt.days
-    base_data["Atrasada"] = (base_data["Atraso_dias"] > 0)
 
-    atrasadas = base_data[base_data["Atrasada"]].copy()
+    pv = base_data.groupby("PV", as_index=False).agg(data_entrega=(coluna_data, "min"))
+
+    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
+
+    pv["Atrasada"] = (pv["Atraso_dias"] > 0)
+
+    atrasadas = pv[pv["Atrasada"]].copy()
 
 
     # ========================================================
