@@ -1357,27 +1357,18 @@ with tab3:
     hoje = pd.Timestamp.today().normalize()
 
     # ========================================================
-    # 🚨 ATRASOS
-    # ========================================================
-    base_data = base.dropna(
-        subset=["DATA_ENTREGA_APS"]
-    ).copy()
+          # 🚨 ATRASOS
+          # ========================================================
+    base_data = df_pv.copy()
 
-    base_data["Atraso_dias"] = (
+    base_data[coluna_data] = pd.to_datetime(base_data[coluna_data], errors="coerce")
 
-        hoje - base_data["DATA_ENTREGA_APS"]
+    base_data = base_data.dropna(subset=[coluna_data]).copy()
 
-    ).dt.days
+    base_data["Atraso_dias"] = (hoje - base_data[coluna_data]).dt.days
+    base_data["Atrasada"] = (base_data["Atraso_dias"] > 0)
 
-    base_data["Atrasada"] = (
-
-        base_data["Atraso_dias"] > 0
-    )
-
-    atrasadas = base_data[
-
-        base_data["Atrasada"]
-    ].copy()
+    atrasadas = base_data[base_data["Atrasada"]].copy()
 
     # ========================================================
     # 🔥 LEITURA PV.xlsx
