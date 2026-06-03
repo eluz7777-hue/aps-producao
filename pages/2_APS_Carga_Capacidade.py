@@ -5812,8 +5812,7 @@ else:
             # =================================================
             if saldo_real <= 0:
 
-                print("❌ BLOQUEADO POR SALDO")
-
+                
                 st.warning(
                     "⚠️ Operação já totalmente baixada"
                 )
