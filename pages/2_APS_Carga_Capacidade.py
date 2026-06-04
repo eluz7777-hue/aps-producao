@@ -5738,14 +5738,13 @@ else:
             # =================================================
             # 🔥 RECARREGA POSTGRESQL
             # =================================================
-            print("🔄 REUTILIZANDO BASE OFICIAL APS")
+            
 
             df_baixas_atual = (
                 df_baixas_ativas.copy()
             )
 
-            print("📦 SHAPE DF:")
-            print(df_baixas_atual.shape)
+            
 
             if not df_baixas_atual.empty:
 
@@ -5804,8 +5803,7 @@ else:
                 0
             )
 
-            print("📌 SALDO REAL FINAL:")
-            print(saldo_real)
+            
 
             # =================================================
             # 🔒 BLOQUEIO FINAL
@@ -5832,7 +5830,7 @@ else:
 
             ):
 
-                print("❌ OPERAÇÃO INVÁLIDA")
+                
 
                 st.error(
                     "Erro: operação inválida."
@@ -5848,7 +5846,7 @@ else:
 
             ):
 
-                print("❌ CHAVE_OPERACAO INVÁLIDA")
+                
 
                 st.error(
                     "Erro: CHAVE_OPERACAO inválida."
@@ -5939,8 +5937,7 @@ else:
 
                 import traceback
 
-                print("❌ EXCEPTION NA PERSISTÊNCIA")
-                print(traceback.format_exc())
+                
 
                 resultado = {
                     "ok": False,
@@ -5949,7 +5946,7 @@ else:
 
             if not resultado:
 
-                print("❌ RESULTADO NONE/VÁZIO")
+                
 
                 st.error(
                     "Erro: retorno vazio da persistência."
@@ -5957,7 +5954,7 @@ else:
 
             elif resultado.get("ok"):
 
-                print("✅ BAIXA PERSISTIDA")
+                
 
                 st.session_state[
                     "reset_corte_unitario"
@@ -5971,8 +5968,7 @@ else:
 
             else:
 
-                print("❌ FALHA NA PERSISTÊNCIA")
-                print(resultado)
+                
 
                 st.error(
                     resultado.get(
@@ -7447,7 +7443,7 @@ else:
 
 
             st.error("🔥 ANTES salvar_baixa_postgresql")
-            print("🔥 ANTES salvar_baixa_postgresql")
+            
 
             resultado = salvar_baixa_postgresql(
                 nova_baixa
