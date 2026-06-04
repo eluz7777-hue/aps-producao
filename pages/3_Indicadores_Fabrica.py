@@ -429,23 +429,13 @@ with tab1:
         )
     )
 
-    # ========================================================
-    # 📊 GRÁFICO
-    # ========================================================
-    fig = px.bar(
-
-        df_plot,
-
-        x="Mês",
-
-        y="Valor",
-
-        text="Label"
-    )
-
-    fig.update_traces(
-        textposition="outside"
-    )
+    
+    # --------------------------------------------------------
+                    # 🔥 COR DAS BARRAS CONFORME META
+                    # --------------------------------------------------------
+        df_plot["Cor"] = df_plot["Valor"].apply(lambda x: "Abaixo da Meta" if x < 25 else "Meta Atingida")
+        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label", color="Cor", color_discrete_map={"Abaixo da Meta": "#d62728", "Meta Atingida": "#76b0de"})
+        fig.update_traces(textposition="outside") 
 
     # --------------------------------------------------------
     # 🔥 META 25%
@@ -834,10 +824,9 @@ with tab2:
         # --------------------------------------------------------
                     # 🔥 COR DAS BARRAS CONFORME META
                     # --------------------------------------------------------
-        df_plot["Cor"] = df_plot["Valor"].apply(lambda x: "Abaixo da Meta" if x < 25 else "Meta Atingida")
+        df_plot["Cor"] = df_plot["Valor"].apply(lambda x: "Abaixo da Meta" if x < Meta else "Meta Atingida")
         fig = px.bar(df_plot, x="Mês", y="Valor", text="Label", color="Cor", color_discrete_map={"Abaixo da Meta": "#d62728", "Meta Atingida": "#76b0de"})
-        fig.update_traces(textposition="outside")      
-
+        fig.update_traces(textposition="outside") 
 
 
 
