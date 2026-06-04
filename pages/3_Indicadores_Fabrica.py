@@ -452,7 +452,9 @@ with tab1:
             "Meta Atingida": "#76b0de"},
 
     category_orders={
-        "Mês": ["Jan","Fev","Mar","Abr","Mai","Jun",Jul","Ago","Set","Out","Nov","Dez","ACM"]})
+        "Mês": ["Jan","Fev","Mar","Abr","Mai","Jun",Jul",
+
+                     "Ago","Set","Out","Nov","Dez","ACM"]})
 
 
     
