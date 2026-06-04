@@ -829,7 +829,7 @@ with tab2:
         # 🔥 COR DAS BARRAS CONFORME META
         # --------------------------------------------------------
         df_plot["Cor"] = df_plot["Valor"].apply(lambda x: "Abaixo da Meta" if x < meta_plot else "Meta Atingida")
-        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label", color="Cor", color_discrete_map={"Abaixo da Meta": "#d62728", "Meta Atingida": "#76b0de"})
+        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label", color="Cor", color_discrete_map={"Abaixo da Meta": "#d62728", "Meta Atingida": "#76b0de"}, category_orders={"Mês": ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez","ACM"]})
         fig.update_traces(textposition="outside") 
 
 
