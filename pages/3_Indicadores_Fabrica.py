@@ -430,22 +430,28 @@ with tab1:
     )
 
     # ========================================================
-    # 📊 GRÁFICO
-    # ========================================================
+          # 📊 GRÁFICO
+          # ========================================================
+
+           # --------------------------------------------------------
+           # 🔥 COR DAS BARRAS CONFORME META
+           # --------------------------------------------------------
+    df_plot["Cor"] = df_plot["Valor"].apply(
+        lambda x: (
+            "Abaixo da Meta"
+            if pd.notna(x) and x < 25
+            else "Meta Atingida"))
     fig = px.bar(
-
         df_plot,
-
         x="Mês",
-
         y="Valor",
-
-        text="Label"
-    )
-
+        text="Label",
+        color="Cor",
+        color_discrete_map={
+            "Abaixo da Meta": "#d62728",
+            "Meta Atingida": "#76b0de"})
     fig.update_traces(
-        textposition="outside"
-    )
+        textposition="outside")
 
     # --------------------------------------------------------
     # 🔥 META 25%
@@ -830,23 +836,15 @@ with tab2:
             )
         )
 
-        # ====================================================
-        # 📊 GRÁFICO
-        # ====================================================
-        fig = px.bar(
+        
+        # --------------------------------------------------------
+                    # 🔥 COR DAS BARRAS CONFORME META
+                    # --------------------------------------------------------
+        df_plot["Cor"] = df_plot["Valor"].apply(lambda x: "Abaixo da Meta" if x < Meta else "Meta Atingida")
+        fig = px.bar(df_plot, x="Mês", y="Valor", text="Label", color="Cor", color_discrete_map={"Abaixo da Meta": "#d62728", "Meta Atingida": "#76b0de"})
+        fig.update_traces(textposition="outside") 
 
-            df_plot,
 
-            x="Mês",
-
-            y="Valor",
-
-            text="Label"
-        )
-
-        fig.update_traces(
-            textposition="outside"
-        )
 
         # ----------------------------------------------------
         # 🔥 META
@@ -1220,9 +1218,6 @@ with tab2:
 
 
 
-
-
-
 # ============================================================
 # 🏭 PRODUÇÃO — TEMPO REAL (ATRASO + CARGA x CAPACIDADE)
 # ============================================================
@@ -1335,6 +1330,8 @@ with tab3:
         base["PV"].str.lower() != "nan"
     ]
 
+
+    
     # ========================================================
     # 📅 DATA APS
     # ========================================================
@@ -1356,28 +1353,7 @@ with tab3:
     # ========================================================
     hoje = pd.Timestamp.today().normalize()
 
-    # ========================================================
-    # 🚨 ATRASOS
-    # ========================================================
-    base_data = base.dropna(
-        subset=["DATA_ENTREGA_APS"]
-    ).copy()
-
-    base_data["Atraso_dias"] = (
-
-        hoje - base_data["DATA_ENTREGA_APS"]
-
-    ).dt.days
-
-    base_data["Atrasada"] = (
-
-        base_data["Atraso_dias"] > 0
-    )
-
-    atrasadas = base_data[
-
-        base_data["Atrasada"]
-    ].copy()
+    
 
     # ========================================================
     # 🔥 LEITURA PV.xlsx
@@ -1451,6 +1427,37 @@ with tab3:
         st.write(df_pv.columns.tolist())
 
         st.stop()
+
+
+
+    # ========================================================
+          # 🚨 ATRASOS
+          # ========================================================
+    base_data = df_pv.copy()
+
+    pvs_ativas = df_aps["PV"].astype(str).str.strip().unique()
+
+    base_data = base_data[
+                    base_data[coluna_pv]
+                    .astype(str)
+                    .str.strip()
+                    .isin(pvs_ativas)
+           ].copy()
+
+    base_data[coluna_data] = pd.to_datetime(base_data[coluna_data], errors="coerce")
+
+    base_data = base_data.dropna(subset=[coluna_data]).copy()
+
+    base_data["Atraso_dias"] = (hoje - base_data[coluna_data]).dt.days
+
+    pv = base_data.groupby("PV", as_index=False).agg(data_entrega=(coluna_data, "min"))
+
+    pv["Atraso_dias"] = (hoje - pv["data_entrega"]).dt.days
+
+    pv["Atrasada"] = (pv["Atraso_dias"] > 0)
+
+    atrasadas = pv[pv["Atrasada"]].copy()
+
 
     # ========================================================
     # 🔥 TOTAL REAL DE PVs
@@ -1694,9 +1701,7 @@ with tab3:
     # ========================================================
     # 📊 CARGA x CAPACIDADE
     # ========================================================
-    st.subheader(
-        "📊 Carga Planejada x Capacidade Disponível"
-    )
+    st.subheader("📊 Carga Planejada x Capacidade Restante")
 
     # ========================================================
     # 🔥 RECURSOS
@@ -1784,19 +1789,6 @@ with tab3:
 
     # ========================================================
     # 🔥 CAPACIDADE REAL
-    # ========================================================
-    #
-    # 1 recurso:
-    #
-    # (4×9)+(1×8)
-    # = 44h semana
-    #
-    # 44 × 0.8
-    # = 35.2h semana
-    #
-    # 35.2 / 5
-    # = 7.04h dia
-    #
     # ========================================================
     horas_semana_recurso = 44
 
@@ -1898,46 +1890,28 @@ with tab3:
             ).fillna(0)
 
     # ========================================================
-    # 🔥 SOMA TEMPOS ROTEIRO
+    # 🔒 GARANTE SOMENTE COLUNAS EXISTENTES
     # ========================================================
-    #
-    # TEMPOS DO PV.xlsx ESTÃO EM MINUTOS
-    #
-    # REGRA:
-    #
-    # quantidade × soma dos tempos
-    #
-    # depois:
-    #
-    # ÷ 60 para converter em horas
-    #
-    # ========================================================
-
-    # ========================================================
-          # 🔒 GARANTE SOMENTE COLUNAS EXISTENTES
-          # ========================================================
     processos_existentes = [
 
-              p for p in processos_excel
+        p for p in processos_excel
 
-              if p in carga.columns
-          ]
+        if p in carga.columns
+    ]
 
-
-         # ========================================================
-         # 🔥 SOMA TEMPOS ROTEIRO
-         # ========================================================
+    # ========================================================
+    # 🔥 SOMA TEMPOS ROTEIRO
+    # ========================================================
     carga["TEMPO_TOTAL_ROTEIRO"] = (
 
-             carga[processos_existentes]
+        carga[processos_existentes]
 
-             .sum(axis=1)
-         )
+        .sum(axis=1)
+    )
 
     # ========================================================
     # 🔥 CARGA TOTAL DA PV (HORAS)
     # ========================================================
-
     carga["CARGA_TOTAL_PV"] = (
 
         (
@@ -1954,20 +1928,9 @@ with tab3:
     # ========================================================
     # 🔥 RESUMO PROCESSOS
     # ========================================================
-
     lista_resumo = []
 
     for processo in processos_existentes:
-
-        # ====================================================
-        # 🔥 HORAS PLANEJADAS DO PROCESSO
-        # ====================================================
-        #
-        # quantidade × tempo do processo
-        #
-        # dividido por 60
-        #
-        # ====================================================
 
         horas_processo = (
 
@@ -1987,10 +1950,6 @@ with tab3:
             horas_processo,
             2
         )
-
-        # ====================================================
-        # 🔥 CAPACIDADE DISPONÍVEL
-        # ====================================================
 
         recursos = MAQUINAS.get(
             processo,
@@ -2015,10 +1974,6 @@ with tab3:
             2
         )
 
-        # ====================================================
-        # 🔥 UTILIZAÇÃO
-        # ====================================================
-
         utilizacao = (
 
             (
@@ -2036,10 +1991,6 @@ with tab3:
             utilizacao,
             2
         )
-
-        # ====================================================
-        # 🔥 RESUMO
-        # ====================================================
 
         lista_resumo.append({
 
@@ -2088,6 +2039,53 @@ with tab3:
     )
 
     # ========================================================
+    # 🔥 DIAS COMPUTADOS x RESTANTES
+    # ========================================================
+    dias_uteis_total = 0
+
+    for dia in range(
+
+        1,
+
+        total_dias_mes + 1
+
+    ):
+
+        data = datetime(
+            ano,
+            mes,
+            dia
+        )
+
+        if (
+
+            data.weekday() < 5
+
+            and
+
+            data.date() not in brasil_feriados
+
+        ):
+
+            dias_uteis_total += 1
+
+    dias_computados = max(
+
+        dias_uteis_total
+        -
+        dias_uteis_restantes,
+
+        0
+    )
+
+    # ========================================================
+    # 🔥 CONTEXTO HOVER
+    # ========================================================
+    resumo_cap["Dias_Computados"] = dias_computados
+
+    resumo_cap["Dias_Restantes"] = dias_uteis_restantes
+
+    # ========================================================
     # 📊 GRÁFICO
     # ========================================================
     fig2 = go.Figure()
@@ -2105,13 +2103,28 @@ with tab3:
 
         text=resumo_cap["Carga"],
 
-        textposition="outside"
+        textposition="outside",
+
+        customdata=np.array([
+
+            resumo_cap["Dias_Computados"],
+
+            resumo_cap["Dias_Restantes"]
+
+        ]).T,
+
+        hovertemplate=
+            "<b>%{x}</b><br>" +
+            "Carga Planejada: %{y:.2f} h<br>" +
+            "Dias Computados: %{customdata[0]}<br>" +
+            "Dias Restantes: %{customdata[1]}<br>" +
+            "<extra></extra>"
     )
 
     # 🔵 CAPACIDADE
     fig2.add_bar(
 
-        name="Capacidade Disponível",
+        name="Capacidade  Restante",
 
         x=resumo_cap["PROCESSO_REAL"],
 
@@ -2121,7 +2134,22 @@ with tab3:
 
         text=resumo_cap["Capacidade"],
 
-        textposition="outside"
+        textposition="outside",
+
+        customdata=np.array([
+
+            resumo_cap["Dias_Computados"],
+
+            resumo_cap["Dias_Restantes"]
+
+        ]).T,
+
+        hovertemplate=
+            "<b>%{x}</b><br>" +
+            "Capacidade Restante: %{y:.2f} h<br>" +
+            "Dias Computados: %{customdata[0]}<br>" +
+            "Dias Restantes: %{customdata[1]}<br>" +
+            "<extra></extra>"
     )
 
     fig2.update_layout(
@@ -2131,7 +2159,7 @@ with tab3:
         height=750,
 
         title=(
-            f"Carga Planejada x Capacidade Disponível "
+            f"Carga Planejada x Capacidade Restante "
             f"({dias_uteis_restantes} dias úteis restantes)"
         ),
 
@@ -2233,593 +2261,6 @@ with tab3:
 
             use_container_width=True
         )
-
-
-
-
-
-
-
-# ============================================================
-# 🔧 MANUTENÇÃO — BLOCO FINAL OFICIAL
-# ============================================================
-
-with tab4:
-
-    import os
-    import pandas as pd
-    import plotly.graph_objects as go
-    import numpy as np
-
-    st.header("🔧 Custo de Manutenção")
-
-    # ========================================================
-    # 📁 CAMINHO
-    # ========================================================
-    caminho = os.path.abspath(
-        "data/Indicadores_manutencao/manutencao.xlsx"
-    )
-
-    # ========================================================
-    # 🚨 EXISTÊNCIA
-    # ========================================================
-    if not os.path.exists(caminho):
-
-        st.error(
-            "Arquivo de manutenção não encontrado"
-        )
-
-        st.stop()
-
-    # ========================================================
-    # 📊 LEITURA
-    # ========================================================
-    try:
-
-        df = pd.read_excel(
-            caminho,
-            dtype=str
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Erro ao ler arquivo de manutenção: {e}"
-        )
-
-        st.stop()
-
-    # ========================================================
-    # 🧹 NORMALIZAÇÃO COLUNAS
-    # ========================================================
-    df.columns = [
-
-        str(c).strip()
-
-        for c in df.columns
-    ]
-
-    # ========================================================
-    # 🔍 COLUNAS OFICIAIS
-    # ========================================================
-    col_mes   = "Mês"
-    col_fat   = "Faturamento Mensal"
-    col_np    = "Corretiva não programada"
-    col_cp    = "Corretiva programada"
-    col_prev  = "Preventiva"
-    col_pred  = "Preditiva"
-    col_melh  = "Melhoria de Máquinas"
-
-    colunas_necessarias = [
-
-        col_mes,
-        col_fat,
-        col_np,
-        col_cp,
-        col_prev,
-        col_pred,
-        col_melh
-    ]
-
-    # ========================================================
-    # 🚨 VALIDAÇÃO
-    # ========================================================
-    faltando = [
-
-        c for c in colunas_necessarias
-
-        if c not in df.columns
-    ]
-
-    if faltando:
-
-        st.error(
-            f"Colunas ausentes: {faltando}"
-        )
-
-        st.stop()
-
-    # ========================================================
-    # 🧹 LIMPEZA MONETÁRIA
-    # ========================================================
-    def limpar_moeda(v):
-
-        if pd.isna(v):
-            return 0.0
-
-        v = str(v).strip()
-
-        if v == "":
-            return 0.0
-
-        v = (
-            v.replace("R$", "")
-             .replace(" ", "")
-             .replace("\xa0", "")
-        )
-
-        if "," in v:
-
-            v = (
-                v.replace(".", "")
-                 .replace(",", ".")
-            )
-
-        try:
-
-            return float(v)
-
-        except:
-
-            return 0.0
-
-    # ========================================================
-    # 🔥 CONVERSÃO NUMÉRICA
-    # ========================================================
-    for col in [
-
-        col_fat,
-        col_np,
-        col_cp,
-        col_prev,
-        col_pred,
-        col_melh
-    ]:
-
-        df[col] = (
-
-            df[col]
-            .apply(limpar_moeda)
-            .fillna(0)
-        )
-
-    # ========================================================
-    # 🧹 REMOVE LINHAS VAZIAS
-    # ========================================================
-    df = df[
-
-        df[col_mes]
-        .notna()
-    ].copy()
-
-    # ========================================================
-    # 📊 TOTAL MENSAL
-    # ========================================================
-    df["Total"] = (
-
-        df[col_np]
-
-        + df[col_cp]
-
-        + df[col_prev]
-
-        + df[col_pred]
-
-        + df[col_melh]
-    )
-
-    # ========================================================
-    # 🎯 META
-    # ========================================================
-    df["Meta"] = (
-
-        df[col_fat] * 0.005
-    )
-
-    # ========================================================
-    # 📊 ACUMULADOS
-    # ========================================================
-    df["NP_acum"] = (
-        df[col_np].cumsum()
-    )
-
-    df["CP_acum"] = (
-        df[col_cp].cumsum()
-    )
-
-    df["Prev_acum"] = (
-        df[col_prev].cumsum()
-    )
-
-    df["Pred_acum"] = (
-        df[col_pred].cumsum()
-    )
-
-    df["Melh_acum"] = (
-        df[col_melh].cumsum()
-    )
-
-    df["Total_acum"] = (
-        df["Total"].cumsum()
-    )
-
-    df["Meta_acum"] = (
-        df["Meta"].cumsum()
-    )
-
-    # ========================================================
-    # 🚨 STATUS ISO
-    # ========================================================
-    df["Status_ISO"] = (
-
-        df["Total"]
-
-        <=
-
-        df["Meta"]
-    )
-
-    df["Status_ISO_acum"] = (
-
-        df["Total_acum"]
-
-        <=
-
-        df["Meta_acum"]
-    )
-
-    # ========================================================
-    # 📊 ESCALA DINÂMICA
-    # ========================================================
-    max_valor = max(
-
-        df["Total"].max(),
-
-        df["Total_acum"].max(),
-
-        df["Meta"].max(),
-
-        df["Meta_acum"].max()
-    )
-
-    limite_y = (
-
-        max_valor * 1.25
-
-        if max_valor > 0
-
-        else 1
-    )
-
-    # ========================================================
-    # 💰 FORMATAÇÃO
-    # ========================================================
-    def moeda(v):
-
-        return (
-
-            f"R$ {v:,.0f}"
-            .replace(",", ".")
-        )
-
-    def moeda_kpi(v):
-
-        return (
-
-            f"R$ {v:,.2f}"
-            .replace(",", "X")
-            .replace(".", ",")
-            .replace("X", ".")
-        )
-
-    # ========================================================
-    # 📊 GRÁFICO
-    # ========================================================
-    fig = go.Figure()
-
-    # ========================================================
-    # 📊 BARRAS MENSAIS
-    # ========================================================
-    fig.add_bar(
-
-        name="NP",
-
-        x=df[col_mes],
-
-        y=df[col_np],
-
-        text=[
-
-            moeda(v)
-
-            for v in df[col_np]
-        ],
-
-        textposition="outside"
-    )
-
-    fig.add_bar(
-
-        name="CP",
-
-        x=df[col_mes],
-
-        y=df[col_cp],
-
-        text=[
-
-            moeda(v)
-
-            for v in df[col_cp]
-        ],
-
-        textposition="outside"
-    )
-
-    fig.add_bar(
-
-        name="Prev",
-
-        x=df[col_mes],
-
-        y=df[col_prev],
-
-        text=[
-
-            moeda(v)
-
-            for v in df[col_prev]
-        ],
-
-        textposition="outside"
-    )
-
-    fig.add_bar(
-
-        name="Pred",
-
-        x=df[col_mes],
-
-        y=df[col_pred],
-
-        text=[
-
-            moeda(v)
-
-            for v in df[col_pred]
-        ],
-
-        textposition="outside"
-    )
-
-    fig.add_bar(
-
-        name="Melh",
-
-        x=df[col_mes],
-
-        y=df[col_melh],
-
-        text=[
-
-            moeda(v)
-
-            for v in df[col_melh]
-        ],
-
-        textposition="outside"
-    )
-
-    # ========================================================
-    # 📊 TOTAL MENSAL
-    # ========================================================
-    cores_total = [
-
-        "green"
-
-        if ok
-
-        else "red"
-
-        for ok in df["Status_ISO"]
-    ]
-
-    fig.add_bar(
-
-        name="Total",
-
-        x=df[col_mes],
-
-        y=df["Total"],
-
-        text=[
-
-            moeda(v)
-
-            for v in df["Total"]
-        ],
-
-        textposition="outside",
-
-        marker_color=cores_total
-    )
-
-    # ========================================================
-    # 📊 TOTAL ACUMULADO
-    # ========================================================
-    fig.add_bar(
-
-        name="Total Acum",
-
-        x=df[col_mes],
-
-        y=df["Total_acum"],
-
-        text=[
-
-            moeda(v)
-
-            for v in df["Total_acum"]
-        ],
-
-        textposition="outside",
-
-        marker_color="darkgreen"
-    )
-
-    # ========================================================
-    # 📈 META MENSAL
-    # ========================================================
-    fig.add_scatter(
-
-        name="Meta",
-
-        x=df[col_mes],
-
-        y=df["Meta"],
-
-        mode="lines+markers",
-
-        line=dict(
-
-            color="red",
-
-            dash="dash"
-        )
-    )
-
-    # ========================================================
-    # 📈 META ACUMULADA
-    # ========================================================
-    fig.add_scatter(
-
-        name="Meta Acum",
-
-        x=df[col_mes],
-
-        y=df["Meta_acum"],
-
-        mode="lines+markers",
-
-        line=dict(
-
-            color="orange",
-
-            dash="dot"
-        )
-    )
-
-    # ========================================================
-    # 📊 LAYOUT
-    # ========================================================
-    fig.update_layout(
-
-        barmode="group",
-
-        height=650,
-
-        yaxis=dict(
-            range=[0, limite_y]
-        ),
-
-        yaxis_title="R$",
-
-        xaxis_title="Mês",
-
-        legend_title="Indicadores"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    # ========================================================
-    # 📊 KPI FINAL
-    # ========================================================
-    ultimo = df.iloc[-1]
-
-    status_mes = (
-
-        "🟢 OK"
-
-        if ultimo["Status_ISO"]
-
-        else "🔴 ACIMA"
-    )
-
-    status_acum = (
-
-        "🟢 OK"
-
-        if ultimo["Status_ISO_acum"]
-
-        else "🔴 ACIMA"
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    c1.metric(
-
-        "💸 Custo Mês",
-
-        moeda_kpi(
-            ultimo["Total"]
-        )
-    )
-
-    c2.metric(
-
-        "🎯 Meta Mês",
-
-        moeda_kpi(
-            ultimo["Meta"]
-        )
-    )
-
-    c3.metric(
-
-        "📊 Custo Acumulado",
-
-        moeda_kpi(
-            ultimo["Total_acum"]
-        )
-    )
-
-    c4.metric(
-
-        "📈 Meta Acumulada",
-
-        moeda_kpi(
-            ultimo["Meta_acum"]
-        )
-    )
-
-    # ========================================================
-    # 🚨 STATUS FINAL
-    # ========================================================
-    if ultimo["Status_ISO_acum"]:
-
-        st.success(
-            f"Status ISO acumulado: {status_acum}"
-        )
-
-    else:
-
-        st.error(
-            f"Status ISO acumulado: {status_acum}"
-        )
-
 
 
 
