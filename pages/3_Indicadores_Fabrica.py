@@ -2269,7 +2269,7 @@ with tab4:
         # =====================================================
 
         sheet_manut = pd.read_excel(
-            "Controle_Manutencao.xlsx",
+            "data/Indicadores_manutencao/Controle_Manutencao.xlsx",
             sheet_name="Tratamento de Dados 2026",
             header=None
         )
