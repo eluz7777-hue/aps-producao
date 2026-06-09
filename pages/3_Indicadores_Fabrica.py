@@ -2529,50 +2529,7 @@ with tab4:
                 use_container_width=True
             )
 
-        # =====================================================
-        # TABELA ANALÍTICA
-        # =====================================================
-
-        tabela = df.copy()
-
-        tabela["% Faturamento"] = (
-            tabela["total"] /
-            tabela["faturamento"]
-        ) * 100
-
-        tabela = tabela[[
-            "mes",
-            "faturamento",
-            "meta",
-            "total",
-            "% Faturamento"
-        ]]
-
-        tabela.columns = [
-            "Mês",
-            "Faturamento",
-            "Meta",
-            "Gasto",
-            "% Faturamento"
-        ]
-
-        def destacar_meta(row):
-
-            if row["Gasto"] > row["Meta"]:
-                return ["background-color: #ffcccc"] * len(row)
-
-            return ["background-color: #d9ead3"] * len(row)
-
-        st.subheader("📋 Análise Mensal")
-
-        st.dataframe(
-            tabela.style.apply(destacar_meta, axis=1),
-            use_container_width=True
-        )
-
-    except Exception as e:
-
-        st.error(f"Erro ao montar indicadores de manutenção: {e}")
+        
 
 
 
