@@ -2327,6 +2327,13 @@ with tab4:
         df = df.dropna(subset=["mes"])
 
         # =====================================================
+        # FUNÇÃO MOEDA BR
+        # =====================================================
+
+        def moeda_br(valor):
+            return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        # =====================================================
         # TOTAIS
         # =====================================================
 
@@ -2358,19 +2365,19 @@ with tab4:
         with c2:
             st.metric(
                 "Custo Total",
-                f"R$ {gasto_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                moeda_br(gasto_total)
             )
 
         with c3:
             st.metric(
                 "Limite Permitido",
-                f"R$ {meta_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                moeda_br(meta_total)
             )
 
         with c4:
             st.metric(
                 "Economia / Excedente",
-                f"R$ {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                moeda_br(saldo)
             )
 
         st.divider()
@@ -2414,12 +2421,44 @@ with tab4:
         # GRÁFICO META X GASTO
         # =====================================================
 
-        fig_meta = px.bar(
-            df,
-            x="mes",
-            y=["total", "meta"],
-            barmode="group",
-            title="Gasto Mensal x Meta Mensal"
+        fig_meta = go.Figure()
+
+        fig_meta.add_trace(
+            go.Bar(
+                x=df["mes"],
+                y=df["total"],
+                text=[moeda_br(v) for v in df["total"]],
+                textposition="outside",
+                name="Gasto Mensal"
+            )
+        )
+
+        fig_meta.add_trace(
+            go.Scatter(
+                x=df["mes"],
+                y=df["meta"],
+                mode="lines+markers+text",
+                text=[moeda_br(v) for v in df["meta"]],
+                textposition="top center",
+                textfont=dict(size=11),
+                marker=dict(size=7),
+                name="Meta 0,5%",
+                line=dict(
+                    color="red",
+                    dash="dash",
+                    width=3
+                )
+            )
+        )
+
+        fig_meta.update_layout(
+            height=550,
+            margin=dict(t=80),
+            title="Gasto Mensal x Meta Mensal",
+            xaxis_title="Mês",
+            yaxis_title="Custo de Manutenção (R$)",
+            xaxis=dict(type="category"),
+            hovermode="x unified"
         )
 
         st.plotly_chart(
@@ -2534,7 +2573,6 @@ with tab4:
     except Exception as e:
 
         st.error(f"Erro ao montar indicadores de manutenção: {e}")
-
 
 
 
