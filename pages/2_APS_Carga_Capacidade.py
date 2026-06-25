@@ -2200,40 +2200,6 @@ k4.metric("📦 PVs no APS", fmt_br_int(pvs_no_aps))
 
 
 
-# ==========================================================
-# DEBUG - PVs AUSENTES NO PAINEL
-# ==========================================================
-
-try:
-
-    pvs_excel = set(df["PV"].astype(str).str.strip().unique())
-
-    pvs_aps = set(df_operacional["PV"].astype(str).str.strip().unique())
-
-    pvs_faltando = sorted(pvs_excel - pvs_aps)
-
-    st.warning(f"📄 PVs no Excel: {len(pvs_excel)}")
-    st.warning(f"⚙️ PVs no APS : {len(pvs_aps)}")
-    st.warning(f"❌ PVs ausentes: {len(pvs_faltando)}")
-
-    if pvs_faltando:
-
-        st.error("Lista de PVs que não aparecem no APS:")
-
-        st.dataframe(
-            pd.DataFrame(
-                {"PV Ausente": pvs_faltando}
-            ),
-            use_container_width=True
-        )
-
-except Exception as e:
-
-    st.error(f"Erro no debug de PVs: {e}")
-
-
-
-
 
 
 # ===============================
